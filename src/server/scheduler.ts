@@ -145,7 +145,7 @@ async function tick() {
   const rallies = await prisma.rally.findMany({
     where: {
       cancelled: false,
-      status: { in: ["ACTIVE", "COMPLETED", "SCHEDULED"] },
+      status: { in: ["ACTIVE", "COMPLETED"] },
       rallyTime: { not: null },
     },
   });

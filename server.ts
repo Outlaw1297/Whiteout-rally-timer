@@ -5,6 +5,7 @@ import { WebSocketServer } from "ws";
 import { setupWebSocket } from "./src/server/websocket";
 import { startScheduler } from "./src/server/scheduler";
 import { initWebPush } from "./src/lib/push";
+import { migrateLegacyData } from "./src/lib/db-migrate";
 
 const dev = process.env.NODE_ENV !== "production";
 const hostname = process.env.HOSTNAME || "0.0.0.0";
@@ -13,8 +14,14 @@ const port = parseInt(process.env.PORT || "3000", 10);
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
-app.prepare().then(() => {
+app.prepare().then(async () => {
   initWebPush();
+
+  try {
+    await migrateLegacyData();
+  } catch (err) {
+    console.error(JSON.stringify({ event: "startup_migration_failed", error: String(err) }));
+  }
 
   const server = createServer((req, res) => {
     const parsedUrl = parse(req.url!, true);

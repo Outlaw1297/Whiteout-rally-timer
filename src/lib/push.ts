@@ -16,6 +16,8 @@ export function normalizeVapidKey(key: string | undefined): string | null {
   }
 
   normalized = normalized.replace(/^VAPID_(PUBLIC|PRIVATE)_KEY=/i, "").trim();
+  // Remove line breaks/spaces from copy-paste (keys must be one continuous string)
+  normalized = normalized.replace(/\s+/g, "");
   // web-push requires URL-safe base64 without padding
   normalized = normalized.replace(/=+$/, "");
 

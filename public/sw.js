@@ -37,6 +37,7 @@ self.addEventListener("push", (event) => {
   const rallyId = data.rallyId || "";
   const notificationType = data.notificationType || "";
   const assignmentId = data.assignmentId || "";
+  const scheduledAt = data.scheduledAt || "";
   const url = assignmentId
     ? `/caller/events/${rallyId}`
     : rallyId
@@ -50,6 +51,7 @@ self.addEventListener("push", (event) => {
     rallyId,
     notificationType,
     assignmentId,
+    scheduledAt,
     url,
   };
 
@@ -57,7 +59,7 @@ self.addEventListener("push", (event) => {
     body,
     icon: "/icons/icon-192.png",
     badge: "/icons/icon-192.png",
-    tag: `rally-${rallyId}-${notificationType}-${assignmentId}`,
+    tag: `rally-${rallyId}-${notificationType}-${assignmentId}-${scheduledAt}`,
     renotify: true,
     requireInteraction: notificationType === "LAUNCH",
     vibrate: notificationType === "LAUNCH" ? [300, 100, 300, 100, 300] : [200, 100, 200],

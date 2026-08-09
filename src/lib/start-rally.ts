@@ -1,6 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { serializeEvent, recalculateAssignmentTimes } from "@/lib/rally-event";
-import { activateEventNotifications, cancelAllEventNotifications } from "@/lib/notifications";
+import {
+  activateEventNotifications,
+  cancelAllEventNotifications,
+  clearEventNotificationEvents,
+} from "@/lib/notifications";
 import { broadcastRallyUpdate } from "@/server/rally-hub";
 import { computeTargetArrivalOnGo } from "@/lib/timing";
 
@@ -25,6 +29,9 @@ export async function startOrRestartRally(eventId: string) {
   if (event.status === "ACTIVE" || event.status === "COMPLETED") {
     await cancelAllEventNotifications(eventId);
   }
+
+  // Always wipe prior run rows so GO AGAIN / RESTART schedules fresh PENDING events.
+  await clearEventNotificationEvents(eventId);
 
   const startedAt = new Date();
   const marches = event.assignments.map((a) => a.marchDurationSeconds);
@@ -60,7 +67,7 @@ export async function startOrRestartRally(eventId: string) {
     }
   });
 
-  await activateEventNotifications(eventId);
+  await activateEventNotifications(eventId, { freshLaunch: true });
 
   const updated = await prisma.rallyEvent.findUnique({
     where: { id: eventId },

@@ -10,8 +10,10 @@ const ALL_NOTIFICATION_TYPES = ["WARNING_10", "WARNING_5", "WARNING_3", "LAUNCH"
 async function syncNotificationEventsForAssignment(
   assignment: RallyAssignment,
   user: User,
-  event: Pick<RallyEvent, "pushLeadMs">
+  event: Pick<RallyEvent, "pushLeadMs">,
+  options: { preserveTerminal?: boolean } = {}
 ) {
+  const preserveTerminal = options.preserveTerminal ?? true;
   if (!assignment.launchTime) return;
 
   const schedule = buildNotificationEventsForAssignment(assignment, user, {
@@ -44,7 +46,7 @@ async function syncNotificationEventsForAssignment(
       },
     });
 
-    if (existing && ["SENT", "FAILED", "SKIPPED"].includes(existing.status)) {
+    if (preserveTerminal && existing && ["SENT", "FAILED", "SKIPPED"].includes(existing.status)) {
       continue;
     }
 
@@ -75,9 +77,17 @@ async function syncNotificationEventsForAssignment(
 export async function createNotificationEventsForAssignment(
   assignment: RallyAssignment,
   user: User,
-  event: Pick<RallyEvent, "pushLeadMs">
+  event: Pick<RallyEvent, "pushLeadMs">,
+  options?: { preserveTerminal?: boolean }
 ) {
-  await syncNotificationEventsForAssignment(assignment, user, event);
+  await syncNotificationEventsForAssignment(assignment, user, event, options);
+}
+
+/** Remove all scheduled notifications so a new GO can start fresh. */
+export async function clearEventNotificationEvents(eventId: string) {
+  await prisma.notificationEvent.deleteMany({
+    where: { assignment: { rallyEventId: eventId } },
+  });
 }
 
 export async function cancelPendingNotifications(assignmentId: string) {
@@ -109,7 +119,7 @@ export async function skipRemainingEventNotifications(eventId: string, reason: s
 }
 
 export async function resetEventToTemplate(eventId: string) {
-  await cancelAllEventNotifications(eventId);
+  await clearEventNotificationEvents(eventId);
 
   await prisma.$transaction(async (tx) => {
     await tx.rallyEvent.update({
@@ -167,15 +177,25 @@ export async function rescheduleEventNotifications(eventId: string) {
   }
 }
 
-export async function activateEventNotifications(eventId: string) {
+export async function activateEventNotifications(
+  eventId: string,
+  options?: { freshLaunch?: boolean }
+) {
   const event = await prisma.rallyEvent.findUnique({
     where: { id: eventId },
     include: { assignments: { include: { user: true } } },
   });
   if (!event) return;
 
+  const syncOptions = { preserveTerminal: !options?.freshLaunch };
+
   for (const assignment of event.assignments) {
     if (!assignment.user || !assignment.launchTime) continue;
-    await createNotificationEventsForAssignment(assignment, assignment.user, event);
+    await createNotificationEventsForAssignment(
+      assignment,
+      assignment.user,
+      event,
+      syncOptions
+    );
   }
 }

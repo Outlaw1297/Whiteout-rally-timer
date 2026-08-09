@@ -116,6 +116,7 @@ async function processNotificationEvent(eventId: string) {
         rallyId: rallyEvent.id,
         notificationType: notification.type,
         assignmentId: assignment.id,
+        scheduledAt: notification.scheduledAt.toISOString(),
       }
     );
 

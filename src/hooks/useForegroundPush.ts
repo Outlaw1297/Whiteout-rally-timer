@@ -9,6 +9,7 @@ export interface ForegroundPushMessage {
   rallyId: string;
   notificationType: string;
   assignmentId: string;
+  scheduledAt: string;
   url: string;
   receivedAt: number;
 }
@@ -21,7 +22,7 @@ function tryPageNotification(message: ForegroundPushMessage) {
     const notification = new Notification(message.title, {
       body: message.body,
       icon: "/icons/icon-192.png",
-      tag: `rally-fg-${message.rallyId}-${message.notificationType}-${message.assignmentId}`,
+      tag: `rally-fg-${message.rallyId}-${message.notificationType}-${message.assignmentId}-${message.scheduledAt}`,
     });
     notification.onclick = () => {
       window.focus();
@@ -42,7 +43,7 @@ function tryVibrate(notificationType: string) {
 
 export function useForegroundPush() {
   const [messages, setMessages] = useState<ForegroundPushMessage[]>([]);
-  const seenRef = useRef(new Set<string>());
+  const recentRef = useRef<Map<string, number>>(new Map());
 
   const dismiss = useCallback((id: string) => {
     setMessages((prev) => prev.filter((m) => m.id !== id));
@@ -54,18 +55,21 @@ export function useForegroundPush() {
     const notificationType = String(data.notificationType || "");
     const rallyId = String(data.rallyId || "");
     const assignmentId = String(data.assignmentId || "");
-    const dedupeKey = `${rallyId}:${notificationType}:${assignmentId}:${String(data.title || "")}`;
-
-    if (seenRef.current.has(dedupeKey)) return;
-    seenRef.current.add(dedupeKey);
+    const scheduledAt = String(data.scheduledAt || "");
+    const dedupeKey = `${rallyId}:${notificationType}:${assignmentId}:${scheduledAt}`;
+    const now = Date.now();
+    const lastSeen = recentRef.current.get(dedupeKey);
+    if (lastSeen && now - lastSeen < 3000) return;
+    recentRef.current.set(dedupeKey, now);
 
     const message: ForegroundPushMessage = {
-      id: `${Date.now()}-${dedupeKey}`,
+      id: `${now}-${dedupeKey}`,
       title: String(data.title || "Whiteout Rally"),
       body: String(data.body || "Rally notification"),
       rallyId,
       notificationType,
       assignmentId,
+      scheduledAt,
       url: String(data.url || "/caller"),
       receivedAt: Date.now(),
     };

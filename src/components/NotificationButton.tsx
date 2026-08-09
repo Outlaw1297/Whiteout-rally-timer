@@ -73,6 +73,47 @@ export function NotificationButton({ onStatusChange }: { onStatusChange?: () => 
     onStatusChange?.();
   };
 
+  if (status === "checking") {
+    return (
+      <div className="text-rally-muted text-sm text-center">Checking notification support…</div>
+    );
+  }
+
+  if (status === "ios-install") {
+    return (
+      <div className="text-sm space-y-3">
+        <p className="text-rally-accent font-bold text-center">Install the app to enable alerts</p>
+        <p className="text-rally-muted text-xs text-center">
+          iPhone and iPad only receive rally push notifications from the installed home-screen app
+          (iOS 16.4 or newer).
+        </p>
+        <ol className="text-rally-text text-xs space-y-2 list-decimal list-inside">
+          <li>Open this site in <span className="font-bold">Safari</span> (not Chrome)</li>
+          <li>Tap Share → <span className="font-bold">Add to Home Screen</span></li>
+          <li>Open <span className="font-bold">Rally Timer</span> from your home screen</li>
+          <li>Return here and tap Enable Rally Notifications</li>
+        </ol>
+      </div>
+    );
+  }
+
+  if (status === "ios-use-safari") {
+    return (
+      <div className="text-sm space-y-3">
+        <p className="text-rally-warning font-bold text-center">Open in Safari to enable alerts</p>
+        <p className="text-rally-muted text-xs text-center">
+          Chrome and other browsers on iPhone cannot register for Web Push. Apple requires Safari
+          and a home-screen install.
+        </p>
+        <ol className="text-rally-text text-xs space-y-2 list-decimal list-inside">
+          <li>Copy this page link and open it in <span className="font-bold">Safari</span></li>
+          <li>Tap Share → <span className="font-bold">Add to Home Screen</span></li>
+          <li>Launch the installed app, then enable notifications</li>
+        </ol>
+      </div>
+    );
+  }
+
   if (status === "unsupported") {
     return (
       <div className="text-rally-muted text-sm text-center">

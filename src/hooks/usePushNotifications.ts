@@ -1,24 +1,27 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { assessPushEnvironment, detectPlatform } from "@/lib/push-support";
 
-export type NotificationStatus = "unsupported" | "default" | "granted" | "denied" | "subscribed";
-
-function detectPlatform(): string {
-  const ua = navigator.userAgent;
-  if (/iPhone|iPad|iPod/.test(ua)) return "iOS";
-  if (/Android/.test(ua)) return "Android";
-  return "Desktop";
-}
+export type NotificationStatus =
+  | "checking"
+  | "unsupported"
+  | "ios-use-safari"
+  | "ios-install"
+  | "default"
+  | "granted"
+  | "denied"
+  | "subscribed";
 
 export function usePushNotifications() {
-  const [status, setStatus] = useState<NotificationStatus>("default");
+  const [status, setStatus] = useState<NotificationStatus>("checking");
   const [loading, setLoading] = useState(false);
   const [testLoading, setTestLoading] = useState(false);
 
   const checkStatus = useCallback(async () => {
-    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
-      setStatus("unsupported");
+    const environment = await assessPushEnvironment();
+    if (environment !== "ready") {
+      setStatus(environment);
       return;
     }
 
@@ -66,6 +69,12 @@ export function usePushNotifications() {
   const enableNotifications = async () => {
     setLoading(true);
     try {
+      const environment = await assessPushEnvironment();
+      if (environment !== "ready") {
+        setStatus(environment);
+        return false;
+      }
+
       const registration = await registerServiceWorker();
       if (!registration) throw new Error("Service worker not supported");
 

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
+import { PushSetupCard } from "@/components/PushSetupCard";
 
 interface UserRow {
   id: string;
@@ -34,7 +35,11 @@ export default function AdminUsersPage() {
   }, [user, loading, router]);
 
   useEffect(() => {
-    if (user?.role === "ADMIN") loadUsers();
+    if (user?.role === "ADMIN") {
+      loadUsers();
+      const interval = setInterval(loadUsers, 5000);
+      return () => clearInterval(interval);
+    }
   }, [user]);
 
   const createUser = async (e: React.FormEvent) => {
@@ -89,7 +94,23 @@ export default function AdminUsersPage() {
         </button>
       </header>
 
-      <h1 className="text-xl font-bold mb-4">Manage Callers</h1>
+      <h1 className="text-xl font-bold mb-2">Manage Callers</h1>
+      <p className="text-rally-muted text-sm mb-4">
+        Device counts show how many phones have enabled push for each account. Each person
+        must log in on their phone and tap Enable Notifications.
+      </p>
+
+      <PushSetupCard onSubscribed={loadUsers} />
+
+      <section className="p-3 mb-4 bg-rally-surface border border-rally-border rounded-lg text-sm">
+        <p className="text-rally-muted text-xs mb-2">SETUP FOR EACH CALLER</p>
+        <ol className="list-decimal list-inside space-y-1 text-rally-muted text-xs">
+          <li>Create account below (or use Reset PW to get a temp password)</li>
+          <li>Caller opens the app and logs in at /login</li>
+          <li>Caller taps Enable Rally Notifications on their dashboard</li>
+          <li>In your rally template, link that caller slot to their account</li>
+        </ol>
+      </section>
 
       {tempPassword && (
         <div className="p-3 mb-4 bg-rally-success/20 border border-rally-success rounded-lg text-sm">
@@ -127,10 +148,21 @@ export default function AdminUsersPage() {
             className="p-3 bg-rally-surface border border-rally-border rounded-lg flex justify-between items-center"
           >
             <div>
-              <p className="font-bold">{u.displayName}</p>
-              <p className="text-rally-muted text-xs">
-                @{u.username} · {u.activeDevices} device{u.activeDevices !== 1 ? "s" : ""}
+              <p className="font-bold">
+                {u.displayName}
+                {u.id === user.id && (
+                  <span className="text-rally-accent text-xs ml-2">(you)</span>
+                )}
               </p>
+              <p className="text-rally-muted text-xs">
+                @{u.username} ·{" "}
+                <span className={u.activeDevices > 0 ? "text-rally-success" : "text-rally-warning"}>
+                  {u.activeDevices} device{u.activeDevices !== 1 ? "s" : ""}
+                </span>
+              </p>
+              {u.activeDevices === 0 && u.role === "CALLER" && (
+                <p className="text-rally-warning text-xs mt-1">Needs to log in and enable push</p>
+              )}
             </div>
             <div className="flex gap-2">
               <button

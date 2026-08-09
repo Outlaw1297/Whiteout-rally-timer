@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { jsonResponse, errorResponse } from "@/lib/api";
 import { getSessionFromRequest } from "@/lib/session";
 import { nextDeliveryLeadMs } from "@/lib/delivery-lead";
+import { syncUserDeliveryLead } from "@/lib/sync-user-delivery-lead";
 import { logger } from "@/lib/logger";
 
 export async function POST(request: NextRequest) {
@@ -69,6 +70,8 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  const userLead = await syncUserDeliveryLead(session.id);
+
   logger.info("delivery_feedback", {
     userId: session.id,
     delayMs,
@@ -81,5 +84,6 @@ export async function POST(request: NextRequest) {
     ok: true,
     delayMs,
     devices: updates,
+    userLead,
   });
 }

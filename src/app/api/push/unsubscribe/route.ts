@@ -4,6 +4,7 @@ import { jsonResponse, errorResponse } from "@/lib/api";
 import { requireAuth } from "@/lib/auth";
 import { rateLimit, RATE_LIMITS, getClientIp, rateLimitResponse } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
+import { syncUserDeliveryLead } from "@/lib/sync-user-delivery-lead";
 
 export async function POST(request: NextRequest) {
   const session = await requireAuth(request);
@@ -37,6 +38,8 @@ export async function POST(request: NextRequest) {
   });
 
   logger.pushSubscriptionRemoved(subscription.id, "unsubscribed");
+
+  await syncUserDeliveryLead(session.id);
 
   return jsonResponse({ success: true });
 }

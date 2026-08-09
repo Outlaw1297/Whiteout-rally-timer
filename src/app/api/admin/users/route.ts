@@ -15,6 +15,8 @@ export async function GET(request: NextRequest) {
       displayName: true,
       role: true,
       active: true,
+      deliveryLeadMs: true,
+      deliverySampleCount: true,
       createdAt: true,
       _count: { select: { pushSubscriptions: { where: { active: true } } } },
     },

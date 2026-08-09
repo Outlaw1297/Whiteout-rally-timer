@@ -75,6 +75,11 @@ export async function POST(request: NextRequest) {
 
   logger.pushSubscriptionCreated(subscription.id, session.id);
 
+  await prisma.user.update({
+    where: { id: session.id },
+    data: { deliveryLeadMs: freshLead, deliverySampleCount: 0 },
+  });
+
   return jsonResponse({
     success: true,
     subscriptionId: subscription.id,

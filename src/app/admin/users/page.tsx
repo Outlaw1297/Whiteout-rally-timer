@@ -15,6 +15,8 @@ interface UserRow {
   role: string;
   active: boolean;
   activeDevices: number;
+  deliveryLeadMs: number | null;
+  deliverySampleCount: number;
 }
 
 export default function AdminUsersPage() {
@@ -273,6 +275,23 @@ export default function AdminUsersPage() {
                   <span className={u.activeDevices > 0 ? "text-rally-success" : "text-rally-warning"}>
                     {u.activeDevices} device{u.activeDevices !== 1 ? "s" : ""}
                   </span>
+                  {u.deliveryLeadMs != null ? (
+                    <>
+                      {" · "}
+                      <span className="text-rally-accent font-mono">
+                        {u.deliveryLeadMs}ms lead
+                      </span>
+                      <span className="text-rally-muted">
+                        {" "}
+                        ({u.deliverySampleCount} samples)
+                      </span>
+                    </>
+                  ) : u.activeDevices > 0 ? (
+                    <>
+                      {" · "}
+                      <span className="text-rally-warning">not calibrated</span>
+                    </>
+                  ) : null}
                 </p>
                 {u.activeDevices === 0 && u.role === "CALLER" && (
                   <p className="text-rally-warning text-xs mt-1">Needs to log in and enable push</p>

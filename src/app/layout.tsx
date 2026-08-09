@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { ServiceWorkerRegistrar } from "@/components/ServiceWorkerRegistrar";
+import { ForegroundNotificationListener } from "@/components/ForegroundNotificationListener";
 
 export const metadata: Metadata = {
   title: "Whiteout Rally Timer",
@@ -34,6 +35,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="bg-rally-bg text-rally-text min-h-screen antialiased">
         <ServiceWorkerRegistrar />
+        <ForegroundNotificationListener />
         {children}
       </body>
     </html>

@@ -6,6 +6,22 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
 });
 
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
+});
+
+function broadcastToClients(payload) {
+  return self.clients
+    .matchAll({ type: "window", includeUncontrolled: true })
+    .then((clientList) => {
+      for (const client of clientList) {
+        client.postMessage(payload);
+      }
+    });
+}
+
 self.addEventListener("push", (event) => {
   if (!event.data) return;
 
@@ -21,27 +37,43 @@ self.addEventListener("push", (event) => {
   const rallyId = data.rallyId || "";
   const notificationType = data.notificationType || "";
   const assignmentId = data.assignmentId || "";
+  const url = assignmentId
+    ? `/caller/events/${rallyId}`
+    : rallyId
+      ? `/caller/events/${rallyId}`
+      : "/caller";
+
+  const payload = {
+    type: "rally-push",
+    title,
+    body,
+    rallyId,
+    notificationType,
+    assignmentId,
+    url,
+  };
+
+  const notificationOptions = {
+    body,
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    tag: `rally-${rallyId}-${notificationType}-${assignmentId}`,
+    renotify: true,
+    requireInteraction: notificationType === "LAUNCH",
+    vibrate: notificationType === "LAUNCH" ? [300, 100, 300, 100, 300] : [200, 100, 200],
+    data: {
+      rallyId,
+      assignmentId,
+      notificationType,
+      url,
+    },
+  };
 
   event.waitUntil(
-    self.registration.showNotification(title, {
-      body,
-      icon: "/icons/icon-192.png",
-      badge: "/icons/icon-192.png",
-      tag: `rally-${rallyId}-${notificationType}-${assignmentId}`,
-      renotify: true,
-      requireInteraction: notificationType === "LAUNCH",
-      vibrate: [200, 100, 200],
-      data: {
-        rallyId,
-        assignmentId,
-        notificationType,
-        url: assignmentId
-          ? `/caller/events/${rallyId}`
-          : rallyId
-            ? `/caller/events/${rallyId}`
-            : "/caller",
-      },
-    })
+    Promise.all([
+      self.registration.showNotification(title, notificationOptions),
+      broadcastToClients(payload),
+    ]).catch(() => broadcastToClients(payload))
   );
 });
 

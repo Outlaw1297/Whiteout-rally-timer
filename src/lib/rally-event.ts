@@ -92,6 +92,8 @@ export function serializeEvent(event: EventWithAssignments) {
     name: event.name,
     targetArrivalTime: event.targetArrivalTime?.toISOString() ?? null,
     gatherDurationSeconds: event.gatherDurationSeconds,
+    firstCallerLeadSeconds: event.firstCallerLeadSeconds,
+    pushLeadMs: event.pushLeadMs,
     status: event.status,
     isTestMode: event.isTestMode,
     isTemplate: !event.targetArrivalTime && event.status !== "ACTIVE",
@@ -109,7 +111,11 @@ export function serializeEvent(event: EventWithAssignments) {
 export function buildNotificationEventsForAssignment(
   assignment: RallyAssignment,
   user: User,
-  isFirstCaller = false
+  options: {
+    isFirstCaller?: boolean;
+    referenceTime: Date;
+    pushLeadMs?: number;
+  }
 ) {
   if (!assignment.launchTime) return [];
   return getNotificationSchedule(
@@ -117,7 +123,11 @@ export function buildNotificationEventsForAssignment(
     user.warn10Enabled,
     user.warn5Enabled,
     user.launchEnabled,
-    isFirstCaller
+    {
+      warn3: options.isFirstCaller,
+      referenceTime: options.referenceTime,
+      pushLeadMs: options.pushLeadMs,
+    }
   );
 }
 

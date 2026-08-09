@@ -115,6 +115,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   let body: {
     name?: string;
     gatherDurationSeconds?: number;
+    firstCallerLeadSeconds?: number;
+    pushLeadMs?: number;
     status?: "DRAFT" | "READY";
   };
   try {
@@ -127,6 +129,18 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   if (body.name !== undefined) updateData.name = body.name.trim();
   if (body.gatherDurationSeconds !== undefined) {
     updateData.gatherDurationSeconds = body.gatherDurationSeconds;
+  }
+  if (body.firstCallerLeadSeconds !== undefined) {
+    if (body.firstCallerLeadSeconds < 0 || body.firstCallerLeadSeconds > 300) {
+      return errorResponse("firstCallerLeadSeconds must be 0–300");
+    }
+    updateData.firstCallerLeadSeconds = body.firstCallerLeadSeconds;
+  }
+  if (body.pushLeadMs !== undefined) {
+    if (body.pushLeadMs < 0 || body.pushLeadMs > 5000) {
+      return errorResponse("pushLeadMs must be 0–5000");
+    }
+    updateData.pushLeadMs = body.pushLeadMs;
   }
   if (body.status !== undefined) {
     updateData.status = body.status;

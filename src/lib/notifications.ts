@@ -3,32 +3,55 @@ import {
   buildNotificationEventsForAssignment,
   recalculateAssignmentTimes,
 } from "./rally-event";
-import type { RallyAssignment, User } from "@prisma/client";
+import type { RallyAssignment, User, RallyEvent } from "@prisma/client";
 
-export async function createNotificationEventsForAssignment(
+const ALL_NOTIFICATION_TYPES = ["WARNING_10", "WARNING_5", "WARNING_3", "LAUNCH"] as const;
+
+async function syncNotificationEventsForAssignment(
   assignment: RallyAssignment,
   user: User,
-  isFirstCaller = false
+  event: Pick<RallyEvent, "startedAt" | "pushLeadMs">,
+  isFirstCaller: boolean
 ) {
-  if (!assignment.launchTime) return;
+  if (!assignment.launchTime || !event.startedAt) return;
 
-  const schedule = buildNotificationEventsForAssignment(assignment, user, isFirstCaller);
-  for (const event of schedule) {
+  const schedule = buildNotificationEventsForAssignment(assignment, user, {
+    isFirstCaller,
+    referenceTime: event.startedAt,
+    pushLeadMs: event.pushLeadMs,
+  });
+
+  const scheduledTypes = new Set(schedule.map((s) => s.type));
+
+  for (const eventType of ALL_NOTIFICATION_TYPES) {
+    if (!scheduledTypes.has(eventType)) {
+      await prisma.notificationEvent.updateMany({
+        where: {
+          rallyAssignmentId: assignment.id,
+          type: eventType,
+          status: "PENDING",
+        },
+        data: { status: "SKIPPED", error: "not enough lead time" },
+      });
+    }
+  }
+
+  for (const item of schedule) {
     await prisma.notificationEvent.upsert({
       where: {
         rallyAssignmentId_type: {
           rallyAssignmentId: assignment.id,
-          type: event.type,
+          type: item.type,
         },
       },
       create: {
         rallyAssignmentId: assignment.id,
-        type: event.type,
-        scheduledAt: event.scheduledAt,
+        type: item.type,
+        scheduledAt: item.scheduledAt,
         status: "PENDING",
       },
       update: {
-        scheduledAt: event.scheduledAt,
+        scheduledAt: item.scheduledAt,
         status: "PENDING",
         sentAt: null,
         error: null,
@@ -36,6 +59,15 @@ export async function createNotificationEventsForAssignment(
       },
     });
   }
+}
+
+export async function createNotificationEventsForAssignment(
+  assignment: RallyAssignment,
+  user: User,
+  event: Pick<RallyEvent, "startedAt" | "pushLeadMs">,
+  isFirstCaller = false
+) {
+  await syncNotificationEventsForAssignment(assignment, user, event, isFirstCaller);
 }
 
 export async function cancelPendingNotifications(assignmentId: string) {
@@ -122,6 +154,7 @@ export async function rescheduleEventNotifications(eventId: string) {
       await createNotificationEventsForAssignment(
         updated,
         assignment.user,
+        event,
         assignment.id === firstAssignmentId
       );
     }
@@ -144,6 +177,7 @@ export async function activateEventNotifications(eventId: string) {
     await createNotificationEventsForAssignment(
       assignment,
       assignment.user,
+      event,
       assignment.id === firstAssignmentId
     );
   }

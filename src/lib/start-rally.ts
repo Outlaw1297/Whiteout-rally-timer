@@ -31,7 +31,8 @@ export async function startOrRestartRally(eventId: string) {
   const targetArrivalTime = computeTargetArrivalOnGo(
     startedAt,
     event.gatherDurationSeconds,
-    marches
+    marches,
+    event.firstCallerLeadSeconds
   );
 
   await prisma.$transaction(async (tx) => {

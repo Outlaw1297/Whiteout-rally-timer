@@ -1,8 +1,11 @@
 /** Default gather duration: 5 minutes */
 export const DEFAULT_GATHER_SECONDS = 300;
 
-/** Lead time before first caller launches so a 3-second warning can fire after GO */
-export const FIRST_CALLER_WARNING_SECONDS = 3;
+/** Default lead time before first caller launches after GO */
+export const DEFAULT_FIRST_CALLER_LEAD_SECONDS = 3;
+
+/** Default ms to send push early to offset network/OS delivery delay */
+export const DEFAULT_PUSH_LEAD_MS = 1000;
 
 /**
  * launchTime = targetArrivalTime - gatherDurationSeconds - marchDurationSeconds
@@ -32,12 +35,13 @@ export function calculateExpectedArrival(
 export function computeTargetArrivalOnGo(
   startedAt: Date,
   gatherDurationSeconds: number,
-  marchDurationsSeconds: number[]
+  marchDurationsSeconds: number[],
+  firstCallerLeadSeconds = DEFAULT_FIRST_CALLER_LEAD_SECONDS
 ): Date {
   const maxMarch = Math.max(...marchDurationsSeconds);
   return new Date(
     startedAt.getTime() +
-      (gatherDurationSeconds + maxMarch + FIRST_CALLER_WARNING_SECONDS) * 1000
+      (gatherDurationSeconds + maxMarch + firstCallerLeadSeconds) * 1000
   );
 }
 
@@ -84,34 +88,31 @@ export function getNotificationSchedule(
   warn10: boolean,
   warn5: boolean,
   launch: boolean,
-  warn3 = false
+  options: {
+    warn3?: boolean;
+    /** When the schedule is built (usually rally GO time). Skips warnings already in the past. */
+    referenceTime?: Date;
+    /** Send push this many ms before the ideal wall-clock time to offset delivery delay. */
+    pushLeadMs?: number;
+  } = {}
 ): Array<{ type: NotificationOffsetType; scheduledAt: Date }> {
-  const events: Array<{ type: NotificationOffsetType; scheduledAt: Date }> = [];
+  const referenceMs = (options.referenceTime ?? new Date()).getTime();
+  const pushLeadMs = options.pushLeadMs ?? 0;
   const launchMs = launchTime.getTime();
+  const secondsUntilLaunch = (launchMs - referenceMs) / 1000;
 
-  if (warn3) {
-    events.push({
-      type: "WARNING_3",
-      scheduledAt: new Date(launchMs - 3_000),
-    });
-  }
-  if (warn10) {
-    events.push({
-      type: "WARNING_10",
-      scheduledAt: new Date(launchMs - 10_000),
-    });
-  }
-  if (warn5) {
-    events.push({
-      type: "WARNING_5",
-      scheduledAt: new Date(launchMs - 5_000),
-    });
-  }
-  if (launch) {
-    events.push({ type: "LAUNCH", scheduledAt: new Date(launchMs) });
-  }
+  const candidates: Array<{ type: NotificationOffsetType; secondsBefore: number }> = [];
+  if (options.warn3) candidates.push({ type: "WARNING_3", secondsBefore: 3 });
+  if (warn10) candidates.push({ type: "WARNING_10", secondsBefore: 10 });
+  if (warn5) candidates.push({ type: "WARNING_5", secondsBefore: 5 });
+  if (launch) candidates.push({ type: "LAUNCH", secondsBefore: 0 });
 
-  return events;
+  return candidates
+    .filter(({ secondsBefore }) => secondsBefore <= secondsUntilLaunch)
+    .map(({ type, secondsBefore }) => ({
+      type,
+      scheduledAt: new Date(launchMs - secondsBefore * 1000 - pushLeadMs),
+    }));
 }
 
 export interface NextCallerAssignment {

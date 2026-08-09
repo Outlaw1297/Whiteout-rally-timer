@@ -52,6 +52,9 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
   const [addMarch, setAddMarch] = useState("8:00");
   const [useMyAccount, setUseMyAccount] = useState(true);
   const [starting, setStarting] = useState(false);
+  const [firstCallerLead, setFirstCallerLead] = useState("3");
+  const [pushLeadMs, setPushLeadMs] = useState("1000");
+  const [timingSaving, setTimingSaving] = useState(false);
 
   const { correctedNow, isLive } = useServerClock({ activeRally: event?.status === "ACTIVE" });
 
@@ -65,6 +68,8 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
       .then((data) => {
         if (data.error) return;
         setEvent(data);
+        setFirstCallerLead(String(data.firstCallerLeadSeconds ?? 3));
+        setPushLeadMs(String(data.pushLeadMs ?? 1000));
       });
   }, [params.id]);
 
@@ -138,6 +143,23 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
     loadEvent();
   };
 
+  const saveTimingSettings = async () => {
+    setTimingSaving(true);
+    try {
+      await fetch(`/api/events/${params.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          firstCallerLeadSeconds: parseInt(firstCallerLead, 10),
+          pushLeadMs: parseInt(pushLeadMs, 10),
+        }),
+      });
+      loadEvent();
+    } finally {
+      setTimingSaving(false);
+    }
+  };
+
   const linkMyAccount = async (assignmentId: string) => {
     if (!user) return;
     await fetch(`/api/events/${params.id}/assignments/${assignmentId}`, {
@@ -206,6 +228,60 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
       <section className="p-4 mb-4 bg-rally-surface border border-rally-border rounded-lg">
         <p className="text-rally-muted text-xs">GATHER</p>
         <p className="text-xl font-mono font-bold">{formatGather(event.gatherDurationSeconds)}</p>
+
+        {isTemplate ? (
+          <div className="mt-4 pt-4 border-t border-rally-border space-y-3">
+            <p className="text-rally-muted text-xs">TIMING SETTINGS</p>
+            <div>
+              <label className="text-rally-muted text-xs block mb-1">
+                FIRST CALLER LEAD (seconds after GO)
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={300}
+                value={firstCallerLead}
+                onChange={(e) => setFirstCallerLead(e.target.value)}
+                className="w-full px-3 py-2 bg-rally-bg border border-rally-border rounded font-mono text-sm"
+              />
+              <p className="text-rally-muted text-xs mt-1">
+                How long after GO before the first caller throws. Warnings that cannot fit in
+                this window are skipped automatically.
+              </p>
+            </div>
+            <div>
+              <label className="text-rally-muted text-xs block mb-1">
+                PUSH DELIVERY LEAD (milliseconds)
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={5000}
+                step={100}
+                value={pushLeadMs}
+                onChange={(e) => setPushLeadMs(e.target.value)}
+                className="w-full px-3 py-2 bg-rally-bg border border-rally-border rounded font-mono text-sm"
+              />
+              <p className="text-rally-muted text-xs mt-1">
+                Send notifications early to offset ~1s network delay. Check latency in Caller
+                Push Status after a test rally and adjust if needed.
+              </p>
+            </div>
+            <button
+              onClick={saveTimingSettings}
+              disabled={timingSaving}
+              className="w-full py-2 bg-rally-accent text-white text-sm font-bold rounded disabled:opacity-50"
+            >
+              {timingSaving ? "SAVING..." : "SAVE TIMING"}
+            </button>
+          </div>
+        ) : (
+          <div className="mt-3 text-rally-muted text-xs space-y-1">
+            <p>First caller lead: {event.firstCallerLeadSeconds ?? 3}s after GO</p>
+            <p>Push delivery lead: {event.pushLeadMs ?? 1000}ms</p>
+          </div>
+        )}
+
         {!isTemplate && event.targetArrivalTime && (
           <>
             <p className="text-rally-muted text-xs mt-3">TARGET ARRIVAL</p>

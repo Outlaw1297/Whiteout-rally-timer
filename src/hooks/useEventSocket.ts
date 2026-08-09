@@ -7,6 +7,8 @@ export interface SerializedEvent {
   name: string;
   targetArrivalTime: string | null;
   gatherDurationSeconds: number;
+  firstCallerLeadSeconds?: number;
+  pushLeadMs?: number;
   status: string;
   isTestMode: boolean;
   isTemplate?: boolean;

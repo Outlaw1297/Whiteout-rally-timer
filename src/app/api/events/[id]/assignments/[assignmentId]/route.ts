@@ -91,6 +91,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       await createNotificationEventsForAssignment(
         linked,
         linked.user,
+        event,
         firstAssignment?.id === assignmentId
       );
     }

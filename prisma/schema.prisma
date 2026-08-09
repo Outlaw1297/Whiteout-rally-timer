@@ -65,6 +65,10 @@ model RallyEvent {
   name                  String
   targetArrivalTime     DateTime?        @db.Timestamptz(3)
   gatherDurationSeconds Int              @default(300)
+  /** Seconds after GO before the first caller's launch time */
+  firstCallerLeadSeconds Int             @default(3)
+  /** Send push notifications early by this many ms to offset delivery delay */
+  pushLeadMs            Int              @default(1000)
   status                RallyEventStatus @default(DRAFT)
   isTestMode            Boolean          @default(false)
   startedAt             DateTime?        @db.Timestamptz(3)

@@ -4,7 +4,7 @@ import { jsonResponse, errorResponse } from "@/lib/api";
 import { requireAdmin } from "@/lib/auth";
 import { getSessionFromRequest } from "@/lib/session";
 import { serializeEvent } from "@/lib/rally-event";
-import { DEFAULT_GATHER_SECONDS } from "@/lib/timing";
+import { DEFAULT_GATHER_SECONDS, DEFAULT_FIRST_CALLER_LEAD_SECONDS, DEFAULT_PUSH_LEAD_MS } from "@/lib/timing";
 
 const eventInclude = {
   assignments: {
@@ -65,6 +65,8 @@ export async function POST(request: NextRequest) {
   let body: {
     name?: string;
     gatherDurationSeconds?: number;
+    firstCallerLeadSeconds?: number;
+    pushLeadMs?: number;
     isTestMode?: boolean;
   };
   try {
@@ -76,11 +78,15 @@ export async function POST(request: NextRequest) {
   if (!body.name?.trim()) return errorResponse("name required");
 
   const gatherDurationSeconds = body.gatherDurationSeconds ?? DEFAULT_GATHER_SECONDS;
+  const firstCallerLeadSeconds = body.firstCallerLeadSeconds ?? DEFAULT_FIRST_CALLER_LEAD_SECONDS;
+  const pushLeadMs = body.pushLeadMs ?? DEFAULT_PUSH_LEAD_MS;
 
   const event = await prisma.rallyEvent.create({
     data: {
       name: body.name.trim(),
       gatherDurationSeconds,
+      firstCallerLeadSeconds,
+      pushLeadMs,
       isTestMode: !!body.isTestMode,
       status: "DRAFT",
     },

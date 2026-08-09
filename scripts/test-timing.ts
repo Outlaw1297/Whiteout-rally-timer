@@ -7,6 +7,7 @@ import {
   computeTargetArrivalOnGo,
   DEFAULT_GATHER_SECONDS,
   getNextCaller,
+  getNotificationSchedule,
 } from "../src/lib/timing";
 import { formatTimeLocal } from "../src/lib/time";
 
@@ -100,3 +101,39 @@ if (overdue?.assignmentId !== "1") {
 
 console.log("PASS next caller progression");
 console.log("\nAll timing tests passed.");
+
+// Notification schedule: skip warnings that cannot fit before first caller
+const goTime = new Date();
+const firstLaunch = new Date(goTime.getTime() + 5_000);
+const shortLead = getNotificationSchedule(firstLaunch, true, true, true, {
+  warn3: true,
+  referenceTime: goTime,
+  pushLeadMs: 0,
+});
+const shortTypes = shortLead.map((e) => e.type);
+if (shortTypes.includes("WARNING_10")) {
+  console.error("FAIL should skip 10s warning when only 5s until launch");
+  process.exit(1);
+}
+if (!shortTypes.includes("WARNING_5") || !shortTypes.includes("LAUNCH")) {
+  console.error("FAIL should keep 5s warning and launch for 5s lead");
+  process.exit(1);
+}
+console.log("PASS skip impossible warnings for short first-caller lead");
+
+const compensated = getNotificationSchedule(
+  new Date(goTime.getTime() + 15_000),
+  true,
+  false,
+  true,
+  {
+    referenceTime: goTime,
+    pushLeadMs: 1000,
+  }
+);
+const warn10 = compensated.find((e) => e.type === "WARNING_10");
+if (!warn10 || warn10.scheduledAt.getTime() !== goTime.getTime() + 15_000 - 11_000) {
+  console.error("FAIL push lead compensation on 10s warning");
+  process.exit(1);
+}
+console.log("PASS push delivery lead compensation");

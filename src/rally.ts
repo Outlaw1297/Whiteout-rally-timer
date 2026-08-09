@@ -17,7 +17,7 @@ export interface LaunchPlanEntry extends March {
  * How long (ms) after the exact launch instant a march stays in the "launch now"
  * window before being considered late. Gives the player a moment to react.
  */
-export const LAUNCH_WINDOW_MS = 5_000;
+export const LAUNCH_WINDOW_MS = 10_000;
 
 /**
  * Given a set of marches that must all arrive at `arrivalMs`, compute when each
@@ -68,6 +68,7 @@ export function parseDuration(input: string): number | null {
 
 /** Format a number of seconds as "mm:ss" (or "h:mm:ss" when >= 1 hour). */
 export function formatDuration(totalSeconds: number): string {
+  if (!Number.isFinite(totalSeconds)) return "--:--";
   const negative = totalSeconds < 0;
   const abs = Math.abs(Math.round(totalSeconds));
   const hours = Math.floor(abs / 3600);
@@ -83,6 +84,7 @@ export function formatDuration(totalSeconds: number): string {
 
 /** Format an epoch-ms instant as a local wall-clock time (HH:MM:SS). */
 export function formatClock(epochMs: number): string {
+  if (!Number.isFinite(epochMs)) return "--:--:--";
   const d = new Date(epochMs);
   const pad = (n: number) => n.toString().padStart(2, "0");
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;

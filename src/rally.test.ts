@@ -40,12 +40,21 @@ describe("formatDuration", () => {
   it("formats negative durations", () => {
     expect(formatDuration(-5)).toBe("-0:05");
   });
+
+  it("never renders NaN", () => {
+    expect(formatDuration(NaN)).toBe("--:--");
+    expect(formatDuration(Infinity)).toBe("--:--");
+  });
 });
 
 describe("formatClock", () => {
   it("formats an epoch instant as HH:MM:SS", () => {
     const d = new Date(2024, 0, 1, 9, 5, 7);
     expect(formatClock(d.getTime())).toBe("09:05:07");
+  });
+
+  it("never renders NaN for a non-finite instant", () => {
+    expect(formatClock(NaN)).toBe("--:--:--");
   });
 });
 

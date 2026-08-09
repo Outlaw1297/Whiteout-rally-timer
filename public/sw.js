@@ -39,6 +39,9 @@ self.addEventListener("push", (event) => {
   const assignmentId = data.assignmentId || "";
   const scheduledAt = data.scheduledAt || "";
   const targetAt = data.targetAt || "";
+  const calibrationIndex = data.calibrationIndex || 0;
+  const calibrationTotal = data.calibrationTotal || 0;
+  const isCalibration = notificationType === "CALIBRATION";
   const receivedAtMs = Date.now();
   const url = assignmentId
     ? `/caller/events/${rallyId}`
@@ -55,6 +58,8 @@ self.addEventListener("push", (event) => {
     assignmentId,
     scheduledAt,
     targetAt,
+    calibrationIndex,
+    calibrationTotal,
     url,
   };
 
@@ -62,10 +67,17 @@ self.addEventListener("push", (event) => {
     body,
     icon: "/icons/icon-192.png",
     badge: "/icons/icon-192.png",
-    tag: `rally-${rallyId}-${notificationType}-${assignmentId}-${scheduledAt}`,
-    renotify: true,
-    requireInteraction: notificationType === "LAUNCH",
-    vibrate: notificationType === "LAUNCH" ? [300, 100, 300, 100, 300] : [200, 100, 200],
+    tag: isCalibration
+      ? `calibration-${calibrationIndex}-${receivedAtMs}`
+      : `rally-${rallyId}-${notificationType}-${assignmentId}-${scheduledAt}`,
+    renotify: !isCalibration,
+    requireInteraction: !isCalibration && notificationType === "LAUNCH",
+    silent: isCalibration,
+    vibrate: isCalibration
+      ? []
+      : notificationType === "LAUNCH"
+        ? [300, 100, 300, 100, 300]
+        : [200, 100, 200],
     data: {
       rallyId,
       assignmentId,

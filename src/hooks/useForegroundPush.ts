@@ -56,6 +56,29 @@ export function useForegroundPush() {
     if (data.type !== "rally-push") return;
 
     const notificationType = String(data.notificationType || "");
+
+    if (notificationType === "CALIBRATION") {
+      const index = Number(data.calibrationIndex || 0);
+      const total = Number(data.calibrationTotal || 0);
+      if (index > 0 && total > 0) {
+        window.dispatchEvent(
+          new CustomEvent("push-calibration-progress", {
+            detail: { index, total },
+          })
+        );
+      }
+      const targetAt = String(data.targetAt || "");
+      if (targetAt) {
+        reportDeliveryFeedback({
+          targetAt,
+          receivedAtMs: clockSync.correctedNow(),
+          notificationType,
+          rallyId: String(data.rallyId || "calibration"),
+        });
+      }
+      return;
+    }
+
     const rallyId = String(data.rallyId || "");
     const assignmentId = String(data.assignmentId || "");
     const scheduledAt = String(data.scheduledAt || "");

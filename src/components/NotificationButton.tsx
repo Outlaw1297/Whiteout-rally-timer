@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
+import { usePushCalibration } from "@/hooks/usePushCalibration";
 
 export function NotificationButton({ onStatusChange }: { onStatusChange?: () => void }) {
   const {
@@ -12,23 +13,42 @@ export function NotificationButton({ onStatusChange }: { onStatusChange?: () => 
     disableNotifications,
     sendTestNotification,
     isSubscribed,
+    checkStatus,
   } = usePushNotifications();
+
+  const {
+    calibration,
+    runCalibration,
+    dismissCalibration,
+    loadCalibrationStatus,
+    isCalibrating,
+  } = usePushCalibration();
 
   const [error, setError] = useState<string | null>(null);
   const [testSent, setTestSent] = useState(false);
 
+  useEffect(() => {
+    if (isSubscribed) {
+      loadCalibrationStatus();
+    }
+  }, [isSubscribed, loadCalibrationStatus]);
+
   const handleEnable = async () => {
     setError(null);
+    dismissCalibration();
     const ok = await enableNotifications();
     if (!ok) {
       setError("Could not enable notifications. Check browser permission and server VAPID keys.");
-    } else {
-      onStatusChange?.();
+      return;
     }
+    onStatusChange?.();
+    await runCalibration();
+    onStatusChange?.();
   };
 
   const handleDisable = async () => {
     setError(null);
+    dismissCalibration();
     await disableNotifications();
     onStatusChange?.();
   };
@@ -44,6 +64,13 @@ export function NotificationButton({ onStatusChange }: { onStatusChange?: () => 
       const msg = data.error || "Test notification failed.";
       setError(msg);
     }
+  };
+
+  const handleRecalibrate = async () => {
+    setError(null);
+    await checkStatus();
+    await runCalibration();
+    onStatusChange?.();
   };
 
   if (status === "unsupported") {
@@ -73,33 +100,112 @@ export function NotificationButton({ onStatusChange }: { onStatusChange?: () => 
         )}
       </div>
 
+      {(isCalibrating || calibration.phase === "complete" || calibration.phase === "partial") && (
+        <div
+          className={`w-full p-3 rounded-lg border text-sm ${
+            calibration.phase === "complete"
+              ? "bg-rally-success/10 border-rally-success/40"
+              : calibration.phase === "partial"
+                ? "bg-rally-warning/10 border-rally-warning/40"
+                : "bg-rally-surface border-rally-border"
+          }`}
+        >
+          {calibration.phase === "running" && (
+            <>
+              <p className="font-bold text-rally-accent">Calibrating notification timing</p>
+              <p className="text-rally-muted text-xs mt-1">
+                {calibration.message ||
+                  "Measuring how fast this device receives alerts…"}
+              </p>
+              <p className="text-rally-text text-xs mt-2 font-mono">
+                Step {calibration.received} of {calibration.total}
+              </p>
+            </>
+          )}
+          {calibration.phase === "complete" && (
+            <>
+              <p className="font-bold text-rally-success">✓ Calibration complete</p>
+              <p className="text-rally-muted text-xs mt-1">
+                {calibration.message ||
+                  `This device will receive rally alerts about ${calibration.deliveryLeadMs}ms early.`}
+              </p>
+            </>
+          )}
+          {calibration.phase === "partial" && (
+            <>
+              <p className="font-bold text-rally-warning">Calibration partial</p>
+              <p className="text-rally-muted text-xs mt-1">{calibration.message}</p>
+            </>
+          )}
+          {calibration.phase !== "running" && (
+            <button
+              type="button"
+              onClick={dismissCalibration}
+              className="mt-2 text-rally-muted text-xs underline"
+            >
+              Dismiss
+            </button>
+          )}
+        </div>
+      )}
+
+      {calibration.phase === "failed" && calibration.message && (
+        <div className="w-full p-3 rounded-lg border border-rally-danger/40 bg-rally-danger/10 text-sm">
+          <p className="font-bold text-rally-danger">Calibration incomplete</p>
+          <p className="text-rally-muted text-xs mt-1">{calibration.message}</p>
+          <button
+            type="button"
+            onClick={handleRecalibrate}
+            className="mt-2 text-rally-accent text-xs font-bold"
+          >
+            Try calibration again
+          </button>
+        </div>
+      )}
+
       {!isSubscribed ? (
         <>
           <button
             onClick={handleEnable}
-            disabled={loading}
+            disabled={loading || isCalibrating}
             className="w-full py-4 px-6 bg-rally-accent hover:bg-blue-600 disabled:opacity-50 text-white font-bold text-lg rounded-lg transition-colors"
           >
-            {loading ? "ENABLING..." : "ENABLE RALLY NOTIFICATIONS"}
+            {loading
+              ? "ENABLING..."
+              : isCalibrating
+                ? "CALIBRATING..."
+                : "ENABLE RALLY NOTIFICATIONS"}
           </button>
           <p className="text-rally-muted text-xs text-center px-2">
-            Required after installing the app. Allows rally alerts even when the app is in the
-            background.
+            Includes a quick timing calibration for this device (about 5 seconds). Rally
+            alerts work in the background after setup.
           </p>
         </>
       ) : (
         <>
           <p className="text-rally-success text-sm font-bold">✓ NOTIFICATIONS ENABLED</p>
+          {calibration.phase === "idle" && calibration.learnedLeadMs != null && (
+            <p className="text-rally-muted text-xs text-center">
+              Device timing: ~{calibration.learnedLeadMs}ms lead
+            </p>
+          )}
           <button
             onClick={handleTest}
-            disabled={testLoading}
+            disabled={testLoading || isCalibrating}
             className="w-full py-3 px-6 bg-rally-surface border border-rally-border hover:border-rally-accent text-rally-text font-bold text-sm rounded-lg transition-colors"
           >
             {testLoading ? "SENDING..." : testSent ? "✓ TEST SENT" : "SEND TEST NOTIFICATION"}
           </button>
           <button
+            onClick={handleRecalibrate}
+            disabled={isCalibrating}
+            className="w-full py-2 px-6 text-rally-accent text-xs font-bold"
+          >
+            {isCalibrating ? "CALIBRATING..." : "RECALIBRATE TIMING"}
+          </button>
+          <button
             onClick={handleDisable}
-            disabled={loading}
+            disabled={loading || isCalibrating}
             className="w-full py-2 px-6 text-rally-muted hover:text-rally-danger text-xs transition-colors"
           >
             {loading ? "DISABLING..." : "Disable notifications"}

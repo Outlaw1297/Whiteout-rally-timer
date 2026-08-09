@@ -5,6 +5,7 @@ import { requireAuth } from "@/lib/auth";
 import { rateLimit, RATE_LIMITS, getClientIp, rateLimitResponse } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
 import { getVapidPublicKey, getVapidDiagnostics, initWebPush } from "@/lib/push";
+import { defaultDeliveryLeadMs } from "@/lib/delivery-lead";
 
 export async function GET() {
   const publicKey = await getVapidPublicKey();
@@ -45,6 +46,8 @@ export async function POST(request: NextRequest) {
     return errorResponse("endpoint and keys (p256dh, auth) are required");
   }
 
+  const freshLead = defaultDeliveryLeadMs();
+
   const subscription = await prisma.pushSubscription.upsert({
     where: { endpoint },
     create: {
@@ -55,6 +58,8 @@ export async function POST(request: NextRequest) {
       userAgent: userAgent || null,
       platform: platform || null,
       active: true,
+      deliveryLeadMs: freshLead,
+      deliverySampleCount: 0,
     },
     update: {
       userId: session.id,
@@ -63,6 +68,8 @@ export async function POST(request: NextRequest) {
       userAgent: userAgent || null,
       platform: platform || null,
       active: true,
+      deliveryLeadMs: freshLead,
+      deliverySampleCount: 0,
     },
   });
 

@@ -37,14 +37,15 @@ export async function GET(request: NextRequest) {
     orderBy: { launchTime: "asc" },
   });
 
-  const eventMap = new Map<string, ReturnType<typeof serializeEvent>>();
-  for (const a of assignments) {
-    if (!eventMap.has(a.rallyEventId)) {
-      eventMap.set(a.rallyEventId, serializeEvent(a.rallyEvent));
-    }
-  }
+  const events = assignments.map((a) => {
+    const serialized = serializeEvent(a.rallyEvent);
+    return {
+      ...serialized,
+      assignments: serialized.assignments.filter((as) => as.userId === session.id),
+    };
+  });
 
-  return jsonResponse({ events: Array.from(eventMap.values()) });
+  return jsonResponse({ events });
 }
 
 export async function POST(request: NextRequest) {

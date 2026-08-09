@@ -142,6 +142,7 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                 <th className="pb-2">Caller</th>
                 <th className="pb-2">March</th>
                 <th className="pb-2">Launch</th>
+                <th className="pb-2">Expected</th>
                 <th className="pb-2">Status</th>
               </tr>
             </thead>
@@ -151,6 +152,7 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                   <td className="py-2 font-medium">{a.displayName}</td>
                   <td className="py-2 font-mono">{a.marchFormatted}</td>
                   <td className="py-2 font-mono">{formatArrivalTime(a.launchTime)}</td>
+                  <td className="py-2 font-mono">{formatArrivalTime(a.expectedArrivalTime)}</td>
                   <td className="py-2 text-xs">{statusLabel(a.status)}</td>
                 </tr>
               ))}

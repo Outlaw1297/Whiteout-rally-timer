@@ -79,6 +79,8 @@ export default function CallerEventPage({ params }: { params: { id: string } }) 
           isNow ? "bg-rally-danger/30 border-2 border-rally-danger animate-pulse" : "bg-rally-surface border border-rally-border"
         }`}
       >
+        <p className="text-rally-muted text-xs mb-1">YOUR RALLY</p>
+        <p className="text-2xl font-mono font-bold mb-4">{formatArrivalTime(assignment.launchTime)}</p>
         <p className="text-rally-muted text-xs mb-2">THROW RALLY IN</p>
         <p className={`text-5xl font-mono font-bold ${isNow ? "text-rally-danger" : "text-rally-accent"}`}>
           {isNow ? "🚨 THROW RALLY NOW" : countdown}
@@ -93,6 +95,10 @@ export default function CallerEventPage({ params }: { params: { id: string } }) 
         <div className="p-3 bg-rally-surface border border-rally-border rounded-lg">
           <p className="text-rally-muted text-xs">GATHER</p>
           <p className="text-xl font-mono font-bold">{formatGather(event.gatherDurationSeconds)}</p>
+        </div>
+        <div className="col-span-2 p-3 bg-rally-surface border border-rally-border rounded-lg">
+          <p className="text-rally-muted text-xs">EXPECTED ARRIVAL</p>
+          <p className="text-xl font-mono font-bold">{formatArrivalTime(assignment.expectedArrivalTime)}</p>
         </div>
         <div className="col-span-2 p-3 bg-rally-surface border border-rally-border rounded-lg">
           <p className="text-rally-muted text-xs">TARGET ARRIVAL</p>
@@ -116,7 +122,7 @@ export default function CallerEventPage({ params }: { params: { id: string } }) 
               Launch: {formatArrivalTime(assignment.launchTime)}
             </p>
             <p className="text-rally-muted text-sm">
-              Expected arrival: {formatArrivalTime(event.targetArrivalTime)}
+              Expected arrival: {formatArrivalTime(assignment.expectedArrivalTime)}
             </p>
           </div>
         ) : (

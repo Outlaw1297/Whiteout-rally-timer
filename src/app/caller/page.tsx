@@ -16,6 +16,27 @@ export default function CallerDashboard() {
   const [events, setEvents] = useState<SerializedEvent[]>([]);
   const { correctedNow } = useServerClock({ activeRally: true });
 
+  const myAssignments = events
+    .map((event) => {
+      const assignment = event.assignments.find((a) => a.userId === user?.id);
+      return assignment ? { event, assignment } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => a!.assignment.launchTime.localeCompare(b!.assignment.launchTime)) as Array<{
+    event: SerializedEvent;
+    assignment: SerializedEvent["assignments"][0];
+  }>;
+
+  const now = correctedNow();
+  const nextUp = myAssignments.find(
+    (a) =>
+      a.assignment.status === "WAITING" &&
+      new Date(a.assignment.launchTime).getTime() > now
+  );
+
+  const nextLaunchMs = nextUp ? new Date(nextUp.assignment.launchTime).getTime() : null;
+  const { display: countdown, isNow } = useCountdown(nextLaunchMs, correctedNow);
+
   useEffect(() => {
     if (!loading && !user) router.push("/login");
     if (!loading && user && user.role === "ADMIN") router.push("/admin");
@@ -32,23 +53,6 @@ export default function CallerDashboard() {
   if (loading || !user) {
     return <div className="p-8 text-center text-rally-muted">Loading...</div>;
   }
-
-  const myAssignments = events
-    .map((event) => {
-      const assignment = event.assignments.find((a) => a.userId === user.id);
-      return assignment ? { event, assignment } : null;
-    })
-    .filter(Boolean) as Array<{
-    event: SerializedEvent;
-    assignment: SerializedEvent["assignments"][0];
-  }>;
-
-  const nextUp = myAssignments
-    .filter((a) => a.assignment.status === "WAITING" && a.event.status === "ACTIVE")
-    .sort((a, b) => a.assignment.launchTime.localeCompare(b.assignment.launchTime))[0];
-
-  const nextLaunchMs = nextUp ? new Date(nextUp.assignment.launchTime).getTime() : null;
-  const { display: countdown, isNow } = useCountdown(nextLaunchMs, correctedNow);
 
   return (
     <main className="min-h-screen px-4 py-6 max-w-lg mx-auto">
@@ -85,6 +89,7 @@ export default function CallerDashboard() {
       <NotificationPreferences />
 
       <section className="flex flex-col gap-4">
+        <h2 className="text-rally-muted text-xs">UPCOMING ASSIGNMENTS</h2>
         {myAssignments.length === 0 && (
           <p className="text-rally-muted text-center py-8">No rally assignments yet</p>
         )}
@@ -95,14 +100,17 @@ export default function CallerDashboard() {
             className="block p-4 bg-rally-surface border border-rally-border rounded-lg hover:border-rally-accent"
           >
             <h2 className="font-bold text-lg">{event.name}</h2>
+            <p className="text-rally-accent font-mono font-bold text-lg mt-1">
+              YOUR RALLY {formatArrivalTime(assignment.launchTime)}
+            </p>
             <div className="grid grid-cols-2 gap-2 mt-3 text-sm">
               <div>
                 <p className="text-rally-muted text-xs">TARGET ARRIVAL</p>
                 <p className="font-mono">{formatArrivalTime(event.targetArrivalTime)}</p>
               </div>
               <div>
-                <p className="text-rally-muted text-xs">YOUR LAUNCH</p>
-                <p className="font-mono">{formatArrivalTime(assignment.launchTime)}</p>
+                <p className="text-rally-muted text-xs">EXPECTED ARRIVAL</p>
+                <p className="font-mono">{formatArrivalTime(assignment.expectedArrivalTime)}</p>
               </div>
               <div>
                 <p className="text-rally-muted text-xs">YOUR MARCH</p>

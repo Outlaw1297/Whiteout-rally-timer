@@ -15,6 +15,7 @@ export interface SerializedEvent {
     displayName: string;
     marchFormatted: string;
     launchTime: string;
+    expectedArrivalTime: string;
     status: string;
     launchedConfirmedAt: string | null;
   }>;

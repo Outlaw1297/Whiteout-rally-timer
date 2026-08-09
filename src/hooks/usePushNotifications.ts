@@ -86,13 +86,21 @@ export function usePushNotifications() {
       const { publicKey } = await keyRes.json();
       if (!publicKey) throw new Error("VAPID public key not available");
 
-      let subscription = await registration.pushManager.getSubscription();
-      if (!subscription) {
-        subscription = await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(publicKey),
+      // Always re-subscribe so device keys match the server's current VAPID pair.
+      const existing = await registration.pushManager.getSubscription();
+      if (existing) {
+        await fetch("/api/push/unsubscribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ endpoint: existing.endpoint }),
         });
+        await existing.unsubscribe();
       }
+
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+      });
 
       const subJson = subscription.toJSON();
 

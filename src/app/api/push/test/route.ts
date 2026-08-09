@@ -43,7 +43,14 @@ export async function POST(request: NextRequest) {
   }
 
   if (successCount === 0) {
-    return errorResponse(lastError || "Failed to send test notification", 500);
+    const needsResubscribe =
+      lastError?.includes("Vapid") ||
+      lastError?.includes("vapid") ||
+      lastError?.includes("401");
+    const message = needsResubscribe
+      ? `${lastError || "Failed to send test notification"}. Tap Disable then Enable notifications to refresh this device.`
+      : lastError || "Failed to send test notification";
+    return errorResponse(message, 500);
   }
 
   return jsonResponse({ success: true, devicesNotified: successCount });

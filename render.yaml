@@ -27,10 +27,6 @@ services:
         fromDatabase:
           name: rally-timer-db
           property: connectionString
-      - key: VAPID_PUBLIC_KEY
-        sync: false
-      - key: VAPID_PRIVATE_KEY
-        sync: false
       - key: VAPID_SUBJECT
         value: mailto:admin@example.com
       - key: SESSION_SECRET

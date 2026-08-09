@@ -33,7 +33,15 @@ function getSubject(): string {
   return (process.env.VAPID_SUBJECT || "mailto:admin@example.com").trim();
 }
 
+function isPlausibleVapidKey(key: string): boolean {
+  return key.length >= 40 && /^[A-Za-z0-9_-]+$/.test(key);
+}
+
 function trySetVapid(subject: string, publicKey: string, privateKey: string): boolean {
+  if (!isPlausibleVapidKey(publicKey) || !isPlausibleVapidKey(privateKey)) {
+    return false;
+  }
+
   try {
     webpush.setVapidDetails(subject, publicKey, privateKey);
     return true;
@@ -57,6 +65,7 @@ async function loadFromDatabase(): Promise<{
   publicKey: string;
   privateKey: string;
   subject: string;
+  source: string;
 } | null> {
   const row = await prisma.vapidConfig.findUnique({ where: { id: CONFIG_ID } });
   if (!row) return null;
@@ -64,6 +73,7 @@ async function loadFromDatabase(): Promise<{
     publicKey: row.publicKey,
     privateKey: row.privateKey,
     subject: row.subject,
+    source: row.source,
   };
 }
 
@@ -95,19 +105,40 @@ async function generateAndStore(subject: string) {
 async function resolveVapidKeys(): Promise<boolean> {
   const subject = getSubject();
 
-  const envPublic = normalizeVapidKey(process.env.VAPID_PUBLIC_KEY);
-  const envPrivate = normalizeVapidKey(process.env.VAPID_PRIVATE_KEY);
-  if (envPublic && envPrivate && trySetVapid(subject, envPublic, envPrivate)) {
-    await saveToDatabase(envPublic, envPrivate, subject, "env");
-    return markReady(envPublic, "env");
-  }
-
+  // Prefer persisted keys so bad Render env vars cannot break push after auto-setup.
   const stored = await loadFromDatabase();
   if (
     stored &&
     trySetVapid(stored.subject, stored.publicKey, stored.privateKey)
   ) {
-    return markReady(stored.publicKey, "database");
+    const source =
+      stored.source === "env" || stored.source === "generated"
+        ? stored.source
+        : "database";
+    return markReady(stored.publicKey, source);
+  }
+
+  const envPublic = normalizeVapidKey(process.env.VAPID_PUBLIC_KEY);
+  const envPrivate = normalizeVapidKey(process.env.VAPID_PRIVATE_KEY);
+  if (envPublic && envPrivate && trySetVapid(subject, envPublic, envPrivate)) {
+    await saveToDatabase(envPublic, envPrivate, subject, "env");
+    console.log(
+      JSON.stringify({
+        event: "vapid_from_env",
+        message: "Using VAPID keys from environment variables",
+      })
+    );
+    return markReady(envPublic, "env");
+  }
+
+  if (envPublic || envPrivate) {
+    console.warn(
+      JSON.stringify({
+        event: "vapid_env_ignored",
+        message:
+          "Invalid or incomplete VAPID env vars ignored — auto-generating keys instead",
+      })
+    );
   }
 
   const generated = await generateAndStore(subject);

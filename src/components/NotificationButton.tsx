@@ -42,11 +42,7 @@ export function NotificationButton({ onStatusChange }: { onStatusChange?: () => 
     } else {
       const data = await res.json().catch(() => ({}));
       const msg = data.error || "Test notification failed.";
-      setError(
-        msg.includes("VAPID") || msg.includes("vapid")
-          ? `${msg} Try Disable then Enable notifications to re-register this device.`
-          : msg
-      );
+      setError(msg);
     }
   };
 

@@ -10,6 +10,7 @@ export function CallerCountdownRow({
   status,
   correctedNow,
   highlight,
+  jointLaunchWith,
 }: {
   displayName: string;
   marchFormatted: string;
@@ -17,6 +18,7 @@ export function CallerCountdownRow({
   status: string;
   correctedNow: () => number;
   highlight?: boolean;
+  jointLaunchWith?: string[];
 }) {
   const launchMs = launchTime ? new Date(launchTime).getTime() : null;
   const { display, isNow } = useCountdown(launchMs, correctedNow);
@@ -33,6 +35,11 @@ export function CallerCountdownRow({
         <div>
           <p className="font-bold">{displayName}</p>
           <p className="text-rally-muted text-xs font-mono">March {marchFormatted}</p>
+          {jointLaunchWith && jointLaunchWith.length > 0 && (
+            <p className="text-rally-warning text-xs mt-0.5">
+              Joint launch with {jointLaunchWith.join(", ")}
+            </p>
+          )}
         </div>
         <span className="text-xs">{statusLabel(status)}</span>
       </div>

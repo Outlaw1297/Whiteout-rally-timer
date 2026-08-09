@@ -14,6 +14,7 @@ export interface SerializedEvent {
     id: string;
     userId: string | null;
     displayName: string;
+    marchDurationSeconds: number;
     marchFormatted: string;
     launchTime: string | null;
     expectedArrivalTime: string | null;

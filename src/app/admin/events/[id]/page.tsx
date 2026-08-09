@@ -9,7 +9,15 @@ import { useCountdown } from "@/hooks/useCountdown";
 import { useEventSocket, type SerializedEvent } from "@/hooks/useEventSocket";
 import { useNextCaller } from "@/hooks/useNextCaller";
 import { CallerCountdownRow } from "@/components/CallerCountdownRow";
+import { MarchDuplicateNotice } from "@/components/MarchDuplicateNotice";
+import { ServerClock } from "@/components/ServerClock";
 import { formatArrivalTime, formatGather, statusLabel } from "@/lib/display";
+import { parseMarchDuration } from "@/lib/timing";
+import {
+  formatJointLaunchNames,
+  getMarchDuplicateGroupForAssignment,
+  getMarchDuplicateGroups,
+} from "@/lib/march-groups";
 
 interface NotificationMonitor {
   callerName: string;
@@ -42,7 +50,7 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
   const [addMarch, setAddMarch] = useState("8:00");
   const [starting, setStarting] = useState(false);
 
-  const { correctedNow } = useServerClock({ activeRally: event?.status === "ACTIVE" });
+  const { correctedNow, isLive } = useServerClock({ activeRally: event?.status === "ACTIVE" });
 
   const nextCaller = useNextCaller(event?.assignments, correctedNow, event?.status === "ACTIVE");
   const nextLaunchMs = nextCaller?.launchTime ? new Date(nextCaller.launchTime).getTime() : null;
@@ -135,6 +143,11 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
   const isActive = event.status === "ACTIVE";
   const isFinished = event.status === "COMPLETED";
   const isTemplate = canEdit;
+  const marchDuplicateGroups = getMarchDuplicateGroups(event.assignments);
+  const addMarchSeconds = parseMarchDuration(addMarch);
+  const matchingMarchCallers = addMarchSeconds
+    ? event.assignments.filter((a) => a.marchDurationSeconds === addMarchSeconds)
+    : [];
 
   return (
     <main className="min-h-screen px-4 py-6 max-w-lg mx-auto">
@@ -152,6 +165,12 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
           Public live view →
         </Link>
       </header>
+
+      <ServerClock correctedNow={correctedNow} isLive={isLive} />
+
+      {marchDuplicateGroups.length > 0 && (
+        <MarchDuplicateNotice groups={marchDuplicateGroups} />
+      )}
 
       <section className="p-4 mb-4 bg-rally-surface border border-rally-border rounded-lg">
         <p className="text-rally-muted text-xs">GATHER</p>
@@ -179,7 +198,9 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
 
       {isActive && (
         <section className="flex flex-col gap-3 mb-6">
-          {event.assignments.map((a) => (
+          {event.assignments.map((a) => {
+            const jointGroup = getMarchDuplicateGroupForAssignment(a.id, marchDuplicateGroups);
+            return (
             <CallerCountdownRow
               key={a.id}
               displayName={a.displayName}
@@ -188,8 +209,14 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
               status={a.status}
               correctedNow={correctedNow}
               highlight={nextCaller?.assignmentId === a.id}
+              jointLaunchWith={
+                jointGroup
+                  ? jointGroup.displayNames.filter((name) => name !== a.displayName)
+                  : undefined
+              }
             />
-          ))}
+            );
+          })}
         </section>
       )}
 
@@ -197,7 +224,9 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
         <section className="mb-4">
           <h2 className="text-rally-muted text-xs mb-2">TEMPLATE CALLERS</h2>
           <div className="flex flex-col gap-2 mb-4">
-            {event.assignments.map((a) => (
+            {event.assignments.map((a) => {
+              const jointGroup = getMarchDuplicateGroupForAssignment(a.id, marchDuplicateGroups);
+              return (
               <div
                 key={a.id}
                 className="flex justify-between items-center p-3 bg-rally-surface border border-rally-border rounded-lg"
@@ -205,6 +234,12 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                 <div>
                   <p className="font-bold">{a.displayName}</p>
                   <p className="text-rally-muted text-xs font-mono">March {a.marchFormatted}</p>
+                  {jointGroup && (
+                    <p className="text-rally-warning text-xs mt-0.5">
+                      Joint launch with{" "}
+                      {formatJointLaunchNames(jointGroup.displayNames, a.displayName)}
+                    </p>
+                  )}
                   {a.hasPushAccount && (
                     <p className="text-rally-success text-xs">Push account linked</p>
                   )}
@@ -216,7 +251,8 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                   Remove
                 </button>
               </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="p-4 bg-rally-surface border border-rally-border rounded-lg flex flex-col gap-2">
@@ -233,6 +269,12 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
               placeholder="March (M:SS)"
               className="px-3 py-2 bg-rally-bg border border-rally-border rounded"
             />
+            {matchingMarchCallers.length > 0 && (
+              <p className="text-rally-warning text-xs">
+                Same march as {matchingMarchCallers.map((a) => a.displayName).join(", ")} — they
+                will launch together.
+              </p>
+            )}
             <select
               value={linkUserId}
               onChange={(e) => setLinkUserId(e.target.value)}
@@ -280,13 +322,34 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
         </section>
       )}
 
-      {(canEdit || isFinished) && event.assignments.length > 0 && (
+      {isFinished && event.assignments.length > 0 && (
+        <section className="flex flex-col gap-3 mb-4">
+          <button
+            onClick={goRally}
+            disabled={starting}
+            className="w-full py-6 bg-rally-success text-white font-bold text-2xl rounded-xl disabled:opacity-50"
+          >
+            {starting ? "STARTING..." : "GO AGAIN"}
+          </button>
+          <button
+            onClick={resetTemplate}
+            className="w-full py-4 bg-rally-accent/20 border border-rally-accent text-rally-accent font-bold rounded-lg"
+          >
+            START TEMPLATE AGAIN
+          </button>
+          <p className="text-rally-muted text-xs text-center -mt-1">
+            GO AGAIN reruns immediately. START TEMPLATE AGAIN lets you edit callers first.
+          </p>
+        </section>
+      )}
+
+      {canEdit && event.assignments.length > 0 && (
         <button
           onClick={goRally}
           disabled={starting}
           className="w-full py-6 mb-4 bg-rally-success text-white font-bold text-2xl rounded-xl disabled:opacity-50"
         >
-          {starting ? "STARTING..." : isFinished ? "GO AGAIN" : "GO"}
+          {starting ? "STARTING..." : "GO"}
         </button>
       )}
 
@@ -301,15 +364,19 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
 
       {(isActive || isFinished) && (
         <section className="flex flex-col gap-3 mb-6">
-          <button
-            onClick={resetTemplate}
-            className="w-full py-4 bg-rally-warning/20 border border-rally-warning text-rally-warning font-bold rounded-lg"
-          >
-            RESET TO TEMPLATE
-          </button>
-          <p className="text-rally-muted text-xs text-center -mt-1">
-            Clears launch times so you can edit callers and press GO again.
-          </p>
+          {!isFinished && (
+            <>
+              <button
+                onClick={resetTemplate}
+                className="w-full py-4 bg-rally-warning/20 border border-rally-warning text-rally-warning font-bold rounded-lg"
+              >
+                RESET TO TEMPLATE
+              </button>
+              <p className="text-rally-muted text-xs text-center -mt-1">
+                Clears launch times so you can edit callers and press GO again.
+              </p>
+            </>
+          )}
           <button
             onClick={() => deleteRally(false)}
             className="w-full py-3 bg-rally-danger/20 border border-rally-danger text-rally-danger font-bold rounded-lg text-sm"

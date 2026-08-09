@@ -8,14 +8,20 @@ import { useCountdown } from "@/hooks/useCountdown";
 import { useEventSocket } from "@/hooks/useEventSocket";
 import { useNextCaller } from "@/hooks/useNextCaller";
 import { CallerCountdownRow } from "@/components/CallerCountdownRow";
+import { MarchDuplicateNotice } from "@/components/MarchDuplicateNotice";
+import { ServerClock } from "@/components/ServerClock";
 import { formatArrivalTime, formatGather } from "@/lib/display";
+import {
+  getMarchDuplicateGroupForAssignment,
+  getMarchDuplicateGroups,
+} from "@/lib/march-groups";
 import type { SerializedEvent } from "@/hooks/useEventSocket";
 
 export default function PublicEventPage({ params }: { params: { id: string } }) {
   const { user, loading: authLoading } = useAuth();
   const [event, setEvent] = useState<SerializedEvent | null>(null);
   const [error, setError] = useState(false);
-  const { correctedNow } = useServerClock({ activeRally: event?.status === "ACTIVE" });
+  const { correctedNow, isLive } = useServerClock({ activeRally: event?.status === "ACTIVE" });
 
   const nextCaller = useNextCaller(event?.assignments, correctedNow, event?.status === "ACTIVE");
   const nextLaunchMs = nextCaller?.launchTime ? new Date(nextCaller.launchTime).getTime() : null;
@@ -53,6 +59,7 @@ export default function PublicEventPage({ params }: { params: { id: string } }) 
 
   const isActive = event.status === "ACTIVE";
   const isTemplate = event.status === "READY" || event.status === "DRAFT";
+  const marchDuplicateGroups = getMarchDuplicateGroups(event.assignments);
 
   return (
     <main className="min-h-screen px-4 py-6 max-w-lg mx-auto">
@@ -66,6 +73,12 @@ export default function PublicEventPage({ params }: { params: { id: string } }) 
           {isTemplate ? "Waiting for GO" : isActive ? "● LIVE" : event.status}
         </p>
       </header>
+
+      <ServerClock correctedNow={correctedNow} isLive={isLive} />
+
+      {marchDuplicateGroups.length > 0 && (
+        <MarchDuplicateNotice groups={marchDuplicateGroups} />
+      )}
 
       <section className="p-4 mb-4 bg-rally-surface border border-rally-border rounded-lg">
         <p className="text-rally-muted text-xs">GATHER</p>
@@ -89,14 +102,25 @@ export default function PublicEventPage({ params }: { params: { id: string } }) 
       <section className="flex flex-col gap-3 mb-6">
         <h2 className="text-rally-muted text-xs">CALLERS</h2>
         {isTemplate ? (
-          event.assignments.map((a) => (
+          event.assignments.map((a) => {
+            const jointGroup = getMarchDuplicateGroupForAssignment(a.id, marchDuplicateGroups);
+            return (
             <div key={a.id} className="p-3 bg-rally-surface border border-rally-border rounded-lg">
               <p className="font-bold">{a.displayName}</p>
               <p className="text-rally-muted text-sm font-mono">March {a.marchFormatted}</p>
+              {jointGroup && (
+                <p className="text-rally-warning text-xs mt-1">
+                  Joint launch with{" "}
+                  {jointGroup.displayNames.filter((name) => name !== a.displayName).join(", ")}
+                </p>
+              )}
             </div>
-          ))
+            );
+          })
         ) : (
-          event.assignments.map((a) => (
+          event.assignments.map((a) => {
+            const jointGroup = getMarchDuplicateGroupForAssignment(a.id, marchDuplicateGroups);
+            return (
             <CallerCountdownRow
               key={a.id}
               displayName={a.displayName}
@@ -105,8 +129,14 @@ export default function PublicEventPage({ params }: { params: { id: string } }) 
               status={a.status}
               correctedNow={correctedNow}
               highlight={nextCaller?.assignmentId === a.id}
+              jointLaunchWith={
+                jointGroup
+                  ? jointGroup.displayNames.filter((name) => name !== a.displayName)
+                  : undefined
+              }
             />
-          ))
+            );
+          })
         )}
       </section>
 

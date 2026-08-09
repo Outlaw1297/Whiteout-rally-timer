@@ -9,6 +9,7 @@ import { useCountdown } from "@/hooks/useCountdown";
 import { useEventSocket, type SerializedEvent } from "@/hooks/useEventSocket";
 import { NotificationButton } from "@/components/NotificationButton";
 import { ConnectionIndicator } from "@/components/ConnectionIndicator";
+import { ServerClock } from "@/components/ServerClock";
 import { formatArrivalTime, formatGather } from "@/lib/display";
 
 export default function CallerEventPage({ params }: { params: { id: string } }) {
@@ -74,6 +75,8 @@ export default function CallerEventPage({ params }: { params: { id: string } }) 
         <h1 className="text-2xl font-bold">{event.name}</h1>
         <p className="text-rally-muted text-sm">{user.displayName.toUpperCase()}</p>
       </header>
+
+      <ServerClock correctedNow={correctedNow} isLive={isLive} />
 
       <section
         className={`p-8 mb-6 rounded-xl text-center ${

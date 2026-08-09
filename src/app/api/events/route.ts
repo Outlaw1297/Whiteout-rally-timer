@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonResponse, errorResponse, parseRallyTime } from "@/lib/api";
-import { requireAdmin, requireAuth } from "@/lib/auth";
+import { requireAdmin } from "@/lib/auth";
+import { getSessionFromRequest } from "@/lib/session";
 import { serializeEvent } from "@/lib/rally-event";
 import { DEFAULT_GATHER_SECONDS } from "@/lib/timing";
 
@@ -13,8 +14,17 @@ const eventInclude = {
 };
 
 export async function GET(request: NextRequest) {
-  const session = await requireAuth(request);
-  if (session instanceof Response) return session;
+  const session = await getSessionFromRequest(request);
+
+  if (!session) {
+    const events = await prisma.rallyEvent.findMany({
+      where: { status: { in: ["READY", "ACTIVE", "COMPLETED"] } },
+      include: eventInclude,
+      orderBy: { targetArrivalTime: "asc" },
+      take: 50,
+    });
+    return jsonResponse({ events: events.map(serializeEvent) });
+  }
 
   if (session.role === "ADMIN") {
     const events = await prisma.rallyEvent.findMany({

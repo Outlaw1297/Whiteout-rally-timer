@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
@@ -41,6 +42,9 @@ export default function LoginPage() {
       </header>
 
       <form onSubmit={handleSubmit} className="w-full max-w-sm flex flex-col gap-4">
+        <Link href="/" className="text-rally-muted text-sm hover:text-rally-accent -mb-2">
+          ← Back to schedule
+        </Link>
         <div>
           <label className="block text-rally-muted text-xs mb-1">USERNAME</label>
           <input

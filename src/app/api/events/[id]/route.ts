@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonResponse, errorResponse, isValidUuid, parseRallyTime } from "@/lib/api";
 import { requireAdmin, requireAuth } from "@/lib/auth";
+import { getSessionFromRequest } from "@/lib/session";
 import {
   serializeEvent,
   serializeNotificationMonitor,
@@ -40,11 +41,21 @@ async function getEventForUser(eventId: string, userId: string, role: string) {
 }
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
-  const session = await requireAuth(request);
-  if (session instanceof Response) return session;
+  const session = await getSessionFromRequest(request);
 
   const { id } = params;
   if (!isValidUuid(id)) return errorResponse("Invalid event ID");
+
+  if (!session) {
+    const event = await prisma.rallyEvent.findUnique({
+      where: { id },
+      include: eventIncludeBasic,
+    });
+    if (!event || event.status === "CANCELLED" || event.status === "DRAFT") {
+      return errorResponse("Event not found", 404);
+    }
+    return jsonResponse(serializeEvent(event));
+  }
 
   const event = await getEventForUser(id, session.id, session.role);
   if (!event) return errorResponse("Event not found", 404);

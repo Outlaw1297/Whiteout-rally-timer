@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonResponse } from "@/lib/api";
 import { requireAuth } from "@/lib/auth";
-import { getVapidPublicKey, isVapidConfigured } from "@/lib/push";
+import { getVapidPublicKey, getVapidDiagnostics, initWebPush } from "@/lib/push";
 
 export async function GET(request: NextRequest) {
   const session = await requireAuth(request);
@@ -20,8 +20,14 @@ export async function GET(request: NextRequest) {
     orderBy: { updatedAt: "desc" },
   });
 
+  initWebPush();
+  const diagnostics = getVapidDiagnostics();
+
   return jsonResponse({
-    vapidConfigured: isVapidConfigured(),
+    vapidConfigured: diagnostics.configured,
+    vapidError: diagnostics.error,
+    hasPublicKey: diagnostics.hasPublicKey,
+    hasPrivateKey: diagnostics.hasPrivateKey,
     publicKey: getVapidPublicKey(),
     devices: subscriptions.map((sub) => ({
       id: sub.id,

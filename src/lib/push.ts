@@ -2,6 +2,7 @@ import webpush from "web-push";
 import { logger } from "./logger";
 
 let initialized = false;
+let lastInitError: string | null = null;
 
 /** Strip quotes, accidental key prefixes, and base64 padding from env values. */
 export function normalizeVapidKey(key: string | undefined): string | null {
@@ -16,57 +17,79 @@ export function normalizeVapidKey(key: string | undefined): string | null {
   }
 
   normalized = normalized.replace(/^VAPID_(PUBLIC|PRIVATE)_KEY=/i, "").trim();
-  // Remove line breaks/spaces from copy-paste (keys must be one continuous string)
   normalized = normalized.replace(/\s+/g, "");
-  // web-push requires URL-safe base64 without padding
   normalized = normalized.replace(/=+$/, "");
 
   return normalized || null;
+}
+
+export interface VapidDiagnostics {
+  configured: boolean;
+  hasPublicKey: boolean;
+  hasPrivateKey: boolean;
+  publicKeyLength: number;
+  privateKeyLength: number;
+  error: string | null;
+}
+
+export function getVapidDiagnostics(): VapidDiagnostics {
+  const publicKey = normalizeVapidKey(process.env.VAPID_PUBLIC_KEY);
+  const privateKey = normalizeVapidKey(process.env.VAPID_PRIVATE_KEY);
+
+  return {
+    configured: initialized,
+    hasPublicKey: !!publicKey,
+    hasPrivateKey: !!privateKey,
+    publicKeyLength: publicKey?.length ?? 0,
+    privateKeyLength: privateKey?.length ?? 0,
+    error: lastInitError,
+  };
 }
 
 export function isVapidConfigured(): boolean {
   return initialized;
 }
 
-export function initWebPush() {
-  if (initialized) return;
+export function initWebPush(): boolean {
+  if (initialized) return true;
 
   const publicKey = normalizeVapidKey(process.env.VAPID_PUBLIC_KEY);
   const privateKey = normalizeVapidKey(process.env.VAPID_PRIVATE_KEY);
   const subject = (process.env.VAPID_SUBJECT || "mailto:admin@example.com").trim();
 
   if (!publicKey || !privateKey) {
-    console.warn(
-      JSON.stringify({
-        event: "vapid_not_configured",
-        message: "Push notifications disabled — set valid VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY",
-      })
-    );
-    return;
+    lastInitError = !publicKey && !privateKey
+      ? "VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY are not set"
+      : !publicKey
+        ? "VAPID_PUBLIC_KEY is missing or empty"
+        : "VAPID_PRIVATE_KEY is missing or empty";
+    console.warn(JSON.stringify({ event: "vapid_not_configured", error: lastInitError }));
+    return false;
   }
 
   try {
     webpush.setVapidDetails(subject, publicKey, privateKey);
     initialized = true;
+    lastInitError = null;
     console.log(JSON.stringify({ event: "vapid_initialized" }));
+    return true;
   } catch (err) {
+    lastInitError = err instanceof Error ? err.message : String(err);
     console.error(
       JSON.stringify({
         event: "vapid_init_failed",
-        error: String(err),
-        hint: "Run npm run generate:vapid and paste keys into Render without quotes or padding",
+        error: lastInitError,
+        publicKeyLength: publicKey.length,
+        privateKeyLength: privateKey.length,
+        hint: "Generate a fresh pair with: npm run generate:vapid",
       })
     );
+    return false;
   }
 }
 
 export function getVapidPublicKey(): string | null {
-  if (!initialized) {
-    const publicKey = normalizeVapidKey(process.env.VAPID_PUBLIC_KEY);
-    const privateKey = normalizeVapidKey(process.env.VAPID_PRIVATE_KEY);
-    if (!publicKey || !privateKey) return null;
-    return publicKey;
-  }
+  if (!initWebPush()) return null;
   return normalizeVapidKey(process.env.VAPID_PUBLIC_KEY);
 }
 
@@ -82,10 +105,8 @@ export async function sendPushNotification(
   subscription: { endpoint: string; p256dh: string; auth: string },
   payload: PushPayload
 ): Promise<{ success: boolean; statusCode?: number; error?: string }> {
-  initWebPush();
-
-  if (!initialized) {
-    return { success: false, error: "VAPID not configured" };
+  if (!initWebPush()) {
+    return { success: false, error: lastInitError || "VAPID not configured" };
   }
 
   try {

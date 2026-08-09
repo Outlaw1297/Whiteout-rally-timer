@@ -5,6 +5,9 @@ import { NotificationButton } from "@/components/NotificationButton";
 
 interface PushStatus {
   vapidConfigured: boolean;
+  vapidError?: string | null;
+  hasPublicKey?: boolean;
+  hasPrivateKey?: boolean;
   deviceCount: number;
   devices: Array<{ id: string; platform: string }>;
 }
@@ -16,9 +19,32 @@ export function PushSetupCard({ onSubscribed }: { onSubscribed?: () => void }) {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/push/status");
-      if (res.ok) {
-        setStatus(await res.json());
+      const [statusRes, healthRes] = await Promise.all([
+        fetch("/api/push/status"),
+        fetch("/api/push/health"),
+      ]);
+      if (statusRes.ok) {
+        const data = await statusRes.json();
+        if (healthRes.ok) {
+          const health = await healthRes.json();
+          setStatus({
+            ...data,
+            vapidConfigured: health.pushEnabled,
+            vapidError: health.error || data.vapidError,
+          });
+        } else {
+          setStatus(data);
+        }
+      } else if (healthRes.ok) {
+        const health = await healthRes.json();
+        setStatus({
+          vapidConfigured: health.pushEnabled,
+          vapidError: health.error,
+          hasPublicKey: health.hasPublicKey,
+          hasPrivateKey: health.hasPrivateKey,
+          deviceCount: 0,
+          devices: [],
+        });
       }
     } finally {
       setLoading(false);
@@ -43,10 +69,20 @@ export function PushSetupCard({ onSubscribed }: { onSubscribed?: () => void }) {
       <h2 className="text-rally-muted text-xs mb-2">YOUR DEVICE NOTIFICATIONS</h2>
 
       {!status?.vapidConfigured ? (
-        <p className="text-rally-danger text-sm mb-3">
-          Push is not configured on the server. Set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY in
-          Render environment variables.
-        </p>
+        <div className="text-rally-danger text-sm mb-3 space-y-1">
+          <p className="font-bold">Push not working on server</p>
+          {status?.vapidError && <p className="text-xs">{status.vapidError}</p>}
+          {status?.hasPublicKey === false && (
+            <p className="text-xs">VAPID_PUBLIC_KEY is not set in Render.</p>
+          )}
+          {status?.hasPrivateKey === false && (
+            <p className="text-xs">VAPID_PRIVATE_KEY is not set in Render.</p>
+          )}
+          <p className="text-xs text-rally-muted mt-2">
+            Run <span className="font-mono">npm run generate:vapid</span> locally, then paste
+            both keys into Render (one line each, no spaces or quotes). Redeploy after saving.
+          </p>
+        </div>
       ) : (
         <p className="text-rally-muted text-xs mb-3">
           Install the app, then tap enable below. Each caller slot must also be linked to the

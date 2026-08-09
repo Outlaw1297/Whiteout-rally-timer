@@ -4,12 +4,16 @@ import { jsonResponse, errorResponse } from "@/lib/api";
 import { requireAuth } from "@/lib/auth";
 import { rateLimit, RATE_LIMITS, getClientIp, rateLimitResponse } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
-import { getVapidPublicKey } from "@/lib/push";
+import { getVapidPublicKey, getVapidDiagnostics, initWebPush } from "@/lib/push";
 
 export async function GET() {
   const publicKey = getVapidPublicKey();
   if (!publicKey) {
-    return errorResponse("Push notifications not configured", 503);
+    const diagnostics = getVapidDiagnostics();
+    return errorResponse(
+      diagnostics.error || "Push notifications not configured",
+      503
+    );
   }
   return jsonResponse({ publicKey });
 }

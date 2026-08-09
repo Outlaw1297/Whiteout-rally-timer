@@ -112,10 +112,9 @@ export function buildNotificationEventsForAssignment(
   assignment: RallyAssignment,
   user: User,
   options: {
-    isFirstCaller?: boolean;
-    referenceTime: Date;
+    referenceTime?: Date;
     pushLeadMs?: number;
-  }
+  } = {}
 ) {
   if (!assignment.launchTime) return [];
   return getNotificationSchedule(
@@ -124,8 +123,8 @@ export function buildNotificationEventsForAssignment(
     user.warn5Enabled,
     user.launchEnabled,
     {
-      warn3: options.isFirstCaller,
-      referenceTime: options.referenceTime,
+      warn3: true,
+      referenceTime: options.referenceTime ?? new Date(),
       pushLeadMs: options.pushLeadMs,
     }
   );

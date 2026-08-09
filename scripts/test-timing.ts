@@ -8,6 +8,7 @@ import {
   DEFAULT_GATHER_SECONDS,
   getNextCaller,
   getNotificationSchedule,
+  shouldSkipNotification,
 } from "../src/lib/timing";
 import { formatTimeLocal } from "../src/lib/time";
 
@@ -137,3 +138,27 @@ if (!warn10 || warn10.scheduledAt.getTime() !== goTime.getTime() + 15_000 - 11_0
   process.exit(1);
 }
 console.log("PASS push delivery lead compensation");
+
+// Later caller with only 6s until launch (e.g. linked mid-rally)
+const laterLaunch = new Date(goTime.getTime() + 6_000);
+const laterSchedule = getNotificationSchedule(laterLaunch, true, true, true, {
+  warn3: true,
+  referenceTime: goTime,
+  pushLeadMs: 0,
+});
+const laterTypes = laterSchedule.map((e) => e.type);
+if (laterTypes.includes("WARNING_10") || !laterTypes.includes("WARNING_5")) {
+  console.error("FAIL later caller should skip 10s but keep 5s when 6s remain");
+  process.exit(1);
+}
+console.log("PASS skip impossible warnings for any caller");
+
+if (!shouldSkipNotification("WARNING_10", laterLaunch, goTime)) {
+  console.error("FAIL shouldSkipNotification for stale 10s warning");
+  process.exit(1);
+}
+if (shouldSkipNotification("LAUNCH", laterLaunch, goTime)) {
+  console.error("FAIL should never skip LAUNCH");
+  process.exit(1);
+}
+console.log("PASS runtime stale notification skip");

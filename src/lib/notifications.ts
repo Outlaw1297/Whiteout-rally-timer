@@ -10,14 +10,12 @@ const ALL_NOTIFICATION_TYPES = ["WARNING_10", "WARNING_5", "WARNING_3", "LAUNCH"
 async function syncNotificationEventsForAssignment(
   assignment: RallyAssignment,
   user: User,
-  event: Pick<RallyEvent, "startedAt" | "pushLeadMs">,
-  isFirstCaller: boolean
+  event: Pick<RallyEvent, "pushLeadMs">
 ) {
-  if (!assignment.launchTime || !event.startedAt) return;
+  if (!assignment.launchTime) return;
 
   const schedule = buildNotificationEventsForAssignment(assignment, user, {
-    isFirstCaller,
-    referenceTime: event.startedAt,
+    referenceTime: new Date(),
     pushLeadMs: event.pushLeadMs,
   });
 
@@ -64,10 +62,9 @@ async function syncNotificationEventsForAssignment(
 export async function createNotificationEventsForAssignment(
   assignment: RallyAssignment,
   user: User,
-  event: Pick<RallyEvent, "startedAt" | "pushLeadMs">,
-  isFirstCaller = false
+  event: Pick<RallyEvent, "pushLeadMs">
 ) {
-  await syncNotificationEventsForAssignment(assignment, user, event, isFirstCaller);
+  await syncNotificationEventsForAssignment(assignment, user, event);
 }
 
 export async function cancelPendingNotifications(assignmentId: string) {
@@ -141,22 +138,7 @@ export async function rescheduleEventNotifications(eventId: string) {
       where: { id: assignment.id },
     });
     if (updated && assignment.user) {
-      const firstAssignmentId = event.assignments
-        .map((a) => ({
-          id: a.id,
-          launchTime: recalculateAssignmentTimes(
-            event.targetArrivalTime!,
-            event.gatherDurationSeconds,
-            a.marchDurationSeconds
-          ).launchTime,
-        }))
-        .sort((a, b) => a.launchTime.getTime() - b.launchTime.getTime())[0]?.id;
-      await createNotificationEventsForAssignment(
-        updated,
-        assignment.user,
-        event,
-        assignment.id === firstAssignmentId
-      );
+      await createNotificationEventsForAssignment(updated, assignment.user, event);
     }
   }
 }
@@ -168,17 +150,8 @@ export async function activateEventNotifications(eventId: string) {
   });
   if (!event) return;
 
-  const firstAssignmentId = [...event.assignments]
-    .filter((a) => a.launchTime)
-    .sort((a, b) => a.launchTime!.getTime() - b.launchTime!.getTime())[0]?.id;
-
   for (const assignment of event.assignments) {
     if (!assignment.user || !assignment.launchTime) continue;
-    await createNotificationEventsForAssignment(
-      assignment,
-      assignment.user,
-      event,
-      assignment.id === firstAssignmentId
-    );
+    await createNotificationEventsForAssignment(assignment, assignment.user, event);
   }
 }

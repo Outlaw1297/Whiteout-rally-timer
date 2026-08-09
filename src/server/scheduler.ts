@@ -3,6 +3,7 @@ import { logger } from "@/lib/logger";
 import { sendPushNotification, isExpiredSubscription } from "@/lib/push";
 import {
   getNotificationPayload,
+  shouldSkipNotification,
   type NotificationOffsetType,
 } from "@/lib/timing";
 import { broadcastRallyUpdate } from "./rally-hub";
@@ -34,6 +35,21 @@ async function processNotificationEvent(eventId: string) {
     if (!event || event.status !== "PENDING") return null;
     if (event.scheduledAt.getTime() > now + 100) return null;
     if (event.assignment.rallyEvent.status !== "ACTIVE") return null;
+
+    if (
+      event.assignment.launchTime &&
+      shouldSkipNotification(
+        event.type as NotificationOffsetType,
+        event.assignment.launchTime,
+        new Date(now)
+      )
+    ) {
+      await tx.notificationEvent.updateMany({
+        where: { id: eventId, status: "PENDING" },
+        data: { status: "SKIPPED", error: "not enough lead time" },
+      });
+      return null;
+    }
 
     const updated = await tx.notificationEvent.updateMany({
       where: { id: eventId, status: "PENDING" },

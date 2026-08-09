@@ -84,16 +84,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       include: { user: true },
     });
     if (linked?.user && linked.launchTime) {
-      const firstAssignment = await prisma.rallyAssignment.findFirst({
-        where: { rallyEventId: id, launchTime: { not: null } },
-        orderBy: { launchTime: "asc" },
-      });
-      await createNotificationEventsForAssignment(
-        linked,
-        linked.user,
-        event,
-        firstAssignment?.id === assignmentId
-      );
+      await createNotificationEventsForAssignment(linked, linked.user, event);
     }
   }
 

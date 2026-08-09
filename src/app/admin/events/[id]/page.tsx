@@ -245,8 +245,8 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                 className="w-full px-3 py-2 bg-rally-bg border border-rally-border rounded font-mono text-sm"
               />
               <p className="text-rally-muted text-xs mt-1">
-                How long after GO before the first caller throws. Warnings that cannot fit in
-                this window are skipped automatically.
+                How long after GO before the first caller throws. Each caller only gets
+                warnings that fit before their own launch time.
               </p>
             </div>
             <div>
@@ -539,6 +539,32 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                 <p className="text-rally-warning text-xs mt-2">
                   Linked account has not enabled notifications on any device yet.
                 </p>
+              )}
+              {m.notifications.length > 0 && (
+                <div className="mt-2 pt-2 border-t border-rally-border space-y-1">
+                  {m.notifications.map((n) => (
+                    <div key={n.type} className="flex justify-between text-xs gap-2">
+                      <span className="text-rally-muted">{n.type.replace("WARNING_", "")}s</span>
+                      <span
+                        className={
+                          n.status === "SENT"
+                            ? "text-rally-success"
+                            : n.status === "SKIPPED"
+                              ? "text-rally-muted"
+                              : n.status === "PENDING"
+                                ? "text-rally-warning"
+                                : "text-rally-danger"
+                        }
+                      >
+                        {n.status === "SENT" && n.latencyMs != null
+                          ? `sent (+${n.latencyMs}ms)`
+                          : n.status === "SKIPPED"
+                            ? "skipped"
+                            : n.status.toLowerCase()}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           ))}

@@ -83,6 +83,21 @@ export const NOTIFICATION_OFFSETS = [
 
 export type NotificationOffsetType = (typeof NOTIFICATION_OFFSETS)[number]["type"];
 
+export function getNotificationSecondsBefore(type: NotificationOffsetType): number {
+  return NOTIFICATION_OFFSETS.find((o) => o.type === type)?.secondsBefore ?? 0;
+}
+
+/** Skip a warning if less than its lead time remains before launch (applies to every caller). */
+export function shouldSkipNotification(
+  type: NotificationOffsetType,
+  launchTime: Date,
+  now: Date = new Date()
+): boolean {
+  if (type === "LAUNCH") return false;
+  const secondsUntilLaunch = (launchTime.getTime() - now.getTime()) / 1000;
+  return secondsUntilLaunch < getNotificationSecondsBefore(type);
+}
+
 export function getNotificationSchedule(
   launchTime: Date,
   warn10: boolean,
@@ -90,7 +105,7 @@ export function getNotificationSchedule(
   launch: boolean,
   options: {
     warn3?: boolean;
-    /** When the schedule is built (usually rally GO time). Skips warnings already in the past. */
+    /** When the schedule is built. Defaults to now — skips warnings that no longer fit for this caller. */
     referenceTime?: Date;
     /** Send push this many ms before the ideal wall-clock time to offset delivery delay. */
     pushLeadMs?: number;

@@ -62,6 +62,7 @@ const SETUP_STEPS = [
   {
     platform: "iOS",
     target: 2,
+    optional: true,
     steps: [
       "Open the site in Safari (not Chrome)",
       "Share → Add to Home Screen",
@@ -88,6 +89,7 @@ export default function TestBenchPage() {
   const [testResults, setTestResults] = useState<TestResult[] | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [copiedInvite, setCopiedInvite] = useState(false);
 
   const loadBench = useCallback(async () => {
     const res = await fetch("/api/admin/push/devices");
@@ -108,6 +110,28 @@ export default function TestBenchPage() {
       return () => clearInterval(interval);
     }
   }, [user, loadBench]);
+
+  const copyIosInvite = async () => {
+    const text = `Whiteout Rally Timer — iOS push test (5 min)
+
+1. Open in Safari (not Chrome): https://whiteout-rally-timer.onrender.com
+2. Tap Share → Add to Home Screen
+3. Open the app from your home screen (must be installed PWA)
+4. Log in with the test account I send you
+5. Tap "Enable Rally Notifications" → allow
+6. Tap "Send Test Notification"
+7. Tell me: did it work? (app open / background / screen locked)
+
+Requires iPhone/iPad on iOS 16.4 or newer.`;
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedInvite(true);
+      setTimeout(() => setCopiedInvite(false), 3000);
+    } catch {
+      setError("Could not copy — select and copy the text below manually");
+    }
+  };
 
   const sendTest = async (opts: { subscriptionId?: string; all?: boolean }) => {
     setError("");
@@ -150,8 +174,8 @@ export default function TestBenchPage() {
 
       <h1 className="text-xl font-bold mb-2">Notification Test Bench</h1>
       <p className="text-rally-muted text-sm mb-4">
-        Register 2 Android, 2 iOS, and 2 web devices. Each device needs its own caller
-        account (or share accounts — one account can have multiple devices).
+        Register Android and web devices locally. iOS requires a real iPhone/iPad — see
+        alternatives below if you do not have one.
       </p>
 
       {bench && (
@@ -225,7 +249,8 @@ export default function TestBenchPage() {
                 }`}
               >
                 <p className="font-bold text-sm mb-1">
-                  {done ? "✓" : "○"} {item.platform} ({count}/{item.target})
+                  {done ? "✓" : "○"} {item.platform}
+                  {"optional" in item && item.optional ? " (optional)" : ""} ({count}/{item.target})
                 </p>
                 <ol className="list-decimal list-inside text-rally-muted text-xs space-y-1">
                   {item.steps.map((step) => (
@@ -236,6 +261,43 @@ export default function TestBenchPage() {
             );
           })}
         </div>
+      </section>
+
+      <section className="p-4 mb-6 bg-rally-warning/10 border border-rally-warning/40 rounded-lg text-sm">
+        <p className="text-rally-warning font-bold text-xs mb-2">NO APPLE DEVICE?</p>
+        <p className="text-rally-muted text-xs mb-3">
+          The iOS Simulator cannot receive push notifications. You need a real iPhone/iPad,
+          or one of these workarounds:
+        </p>
+        <ul className="text-rally-muted text-xs space-y-2 mb-3 list-disc list-inside">
+          <li>
+            <strong className="text-rally-text">Ask a friend</strong> — create a test caller
+            account, send them the invite below (easiest free option)
+          </li>
+          <li>
+            <strong className="text-rally-text">Mac Safari PWA</strong> — if you have a Mac,
+            install the site to your Dock (Safari → File → Add to Dock). Same WebKit engine,
+            not identical to iPhone but catches many Safari-specific issues
+          </li>
+          <li>
+            <strong className="text-rally-text">Cloud device farm</strong> — BrowserStack or
+            LambdaTest give remote access to real iPhones (paid; manual PWA install still
+            required)
+          </li>
+          <li>
+            <strong className="text-rally-text">Android + web only</strong> — if both pass,
+            your VAPID/service-worker stack is solid; iOS uses the same standard
+          </li>
+        </ul>
+        <button
+          onClick={copyIosInvite}
+          className="w-full py-2 bg-rally-warning text-black text-xs font-bold rounded"
+        >
+          {copiedInvite ? "✓ COPIED iOS TESTER INVITE" : "COPY iOS TESTER INVITE"}
+        </button>
+        <p className="text-rally-muted text-xs mt-2">
+          Paste into Discord/SMS, then send the test account username and password separately.
+        </p>
       </section>
 
       <section className="mb-6">

@@ -11,6 +11,12 @@ import {
   shouldSkipNotification,
 } from "../src/lib/timing";
 import { formatTimeLocal } from "../src/lib/time";
+import {
+  applyServerTimeSync,
+  applyNtpSample,
+  createMonotonicAnchor,
+  readMonotonicNow,
+} from "../src/lib/clock-sync";
 
 function assertEqual(actual: Date, expectedHour: number, expectedMin: number, expectedSec: number, label: string) {
   const h = actual.getHours();
@@ -167,3 +173,23 @@ if (shouldSkipNotification("WARNING_10", laterLaunch, goTime, scheduled10)) {
   process.exit(1);
 }
 console.log("PASS runtime stale notification skip");
+
+const anchor = createMonotonicAnchor(1_000_000);
+const nudged = applyServerTimeSync(anchor, 1_000_080);
+const nudgedNow = readMonotonicNow(nudged);
+if (nudgedNow < 1_000_035 || nudgedNow > 1_000_085) {
+  console.error("FAIL gentle clock nudge", nudgedNow);
+  process.exit(1);
+}
+const snapAnchor = createMonotonicAnchor(1_000_000);
+const snapped = applyServerTimeSync(snapAnchor, 1_001_000);
+if (Math.abs(readMonotonicNow(snapped) - 1_001_000) > 5) {
+  console.error("FAIL large clock snap");
+  process.exit(1);
+}
+const ntp = applyNtpSample(anchor, 1000, 1050, 1052, 1100);
+if (Math.abs(ntp.offset - 1) > 2) {
+  console.error("FAIL NTP offset calculation", ntp.offset);
+  process.exit(1);
+}
+console.log("PASS monotonic clock sync");

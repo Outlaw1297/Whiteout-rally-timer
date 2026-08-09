@@ -20,7 +20,7 @@ export default function CallerEventPage({ params }: { params: { id: string } }) 
 
   const { correctedNow, isLive } = useServerClock({
     activeRally: true,
-    useWebSocket: true,
+    useWebSocket: false,
   });
 
   const assignment = event?.assignments.find((a) => a.userId === user?.id) ?? null;

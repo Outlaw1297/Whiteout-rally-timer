@@ -21,7 +21,10 @@ export default function PublicEventPage({ params }: { params: { id: string } }) 
   const { user, loading: authLoading } = useAuth();
   const [event, setEvent] = useState<SerializedEvent | null>(null);
   const [error, setError] = useState(false);
-  const { correctedNow, isLive } = useServerClock({ activeRally: event?.status === "ACTIVE" });
+  const { correctedNow, isLive } = useServerClock({
+    activeRally: event?.status === "ACTIVE",
+    useWebSocket: false,
+  });
 
   const nextCaller = useNextCaller(event?.assignments, correctedNow, event?.status === "ACTIVE");
   const nextLaunchMs = nextCaller?.launchTime ? new Date(nextCaller.launchTime).getTime() : null;

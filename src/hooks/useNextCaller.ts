@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { getNextCaller, type NextCallerAssignment, type NextCallerInfo } from "@/lib/timing";
 
+const TICK_MS = 100;
+
 export function useNextCaller(
   assignments: NextCallerAssignment[] | undefined,
   correctedNow: () => number,
@@ -12,15 +14,8 @@ export function useNextCaller(
 
   useEffect(() => {
     if (!active) return;
-
-    let raf = 0;
-    const loop = () => {
-      setTick((t) => t + 1);
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-
-    return () => cancelAnimationFrame(raf);
+    const interval = setInterval(() => setTick((t) => t + 1), TICK_MS);
+    return () => clearInterval(interval);
   }, [active]);
 
   return useMemo(() => {

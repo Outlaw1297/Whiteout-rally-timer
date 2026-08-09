@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { calculateClockOffset, estimateRoundTripLatency } from "@/lib/time";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { clockSync } from "@/lib/clock-sync";
 
 interface UseServerClockOptions {
   syncIntervalMs?: number;
@@ -18,6 +18,14 @@ interface ServerClockState {
   sync: () => Promise<void>;
 }
 
+function subscribe(callback: () => void) {
+  return clockSync.subscribe(callback);
+}
+
+function getSnapshot() {
+  return clockSync.getLastSyncAt();
+}
+
 export function useServerClock(options: UseServerClockOptions = {}): ServerClockState {
   const {
     syncIntervalMs = 30_000,
@@ -25,22 +33,22 @@ export function useServerClock(options: UseServerClockOptions = {}): ServerClock
     activeRally = false,
   } = options;
 
-  const effectiveSyncInterval = activeRally ? 5_000 : syncIntervalMs;
+  const effectiveSyncInterval = activeRally ? 2_000 : syncIntervalMs;
+  const wsPingInterval = activeRally ? 2_000 : 5_000;
 
-  const offsetRef = useRef(0);
-  const [offset, setOffset] = useState(0);
-  const [rtt, setRtt] = useState(0);
+  const [offset, setOffset] = useState(clockSync.getOffset());
+  const [rtt, setRtt] = useState(clockSync.getRtt());
   const [isLive, setIsLive] = useState(false);
-  const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastHttpSyncRef = useRef(0);
+  const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const applyOffset = useCallback((newOffset: number, newRtt: number) => {
-    offsetRef.current = newOffset;
-    setOffset(newOffset);
-    setRtt(newRtt);
-    setLastSyncAt(Date.now());
+  useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+
+  const refreshState = useCallback(() => {
+    setOffset(clockSync.getOffset());
+    setRtt(clockSync.getRtt());
+    setIsLive(true);
   }, []);
 
   const sync = useCallback(async () => {
@@ -54,24 +62,70 @@ export function useServerClock(options: UseServerClockOptions = {}): ServerClock
       const data = await res.json();
 
       if (data.serverReceiveTime && data.serverSendTime) {
-        const newOffset = calculateClockOffset(
+        clockSync.applyNtp(
           clientSendTime,
           data.serverReceiveTime,
           data.serverSendTime,
           clientReceiveTime
         );
-        applyOffset(newOffset, estimateRoundTripLatency(clientSendTime, clientReceiveTime));
-        lastHttpSyncRef.current = Date.now();
       } else if (data.unixMs) {
-        applyOffset(
-          data.unixMs - clientReceiveTime,
-          estimateRoundTripLatency(clientSendTime, clientReceiveTime)
-        );
+        clockSync.applyUnixMs(data.unixMs, clientReceiveTime, clientSendTime);
       }
+      refreshState();
     } catch {
-      // keep last known offset
+      // keep last known anchor
     }
-  }, [applyOffset]);
+  }, [refreshState]);
+
+  const sendWsPing = useCallback(() => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: "ping", clientSendTime: Date.now() }));
+  }, []);
+
+  const handleWsMessage = useCallback(
+    (raw: string) => {
+      try {
+        const data = JSON.parse(raw);
+
+        if (
+          data.type === "pong" &&
+          typeof data.clientSendTime === "number" &&
+          typeof data.serverReceiveTime === "number" &&
+          typeof data.serverSendTime === "number"
+        ) {
+          const clientReceiveTime = Date.now();
+          clockSync.applyNtp(
+            data.clientSendTime,
+            data.serverReceiveTime,
+            data.serverSendTime,
+            clientReceiveTime
+          );
+          refreshState();
+          return;
+        }
+
+        // Server push keepalive — only nudge if we have not synced recently.
+        if (data.type === "time_sync" && typeof data.serverTime === "number") {
+          const stale = !clockSync.getLastSyncAt() || Date.now() - clockSync.getLastSyncAt()! > 10_000;
+          if (stale) {
+            const clientReceiveTime = Date.now();
+            const flightMs = Math.max(0, clientReceiveTime - data.serverTime);
+            clockSync.applyUnixMs(
+              data.serverTime + flightMs,
+              clientReceiveTime,
+              clientReceiveTime
+            );
+            refreshState();
+          }
+          setIsLive(true);
+        }
+      } catch {
+        // ignore malformed messages
+      }
+    },
+    [refreshState]
+  );
 
   const connectWebSocket = useCallback(() => {
     if (!useWebSocket) return;
@@ -80,55 +134,59 @@ export function useServerClock(options: UseServerClockOptions = {}): ServerClock
     const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
     wsRef.current = ws;
 
-    ws.onopen = () => setIsLive(true);
-
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === "time_sync" && typeof data.serverTime === "number") {
-          const clientReceiveTime = Date.now();
-          const wsOffset = data.serverTime - clientReceiveTime;
-
-          // Blend WS offset with HTTP NTP offset when HTTP sync is recent
-          if (Date.now() - lastHttpSyncRef.current < 10_000) {
-            applyOffset(
-              offsetRef.current * 0.7 + wsOffset * 0.3,
-              estimateRoundTripLatency(clientReceiveTime - 500, clientReceiveTime)
-            );
-          } else {
-            applyOffset(wsOffset, 0);
-          }
-          setIsLive(true);
-        }
-      } catch {
-        // ignore
-      }
+    ws.onopen = () => {
+      setIsLive(true);
+      sendWsPing();
     };
+
+    ws.onmessage = (event) => handleWsMessage(event.data);
 
     ws.onclose = () => {
       setIsLive(false);
       wsRef.current = null;
+      if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
       reconnectTimeoutRef.current = setTimeout(connectWebSocket, 2000);
     };
 
-    ws.onerror = () => {
-      ws.close();
-    };
-  }, [useWebSocket, applyOffset]);
+    ws.onerror = () => ws.close();
+  }, [useWebSocket, handleWsMessage, sendWsPing]);
+
+  useEffect(() => {
+    const unsub = clockSync.subscribe(refreshState);
+    return unsub;
+  }, [refreshState]);
 
   useEffect(() => {
     sync();
     const interval = setInterval(sync, effectiveSyncInterval);
-    connectWebSocket();
+
+    if (useWebSocket) {
+      connectWebSocket();
+      pingIntervalRef.current = setInterval(sendWsPing, wsPingInterval);
+    }
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") sync();
+    };
+    document.addEventListener("visibilitychange", onVisible);
 
     return () => {
       clearInterval(interval);
+      if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
       if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+      document.removeEventListener("visibilitychange", onVisible);
       wsRef.current?.close();
     };
-  }, [sync, effectiveSyncInterval, connectWebSocket]);
+  }, [sync, effectiveSyncInterval, wsPingInterval, useWebSocket, connectWebSocket, sendWsPing]);
 
-  const correctedNow = useCallback(() => Date.now() + offsetRef.current, []);
+  const correctedNow = useCallback(() => clockSync.correctedNow(), []);
 
-  return { offset, rtt, isLive, lastSyncAt, correctedNow, sync };
+  return {
+    offset,
+    rtt,
+    isLive,
+    lastSyncAt: clockSync.getLastSyncAt(),
+    correctedNow,
+    sync,
+  };
 }

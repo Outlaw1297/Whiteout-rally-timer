@@ -46,8 +46,16 @@ export function setupWebSocket(wss: WebSocketServer) {
       try {
         const message = JSON.parse(data.toString());
 
-        if (message.type === "ping") {
-          ws.send(JSON.stringify({ type: "pong", serverTime: Date.now() }));
+        if (message.type === "ping" && typeof message.clientSendTime === "number") {
+          const serverReceiveTime = Date.now();
+          ws.send(
+            JSON.stringify({
+              type: "pong",
+              clientSendTime: message.clientSendTime,
+              serverReceiveTime,
+              serverSendTime: Date.now(),
+            })
+          );
           return;
         }
 

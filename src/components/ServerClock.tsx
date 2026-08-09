@@ -16,13 +16,11 @@ export function ServerClock({
   const [display, setDisplay] = useState("--:--:--");
 
   useEffect(() => {
-    let raf = 0;
-    const tick = () => {
-      setDisplay(formatTimeLocal(new Date(correctedNow())));
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    let interval = 0;
+    const tick = () => setDisplay(formatTimeLocal(new Date(correctedNow())));
+    tick();
+    interval = window.setInterval(tick, 100);
+    return () => clearInterval(interval);
   }, [correctedNow]);
 
   if (compact) {

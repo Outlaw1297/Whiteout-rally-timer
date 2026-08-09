@@ -3,6 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { formatCountdown } from "@/lib/time";
 
+/** 50ms ticks — reliable on entry devices where rAF is throttled. */
+const TICK_MS = 50;
+
 export function useCountdown(
   rallyTimeMs: number | null,
   correctedNow: () => number
@@ -10,7 +13,6 @@ export function useCountdown(
   const [display, setDisplay] = useState("--:--.---");
   const [remainingMs, setRemainingMs] = useState(0);
   const [isNow, setIsNow] = useState(false);
-  const rafRef = useRef<number>(0);
 
   useEffect(() => {
     if (rallyTimeMs === null) {
@@ -21,8 +23,7 @@ export function useCountdown(
     }
 
     const tick = () => {
-      const now = correctedNow();
-      const remaining = rallyTimeMs - now;
+      const remaining = rallyTimeMs - correctedNow();
       setRemainingMs(remaining);
 
       if (remaining <= 0) {
@@ -31,14 +32,20 @@ export function useCountdown(
       } else {
         setDisplay(formatCountdown(remaining));
         setIsNow(false);
-        rafRef.current = requestAnimationFrame(tick);
       }
     };
 
-    rafRef.current = requestAnimationFrame(tick);
+    tick();
+    const interval = setInterval(tick, TICK_MS);
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") tick();
+    };
+    document.addEventListener("visibilitychange", onVisible);
 
     return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [rallyTimeMs, correctedNow]);
 

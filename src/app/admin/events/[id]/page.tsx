@@ -57,7 +57,10 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
   const [pushLeadMs, setPushLeadMs] = useState("1000");
   const [timingSaving, setTimingSaving] = useState(false);
 
-  const { correctedNow, isLive } = useServerClock({ activeRally: event?.status === "ACTIVE" });
+  const { correctedNow, isLive } = useServerClock({
+    activeRally: event?.status === "ACTIVE",
+    useWebSocket: false,
+  });
 
   const nextCaller = useNextCaller(event?.assignments, correctedNow, event?.status === "ACTIVE");
   const nextLaunchMs = nextCaller?.launchTime ? new Date(nextCaller.launchTime).getTime() : null;

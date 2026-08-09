@@ -44,7 +44,9 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
   const { user, loading } = useAuth();
   const router = useRouter();
   const [event, setEvent] = useState<EventDetail | null>(null);
-  const [callers, setCallers] = useState<Array<{ id: string; displayName: string; username: string }>>([]);
+  const [callers, setCallers] = useState<
+    Array<{ id: string; displayName: string; username: string; role: string }>
+  >([]);
   const [callerName, setCallerName] = useState("");
   const [linkUserId, setLinkUserId] = useState("");
   const [addMarch, setAddMarch] = useState("8:00");
@@ -84,7 +86,10 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
         .then((r) => r.json())
         .then((data) =>
           setCallers(
-            (data.users || []).filter((u: { role: string; active: boolean }) => u.role === "CALLER" && u.active)
+            (data.users || []).filter(
+              (u: { role: string; active: boolean }) =>
+                u.active && (u.role === "CALLER" || u.role === "ADMIN")
+            )
           )
         );
     }
@@ -307,6 +312,7 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
               {callers.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.displayName} (@{c.username})
+                  {c.role === "ADMIN" ? " — admin" : ""}
                 </option>
               ))}
             </select>
@@ -319,9 +325,8 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
               Auto-link my account to new callers (for push testing)
             </label>
             <p className="text-rally-muted text-xs">
-              Link an account to send push notifications for that caller slot. Admins can link
-              their own account too — you can run the rally and throw your own march. Most
-              callers are not admins.
+              Link a caller or admin account to send push notifications for that slot. Admins
+              can run the rally and throw their own march when linked here.
             </p>
             <button onClick={addCaller} className="py-2 border border-rally-border rounded font-bold text-sm">
               ADD TO TEMPLATE

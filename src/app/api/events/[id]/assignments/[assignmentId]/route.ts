@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonResponse, errorResponse, isValidUuid } from "@/lib/api";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, canBeRallyCaller } from "@/lib/auth";
 import { serializeEvent } from "@/lib/rally-event";
 import { parseMarchDuration } from "@/lib/timing";
 import { createNotificationEventsForAssignment } from "@/lib/notifications";
@@ -61,7 +61,17 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   } = {};
 
   if (marchSeconds) updateData.marchDurationSeconds = marchSeconds;
-  if (body.userId !== undefined) updateData.userId = body.userId;
+  if (body.userId !== undefined) {
+    if (body.userId === null) {
+      updateData.userId = null;
+    } else {
+      const linkedUser = await prisma.user.findUnique({ where: { id: body.userId } });
+      if (!canBeRallyCaller(linkedUser)) {
+        return errorResponse("Invalid account for caller slot", 400);
+      }
+      updateData.userId = body.userId;
+    }
+  }
 
   await prisma.rallyAssignment.update({
     where: { id: assignmentId },

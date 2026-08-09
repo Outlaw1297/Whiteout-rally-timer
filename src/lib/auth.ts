@@ -57,3 +57,11 @@ export function validatePassword(password: string): string | null {
   if (password.length < 8) return "Password must be at least 8 characters";
   return null;
 }
+
+/** Accounts that can be linked to a rally caller slot (callers and admins). */
+export function canBeRallyCaller(
+  user: { role: string; active: boolean } | null | undefined
+): boolean {
+  if (!user || !user.active) return false;
+  return user.role === "CALLER" || user.role === "ADMIN";
+}

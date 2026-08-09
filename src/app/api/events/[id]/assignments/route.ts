@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonResponse, errorResponse, isValidUuid } from "@/lib/api";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, canBeRallyCaller } from "@/lib/auth";
 import { serializeEvent } from "@/lib/rally-event";
 import { parseMarchDuration } from "@/lib/timing";
 
@@ -53,10 +53,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   if (userId) {
     const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user || user.role !== "CALLER" || !user.active) {
-      return errorResponse("Invalid caller account", 400);
+    if (!canBeRallyCaller(user)) {
+      return errorResponse("Invalid account for caller slot", 400);
     }
-    callerName = callerName || user.displayName;
+    callerName = callerName || user!.displayName;
   }
 
   if (!callerName) {

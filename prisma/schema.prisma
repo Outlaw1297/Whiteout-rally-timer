@@ -138,3 +138,14 @@ model NotificationEvent {
   @@index([scheduledAt, status])
   @@index([rallyAssignmentId])
 }
+
+/** Auto-generated VAPID keys persisted across deploys (env vars optional override). */
+model VapidConfig {
+  id         String   @id @default("default")
+  publicKey  String
+  privateKey String
+  subject    String   @default("mailto:admin@example.com")
+  source     String   @default("generated")
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
+}

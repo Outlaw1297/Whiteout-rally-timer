@@ -17,6 +17,7 @@ export async function POST(request: NextRequest) {
   }
 
   let successCount = 0;
+  let lastError: string | null = null;
   for (const sub of subscriptions) {
     const result = await sendPushNotification(
       { endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth },
@@ -30,16 +31,19 @@ export async function POST(request: NextRequest) {
 
     if (result.success) {
       successCount++;
-    } else if (isExpiredSubscription(result.statusCode)) {
-      await prisma.pushSubscription.update({
-        where: { id: sub.id },
-        data: { active: false },
-      });
+    } else {
+      lastError = result.error || lastError;
+      if (isExpiredSubscription(result.statusCode)) {
+        await prisma.pushSubscription.update({
+          where: { id: sub.id },
+          data: { active: false },
+        });
+      }
     }
   }
 
   if (successCount === 0) {
-    return errorResponse("Failed to send test notification", 500);
+    return errorResponse(lastError || "Failed to send test notification", 500);
   }
 
   return jsonResponse({ success: true, devicesNotified: successCount });

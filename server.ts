@@ -21,17 +21,20 @@ app
   .prepare()
   .then(async () => {
     try {
-      initWebPush();
-    } catch (err) {
-      console.error(JSON.stringify({ event: "vapid_startup_error", error: String(err) }));
-    }
-
-    try {
       await migrateLegacyData();
       await migrateTemplateSchema();
       await migrateNotificationEnum();
     } catch (err) {
       console.error(JSON.stringify({ event: "startup_migration_failed", error: String(err) }));
+    }
+
+    try {
+      const vapidOk = await initWebPush();
+      if (!vapidOk) {
+        console.error(JSON.stringify({ event: "vapid_startup_error", error: "init failed" }));
+      }
+    } catch (err) {
+      console.error(JSON.stringify({ event: "vapid_startup_error", error: String(err) }));
     }
 
     const server = createServer((req, res) => {

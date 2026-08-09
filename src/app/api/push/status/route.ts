@@ -20,15 +20,17 @@ export async function GET(request: NextRequest) {
     orderBy: { updatedAt: "desc" },
   });
 
-  initWebPush();
-  const diagnostics = getVapidDiagnostics();
+  await initWebPush();
+  const diagnostics = await getVapidDiagnostics();
 
   return jsonResponse({
     vapidConfigured: diagnostics.configured,
     vapidError: diagnostics.error,
+    vapidSource: diagnostics.source,
+    autoManaged: diagnostics.autoManaged,
     hasPublicKey: diagnostics.hasPublicKey,
     hasPrivateKey: diagnostics.hasPrivateKey,
-    publicKey: getVapidPublicKey(),
+    publicKey: await getVapidPublicKey(),
     devices: subscriptions.map((sub) => ({
       id: sub.id,
       platform: sub.platform || "unknown",

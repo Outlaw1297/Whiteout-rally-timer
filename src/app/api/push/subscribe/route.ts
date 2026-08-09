@@ -7,9 +7,9 @@ import { logger } from "@/lib/logger";
 import { getVapidPublicKey, getVapidDiagnostics, initWebPush } from "@/lib/push";
 
 export async function GET() {
-  const publicKey = getVapidPublicKey();
+  const publicKey = await getVapidPublicKey();
   if (!publicKey) {
-    const diagnostics = getVapidDiagnostics();
+    const diagnostics = await getVapidDiagnostics();
     return errorResponse(
       diagnostics.error || "Push notifications not configured",
       503

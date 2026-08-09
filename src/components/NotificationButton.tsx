@@ -35,12 +35,18 @@ export function NotificationButton({ onStatusChange }: { onStatusChange?: () => 
 
   const handleTest = async () => {
     setError(null);
-    const ok = await sendTestNotification();
-    if (ok) {
+    const res = await sendTestNotification();
+    if (res.ok) {
       setTestSent(true);
       setTimeout(() => setTestSent(false), 3000);
     } else {
-      setError("Test notification failed. Confirm VAPID keys are set on the server.");
+      const data = await res.json().catch(() => ({}));
+      const msg = data.error || "Test notification failed.";
+      setError(
+        msg.includes("VAPID") || msg.includes("vapid")
+          ? `${msg} Try Disable then Enable notifications to re-register this device.`
+          : msg
+      );
     }
   };
 

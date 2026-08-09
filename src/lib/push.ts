@@ -1,8 +1,14 @@
 import webpush from "web-push";
+import { prisma } from "./prisma";
 import { logger } from "./logger";
 
+const CONFIG_ID = "default";
+
 let initialized = false;
+let activePublicKey: string | null = null;
 let lastInitError: string | null = null;
+let initPromise: Promise<boolean> | null = null;
+let keySource: "env" | "database" | "generated" | null = null;
 
 /** Strip quotes, accidental key prefixes, and base64 padding from env values. */
 export function normalizeVapidKey(key: string | undefined): string | null {
@@ -23,6 +29,108 @@ export function normalizeVapidKey(key: string | undefined): string | null {
   return normalized || null;
 }
 
+function getSubject(): string {
+  return (process.env.VAPID_SUBJECT || "mailto:admin@example.com").trim();
+}
+
+function trySetVapid(subject: string, publicKey: string, privateKey: string): boolean {
+  try {
+    webpush.setVapidDetails(subject, publicKey, privateKey);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function markReady(
+  publicKey: string,
+  source: "env" | "database" | "generated"
+): boolean {
+  initialized = true;
+  activePublicKey = publicKey;
+  keySource = source;
+  lastInitError = null;
+  return true;
+}
+
+async function loadFromDatabase(): Promise<{
+  publicKey: string;
+  privateKey: string;
+  subject: string;
+} | null> {
+  const row = await prisma.vapidConfig.findUnique({ where: { id: CONFIG_ID } });
+  if (!row) return null;
+  return {
+    publicKey: row.publicKey,
+    privateKey: row.privateKey,
+    subject: row.subject,
+  };
+}
+
+async function saveToDatabase(
+  publicKey: string,
+  privateKey: string,
+  subject: string,
+  source: "env" | "database" | "generated"
+) {
+  await prisma.vapidConfig.upsert({
+    where: { id: CONFIG_ID },
+    create: { id: CONFIG_ID, publicKey, privateKey, subject, source },
+    update: { publicKey, privateKey, subject, source },
+  });
+}
+
+async function generateAndStore(subject: string) {
+  const keys = webpush.generateVAPIDKeys();
+  await saveToDatabase(keys.publicKey, keys.privateKey, subject, "generated");
+  console.log(
+    JSON.stringify({
+      event: "vapid_auto_generated",
+      message: "Created new VAPID key pair and saved to database",
+    })
+  );
+  return keys;
+}
+
+async function resolveVapidKeys(): Promise<boolean> {
+  const subject = getSubject();
+
+  const envPublic = normalizeVapidKey(process.env.VAPID_PUBLIC_KEY);
+  const envPrivate = normalizeVapidKey(process.env.VAPID_PRIVATE_KEY);
+  if (envPublic && envPrivate && trySetVapid(subject, envPublic, envPrivate)) {
+    await saveToDatabase(envPublic, envPrivate, subject, "env");
+    return markReady(envPublic, "env");
+  }
+
+  const stored = await loadFromDatabase();
+  if (
+    stored &&
+    trySetVapid(stored.subject, stored.publicKey, stored.privateKey)
+  ) {
+    return markReady(stored.publicKey, "database");
+  }
+
+  const generated = await generateAndStore(subject);
+  if (trySetVapid(subject, generated.publicKey, generated.privateKey)) {
+    return markReady(generated.publicKey, "generated");
+  }
+
+  lastInitError = "Failed to generate valid VAPID keys";
+  return false;
+}
+
+export async function initWebPush(): Promise<boolean> {
+  if (initialized) return true;
+  if (!initPromise) {
+    initPromise = resolveVapidKeys().catch((err) => {
+      lastInitError = err instanceof Error ? err.message : String(err);
+      logger.error("vapid_init_failed", { error: lastInitError });
+      return false;
+    });
+  }
+  return initPromise;
+}
+
 export interface VapidDiagnostics {
   configured: boolean;
   hasPublicKey: boolean;
@@ -30,19 +138,26 @@ export interface VapidDiagnostics {
   publicKeyLength: number;
   privateKeyLength: number;
   error: string | null;
+  source: string | null;
+  autoManaged: boolean;
 }
 
-export function getVapidDiagnostics(): VapidDiagnostics {
-  const publicKey = normalizeVapidKey(process.env.VAPID_PUBLIC_KEY);
-  const privateKey = normalizeVapidKey(process.env.VAPID_PRIVATE_KEY);
+export async function getVapidDiagnostics(): Promise<VapidDiagnostics> {
+  await initWebPush();
+
+  const envPublic = normalizeVapidKey(process.env.VAPID_PUBLIC_KEY);
+  const envPrivate = normalizeVapidKey(process.env.VAPID_PRIVATE_KEY);
+  const stored = await loadFromDatabase().catch(() => null);
 
   return {
     configured: initialized,
-    hasPublicKey: !!publicKey,
-    hasPrivateKey: !!privateKey,
-    publicKeyLength: publicKey?.length ?? 0,
-    privateKeyLength: privateKey?.length ?? 0,
+    hasPublicKey: !!(envPublic || stored?.publicKey || activePublicKey),
+    hasPrivateKey: !!(envPrivate || stored?.privateKey),
+    publicKeyLength: (activePublicKey || envPublic || stored?.publicKey || "").length,
+    privateKeyLength: (envPrivate || stored?.privateKey || "").length,
     error: lastInitError,
+    source: keySource,
+    autoManaged: keySource === "database" || keySource === "generated",
   };
 }
 
@@ -50,47 +165,9 @@ export function isVapidConfigured(): boolean {
   return initialized;
 }
 
-export function initWebPush(): boolean {
-  if (initialized) return true;
-
-  const publicKey = normalizeVapidKey(process.env.VAPID_PUBLIC_KEY);
-  const privateKey = normalizeVapidKey(process.env.VAPID_PRIVATE_KEY);
-  const subject = (process.env.VAPID_SUBJECT || "mailto:admin@example.com").trim();
-
-  if (!publicKey || !privateKey) {
-    lastInitError = !publicKey && !privateKey
-      ? "VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY are not set"
-      : !publicKey
-        ? "VAPID_PUBLIC_KEY is missing or empty"
-        : "VAPID_PRIVATE_KEY is missing or empty";
-    console.warn(JSON.stringify({ event: "vapid_not_configured", error: lastInitError }));
-    return false;
-  }
-
-  try {
-    webpush.setVapidDetails(subject, publicKey, privateKey);
-    initialized = true;
-    lastInitError = null;
-    console.log(JSON.stringify({ event: "vapid_initialized" }));
-    return true;
-  } catch (err) {
-    lastInitError = err instanceof Error ? err.message : String(err);
-    console.error(
-      JSON.stringify({
-        event: "vapid_init_failed",
-        error: lastInitError,
-        publicKeyLength: publicKey.length,
-        privateKeyLength: privateKey.length,
-        hint: "Generate a fresh pair with: npm run generate:vapid",
-      })
-    );
-    return false;
-  }
-}
-
-export function getVapidPublicKey(): string | null {
-  if (!initWebPush()) return null;
-  return normalizeVapidKey(process.env.VAPID_PUBLIC_KEY);
+export async function getVapidPublicKey(): Promise<string | null> {
+  if (!(await initWebPush())) return null;
+  return activePublicKey;
 }
 
 export interface PushPayload {
@@ -105,7 +182,7 @@ export async function sendPushNotification(
   subscription: { endpoint: string; p256dh: string; auth: string },
   payload: PushPayload
 ): Promise<{ success: boolean; statusCode?: number; error?: string }> {
-  if (!initWebPush()) {
+  if (!(await initWebPush())) {
     return { success: false, error: lastInitError || "VAPID not configured" };
   }
 

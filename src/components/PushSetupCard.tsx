@@ -6,6 +6,8 @@ import { NotificationButton } from "@/components/NotificationButton";
 interface PushStatus {
   vapidConfigured: boolean;
   vapidError?: string | null;
+  vapidSource?: string | null;
+  autoManaged?: boolean;
   hasPublicKey?: boolean;
   hasPrivateKey?: boolean;
   deviceCount: number;
@@ -72,17 +74,15 @@ export function PushSetupCard({ onSubscribed }: { onSubscribed?: () => void }) {
         <div className="text-rally-danger text-sm mb-3 space-y-1">
           <p className="font-bold">Push not working on server</p>
           {status?.vapidError && <p className="text-xs">{status.vapidError}</p>}
-          {status?.hasPublicKey === false && (
-            <p className="text-xs">VAPID_PUBLIC_KEY is not set in Render.</p>
-          )}
-          {status?.hasPrivateKey === false && (
-            <p className="text-xs">VAPID_PRIVATE_KEY is not set in Render.</p>
-          )}
           <p className="text-xs text-rally-muted mt-2">
-            Run <span className="font-mono">npm run generate:vapid</span> locally, then paste
-            both keys into Render (one line each, no spaces or quotes). Redeploy after saving.
+            Keys are auto-generated on first run — redeploy if this persists.
           </p>
         </div>
+      ) : status?.autoManaged ? (
+        <p className="text-rally-muted text-xs mb-3">
+          Push keys are managed automatically — no Render env setup needed. If test
+          fails, tap Disable then Enable notifications again to refresh your device.
+        </p>
       ) : (
         <p className="text-rally-muted text-xs mb-3">
           Install the app, then tap enable below. Each caller slot must also be linked to the

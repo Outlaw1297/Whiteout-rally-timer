@@ -142,8 +142,7 @@ export function usePushNotifications() {
   const sendTestNotification = async () => {
     setTestLoading(true);
     try {
-      const res = await fetch("/api/push/test", { method: "POST" });
-      return res.ok;
+      return await fetch("/api/push/test", { method: "POST" });
     } finally {
       setTestLoading(false);
     }

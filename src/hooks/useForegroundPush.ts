@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { clockSync } from "@/lib/clock-sync";
+import { reportDeliveryFeedback } from "@/lib/report-delivery-feedback";
 
 export interface ForegroundPushMessage {
   id: string;
@@ -10,6 +12,7 @@ export interface ForegroundPushMessage {
   notificationType: string;
   assignmentId: string;
   scheduledAt: string;
+  targetAt: string;
   url: string;
   receivedAt: number;
 }
@@ -56,8 +59,9 @@ export function useForegroundPush() {
     const rallyId = String(data.rallyId || "");
     const assignmentId = String(data.assignmentId || "");
     const scheduledAt = String(data.scheduledAt || "");
+    const targetAt = String(data.targetAt || "");
     const dedupeKey = `${rallyId}:${notificationType}:${assignmentId}:${scheduledAt}`;
-    const now = Date.now();
+    const now = clockSync.correctedNow();
     const lastSeen = recentRef.current.get(dedupeKey);
     if (lastSeen && now - lastSeen < 3000) return;
     recentRef.current.set(dedupeKey, now);
@@ -70,13 +74,24 @@ export function useForegroundPush() {
       notificationType,
       assignmentId,
       scheduledAt,
+      targetAt,
       url: String(data.url || "/caller"),
-      receivedAt: Date.now(),
+      receivedAt: now,
     };
 
     setMessages((prev) => [...prev.slice(-2), message]);
     tryPageNotification(message);
     tryVibrate(notificationType);
+
+    if (targetAt) {
+      reportDeliveryFeedback({
+        targetAt,
+        receivedAtMs: now,
+        assignmentId,
+        notificationType,
+        rallyId,
+      });
+    }
 
     if (notificationType !== "LAUNCH") {
       window.setTimeout(() => dismiss(message.id), 5000);

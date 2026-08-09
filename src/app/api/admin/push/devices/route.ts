@@ -17,6 +17,8 @@ export async function GET(request: NextRequest) {
       id: true,
       platform: true,
       userAgent: true,
+      deliveryLeadMs: true,
+      deliverySampleCount: true,
       createdAt: true,
       updatedAt: true,
       user: {
@@ -51,6 +53,8 @@ export async function GET(request: NextRequest) {
       id: sub.id,
       platform: sub.platform || "unknown",
       userAgent: sub.userAgent,
+      deliveryLeadMs: sub.deliveryLeadMs,
+      deliverySampleCount: sub.deliverySampleCount,
       updatedAt: sub.updatedAt.toISOString(),
       user: sub.user,
     })),

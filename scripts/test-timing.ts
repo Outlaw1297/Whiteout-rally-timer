@@ -17,6 +17,7 @@ import {
   createMonotonicAnchor,
   readMonotonicNow,
 } from "../src/lib/clock-sync";
+import { getEffectivePushLeadMs, nextDeliveryLeadMs } from "../src/lib/delivery-lead";
 
 function assertEqual(actual: Date, expectedHour: number, expectedMin: number, expectedSec: number, label: string) {
   const h = actual.getHours();
@@ -193,3 +194,14 @@ if (Math.abs(ntp.offset - 1) > 2) {
   process.exit(1);
 }
 console.log("PASS monotonic clock sync");
+
+const learned = nextDeliveryLeadMs(1000, 250, 3);
+if (learned.deliveryLeadMs < 1000 || learned.deliveryLeadMs > 1200) {
+  console.error("FAIL adaptive delivery lead", learned);
+  process.exit(1);
+}
+if (getEffectivePushLeadMs(500, [{ deliveryLeadMs: 900 }, { deliveryLeadMs: 1200 }]) !== 1200) {
+  console.error("FAIL effective push lead uses max device lead");
+  process.exit(1);
+}
+console.log("PASS adaptive delivery lead");

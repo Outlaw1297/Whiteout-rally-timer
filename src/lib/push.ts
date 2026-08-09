@@ -266,6 +266,7 @@ export interface PushPayload {
   notificationType: string;
   assignmentId?: string;
   scheduledAt?: string;
+  targetAt?: string;
 }
 
 export async function sendPushNotification(

@@ -38,6 +38,8 @@ self.addEventListener("push", (event) => {
   const notificationType = data.notificationType || "";
   const assignmentId = data.assignmentId || "";
   const scheduledAt = data.scheduledAt || "";
+  const targetAt = data.targetAt || "";
+  const receivedAtMs = Date.now();
   const url = assignmentId
     ? `/caller/events/${rallyId}`
     : rallyId
@@ -52,6 +54,7 @@ self.addEventListener("push", (event) => {
     notificationType,
     assignmentId,
     scheduledAt,
+    targetAt,
     url,
   };
 
@@ -75,7 +78,39 @@ self.addEventListener("push", (event) => {
     Promise.all([
       self.registration.showNotification(title, notificationOptions),
       broadcastToClients(payload),
-    ]).catch(() => broadcastToClients(payload))
+      targetAt
+        ? fetch("/api/push/delivery-feedback", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({
+              targetAt,
+              receivedAtMs,
+              assignmentId,
+              notificationType,
+              rallyId,
+            }),
+          }).catch(() => {})
+        : Promise.resolve(),
+    ]).catch(() =>
+      Promise.all([
+        broadcastToClients(payload),
+        targetAt
+          ? fetch("/api/push/delivery-feedback", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify({
+                targetAt,
+                receivedAtMs,
+                assignmentId,
+                notificationType,
+                rallyId,
+              }),
+            }).catch(() => {})
+          : Promise.resolve(),
+      ])
+    )
   );
 });
 

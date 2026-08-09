@@ -3,22 +3,33 @@ import {
   buildNotificationEventsForAssignment,
   recalculateAssignmentTimes,
 } from "./rally-event";
+import { getEffectivePushLeadMs } from "./delivery-lead";
 import type { RallyAssignment, User, RallyEvent } from "@prisma/client";
 
 const ALL_NOTIFICATION_TYPES = ["WARNING_10", "WARNING_5", "WARNING_3", "LAUNCH"] as const;
+
+async function getPushLeadForUser(userId: string, eventPushLeadMs: number) {
+  const subscriptions = await prisma.pushSubscription.findMany({
+    where: { userId, active: true },
+    select: { deliveryLeadMs: true },
+  });
+  return getEffectivePushLeadMs(eventPushLeadMs, subscriptions);
+}
 
 async function syncNotificationEventsForAssignment(
   assignment: RallyAssignment,
   user: User,
   event: Pick<RallyEvent, "pushLeadMs">,
-  options: { preserveTerminal?: boolean } = {}
+  options: { preserveTerminal?: boolean; pushLeadMs?: number } = {}
 ) {
   const preserveTerminal = options.preserveTerminal ?? true;
   if (!assignment.launchTime) return;
 
+  const pushLeadMs = options.pushLeadMs ?? event.pushLeadMs;
+
   const schedule = buildNotificationEventsForAssignment(assignment, user, {
     referenceTime: new Date(),
-    pushLeadMs: event.pushLeadMs,
+    pushLeadMs,
   });
 
   const scheduledTypes = new Set(schedule.map((s) => s.type));
@@ -78,7 +89,7 @@ export async function createNotificationEventsForAssignment(
   assignment: RallyAssignment,
   user: User,
   event: Pick<RallyEvent, "pushLeadMs">,
-  options?: { preserveTerminal?: boolean }
+  options?: { preserveTerminal?: boolean; pushLeadMs?: number }
 ) {
   await syncNotificationEventsForAssignment(assignment, user, event, options);
 }
@@ -172,7 +183,10 @@ export async function rescheduleEventNotifications(eventId: string) {
       where: { id: assignment.id },
     });
     if (updated && assignment.user) {
-      await createNotificationEventsForAssignment(updated, assignment.user, event);
+      const pushLeadMs = await getPushLeadForUser(assignment.user.id, event.pushLeadMs);
+      await createNotificationEventsForAssignment(updated, assignment.user, event, {
+        pushLeadMs,
+      });
     }
   }
 }
@@ -191,11 +205,14 @@ export async function activateEventNotifications(
 
   for (const assignment of event.assignments) {
     if (!assignment.user || !assignment.launchTime) continue;
+
+    const pushLeadMs = await getPushLeadForUser(assignment.user.id, event.pushLeadMs);
+
     await createNotificationEventsForAssignment(
       assignment,
       assignment.user,
       event,
-      syncOptions
+      { ...syncOptions, pushLeadMs }
     );
   }
 }

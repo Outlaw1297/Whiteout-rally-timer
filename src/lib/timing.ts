@@ -87,6 +87,15 @@ export function getNotificationSecondsBefore(type: NotificationOffsetType): numb
   return NOTIFICATION_OFFSETS.find((o) => o.type === type)?.secondsBefore ?? 0;
 }
 
+/** Wall-clock moment the caller should experience this notification. */
+export function getNotificationTargetAt(
+  launchTime: Date,
+  type: NotificationOffsetType
+): Date {
+  const secondsBefore = getNotificationSecondsBefore(type);
+  return new Date(launchTime.getTime() - secondsBefore * 1000);
+}
+
 /** Skip a warning if less than its lead time remains before launch (applies to every caller). */
 export function shouldSkipNotification(
   type: NotificationOffsetType,

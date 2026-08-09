@@ -9,6 +9,8 @@ interface DeviceRow {
   id: string;
   platform: string;
   userAgent: string | null;
+  deliveryLeadMs?: number;
+  deliverySampleCount?: number;
   updatedAt: string;
   user: {
     id: string;
@@ -323,6 +325,12 @@ Requires iPhone/iPad on iOS 16.4 or newer.`;
                   <p className="text-rally-muted text-xs">@{device.user.username}</p>
                   <p className="text-rally-muted text-xs truncate mt-1">
                     {device.userAgent || "unknown browser"}
+                  </p>
+                  <p className="text-rally-accent text-xs mt-1">
+                    Learned lead: {device.deliveryLeadMs ?? 1000}ms
+                    {(device.deliverySampleCount ?? 0) > 0
+                      ? ` (${device.deliverySampleCount} samples)`
+                      : " (not calibrated yet)"}
                   </p>
                 </div>
                 <button

@@ -45,6 +45,8 @@ export async function POST(request: NextRequest) {
     error?: string;
   }> = [];
 
+  const targetAt = new Date().toISOString();
+
   for (const sub of subscriptions) {
     const result = await sendPushNotification(
       { endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth },
@@ -53,6 +55,7 @@ export async function POST(request: NextRequest) {
         body: `${sub.user.displayName} — ${sub.platform || "device"} notification check`,
         rallyId: "test-bench",
         notificationType: "TEST",
+        targetAt,
       }
     );
 

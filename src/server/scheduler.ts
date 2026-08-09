@@ -3,6 +3,7 @@ import { logger } from "@/lib/logger";
 import { sendPushNotification, isExpiredSubscription } from "@/lib/push";
 import {
   getNotificationPayload,
+  getNotificationTargetAt,
   shouldSkipNotification,
   type NotificationOffsetType,
 } from "@/lib/timing";
@@ -77,8 +78,13 @@ async function processNotificationEvent(eventId: string) {
     return;
   }
 
+  const notificationType = notification.type as NotificationOffsetType;
+  const targetAt =
+    assignment.launchTime &&
+    getNotificationTargetAt(assignment.launchTime, notificationType).toISOString();
+
   const { title, body } = getNotificationPayload(
-    notification.type as NotificationOffsetType,
+    notificationType,
     rallyEvent.name,
     callerName,
     rallyEvent.targetArrivalTime,
@@ -117,6 +123,7 @@ async function processNotificationEvent(eventId: string) {
         notificationType: notification.type,
         assignmentId: assignment.id,
         scheduledAt: notification.scheduledAt.toISOString(),
+        targetAt: targetAt || undefined,
       }
     );
 

@@ -116,6 +116,9 @@ model PushSubscription {
   platform  String?
   userAgent String?
   active    Boolean  @default(true)
+  /** Learned ms to send early so this device receives alerts on time */
+  deliveryLeadMs      Int @default(1000)
+  deliverySampleCount Int @default(0)
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 

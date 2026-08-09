@@ -18,6 +18,7 @@ export async function POST(request: NextRequest) {
 
   let successCount = 0;
   let lastError: string | null = null;
+  const targetAt = new Date().toISOString();
   for (const sub of subscriptions) {
     const result = await sendPushNotification(
       { endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth },
@@ -26,6 +27,7 @@ export async function POST(request: NextRequest) {
         body: `${session.displayName}, rally notifications are working.`,
         rallyId: "test",
         notificationType: "TEST",
+        targetAt,
       }
     );
 

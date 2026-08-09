@@ -13,6 +13,8 @@ export async function GET(request: NextRequest) {
     select: {
       id: true,
       platform: true,
+      deliveryLeadMs: true,
+      deliverySampleCount: true,
       userAgent: true,
       createdAt: true,
       updatedAt: true,
@@ -34,6 +36,8 @@ export async function GET(request: NextRequest) {
     devices: subscriptions.map((sub) => ({
       id: sub.id,
       platform: sub.platform || "unknown",
+      deliveryLeadMs: sub.deliveryLeadMs,
+      deliverySampleCount: sub.deliverySampleCount,
       userAgent: sub.userAgent,
       updatedAt: sub.updatedAt.toISOString(),
     })),

@@ -28,6 +28,7 @@ export interface PushPayload {
   body: string;
   rallyId: string;
   notificationType: string;
+  assignmentId?: string;
 }
 
 export async function sendPushNotification(
@@ -55,6 +56,10 @@ export async function sendPushNotification(
     return { success: true };
   } catch (err: unknown) {
     const error = err as { statusCode?: number; message?: string };
+    logger.error("push_send_failed", {
+      statusCode: error.statusCode,
+      error: error.message,
+    });
     return {
       success: false,
       statusCode: error.statusCode,

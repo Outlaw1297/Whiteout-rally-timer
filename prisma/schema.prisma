@@ -7,45 +7,98 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum RallyStatus {
+enum UserRole {
+  ADMIN
+  CALLER
+}
+
+enum RallyEventStatus {
   DRAFT
   READY
   ACTIVE
   COMPLETED
   CANCELLED
-  SCHEDULED // legacy — kept for DB compatibility with existing deployments
 }
 
-enum NotificationStatus {
+enum AssignmentStatus {
+  WAITING
+  LAUNCHED
+  MISSED
+}
+
+enum NotificationEventType {
+  WARNING_10
+  WARNING_5
+  LAUNCH
+}
+
+enum NotificationEventStatus {
   PENDING
   SENT
   FAILED
   SKIPPED
+  CANCELLED
 }
 
-model Rally {
-  id                  String      @id @default(uuid())
-  title               String
-  rallyTime           DateTime?   @db.Timestamptz(3)
-  createdAt           DateTime    @default(now()) @db.Timestamptz(3)
-  updatedAt           DateTime    @updatedAt @db.Timestamptz(3)
-  startedAt           DateTime?   @db.Timestamptz(3)
-  createdBy           String?
-  status              RallyStatus @default(READY)
-  notification30Sent  Boolean     @default(false)
-  notification10Sent  Boolean     @default(false)
-  notification5Sent   Boolean     @default(false)
-  notification1Sent   Boolean     @default(false)
-  notificationNowSent Boolean     @default(false)
-  cancelled           Boolean     @default(false)
-  isTestMode          Boolean     @default(false)
-  startDelaySeconds   Int?
+model User {
+  id              String   @id @default(uuid())
+  username        String   @unique
+  displayName     String
+  passwordHash    String
+  role            UserRole @default(CALLER)
+  active          Boolean  @default(true)
+  warn10Enabled   Boolean  @default(true)
+  warn5Enabled    Boolean  @default(true)
+  launchEnabled   Boolean  @default(true)
+  createdAt       DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(3)
 
-  subscribers      RallySubscriber[]
-  notificationLogs NotificationLog[]
+  assignments       RallyAssignment[]
+  pushSubscriptions PushSubscription[]
 
-  @@index([rallyTime])
-  @@index([status, cancelled])
+  @@index([role, active])
+}
+
+model RallyEvent {
+  id                    String           @id @default(uuid())
+  name                  String
+  targetArrivalTime     DateTime         @db.Timestamptz(3)
+  gatherDurationSeconds Int              @default(300)
+  status                RallyEventStatus @default(DRAFT)
+  isTestMode            Boolean          @default(false)
+  startedAt             DateTime?        @db.Timestamptz(3)
+  completedAt           DateTime?        @db.Timestamptz(3)
+  cancelledAt           DateTime?        @db.Timestamptz(3)
+  createdAt             DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt             DateTime         @updatedAt @db.Timestamptz(3)
+
+  assignments RallyAssignment[]
+
+  @@index([status])
+  @@index([targetArrivalTime])
+}
+
+model RallyAssignment {
+  id                   String           @id @default(uuid())
+  rallyEventId         String
+  userId               String
+  marchDurationSeconds Int
+  launchTime           DateTime         @db.Timestamptz(3)
+  expectedArrivalTime  DateTime         @db.Timestamptz(3)
+  status               AssignmentStatus @default(WAITING)
+  launchedConfirmedAt  DateTime?        @db.Timestamptz(3)
+  createdAt            DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime         @updatedAt @db.Timestamptz(3)
+
+  rallyEvent         RallyEvent          @relation(fields: [rallyEventId], references: [id], onDelete: Cascade)
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notificationEvents NotificationEvent[]
+
+  @@unique([rallyEventId, userId])
+  @@index([rallyEventId])
+  @@index([userId])
+  @@index([launchTime])
+  @@index([status])
 }
 
 model PushSubscription {
@@ -54,46 +107,32 @@ model PushSubscription {
   endpoint  String   @unique
   p256dh    String
   auth      String
+  platform  String?
+  userAgent String?
+  active    Boolean  @default(true)
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
-  userAgent String?
-  platform  String?
-  active    Boolean  @default(true)
 
-  rallySubscriptions RallySubscriber[]
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
-  @@index([active])
+  @@index([userId, active])
 }
 
-model RallySubscriber {
-  id                 String   @id @default(uuid())
-  rallyId            String
-  pushSubscriptionId String
-  createdAt          DateTime @default(now()) @db.Timestamptz(3)
+model NotificationEvent {
+  id                String                  @id @default(uuid())
+  rallyAssignmentId String
+  type              NotificationEventType
+  scheduledAt       DateTime                @db.Timestamptz(3)
+  sentAt            DateTime?               @db.Timestamptz(3)
+  status            NotificationEventStatus @default(PENDING)
+  error             String?
+  latencyMs         Int?
+  createdAt         DateTime                @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime                @updatedAt @db.Timestamptz(3)
 
-  rally            Rally            @relation(fields: [rallyId], references: [id], onDelete: Cascade)
-  pushSubscription PushSubscription @relation(fields: [pushSubscriptionId], references: [id], onDelete: Cascade)
+  assignment RallyAssignment @relation(fields: [rallyAssignmentId], references: [id], onDelete: Cascade)
 
-  @@unique([rallyId, pushSubscriptionId])
-  @@index([rallyId])
-}
-
-model NotificationLog {
-  id               String             @id @default(uuid())
-  rallyId          String
-  notificationType String
-  scheduledAt      DateTime           @db.Timestamptz(3)
-  sentAt           DateTime?          @db.Timestamptz(3)
-  latencyMs        Int?
-  status           NotificationStatus @default(PENDING)
-  success          Boolean            @default(false)
-  errorMessage     String?
-  createdAt        DateTime           @default(now()) @db.Timestamptz(3)
-
-  rally Rally @relation(fields: [rallyId], references: [id], onDelete: Cascade)
-
-  @@index([rallyId])
-  @@index([notificationType])
-  @@index([status])
+  @@unique([rallyAssignmentId, type])
+  @@index([scheduledAt, status])
+  @@index([rallyAssignmentId])
 }

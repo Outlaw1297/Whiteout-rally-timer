@@ -2,24 +2,19 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-const USER_ID_KEY = "rally_user_id";
-
-export function getUserId(): string {
-  if (typeof window === "undefined") return "";
-  let id = localStorage.getItem(USER_ID_KEY);
-  if (!id) {
-    id = crypto.randomUUID();
-    localStorage.setItem(USER_ID_KEY, id);
-  }
-  return id;
-}
-
 export type NotificationStatus = "unsupported" | "default" | "granted" | "denied" | "subscribed";
 
-export function usePushNotifications(rallyId?: string) {
+function detectPlatform(): string {
+  const ua = navigator.userAgent;
+  if (/iPhone|iPad|iPod/.test(ua)) return "iOS";
+  if (/Android/.test(ua)) return "Android";
+  return "Desktop";
+}
+
+export function usePushNotifications() {
   const [status, setStatus] = useState<NotificationStatus>("default");
   const [loading, setLoading] = useState(false);
-  const [subscriptionEndpoint, setSubscriptionEndpoint] = useState<string | null>(null);
+  const [testLoading, setTestLoading] = useState(false);
 
   const checkStatus = useCallback(async () => {
     if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
@@ -37,23 +32,14 @@ export function usePushNotifications(rallyId?: string) {
       const registration = await navigator.serviceWorker.ready;
       const sub = await registration.pushManager.getSubscription();
       if (sub) {
-        setSubscriptionEndpoint(sub.endpoint);
-        if (rallyId) {
-          const res = await fetch(
-            `/api/rallies/${rallyId}/subscription?endpoint=${encodeURIComponent(sub.endpoint)}`
-          );
-          const data = await res.json();
-          setStatus(data.subscribed && data.active ? "subscribed" : "granted");
-        } else {
-          setStatus("granted");
-        }
+        setStatus("subscribed");
       } else {
         setStatus(permission === "granted" ? "granted" : "default");
       }
     } catch {
       setStatus("default");
     }
-  }, [rallyId]);
+  }, []);
 
   useEffect(() => {
     checkStatus();
@@ -102,24 +88,20 @@ export function usePushNotifications(rallyId?: string) {
       }
 
       const subJson = subscription.toJSON();
-      const userId = getUserId();
 
       const res = await fetch("/api/push/subscribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId,
           endpoint: subscription.endpoint,
           keys: subJson.keys,
           userAgent: navigator.userAgent,
-          platform: navigator.platform,
-          rallyId,
+          platform: detectPlatform(),
         }),
       });
 
       if (!res.ok) throw new Error("Failed to subscribe");
 
-      setSubscriptionEndpoint(subscription.endpoint);
       setStatus("subscribed");
       return true;
     } catch (err) {
@@ -140,30 +122,35 @@ export function usePushNotifications(rallyId?: string) {
         await fetch("/api/push/unsubscribe", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            endpoint: subscription.endpoint,
-            rallyId,
-          }),
+          body: JSON.stringify({ endpoint: subscription.endpoint }),
         });
-        if (!rallyId) {
-          await subscription.unsubscribe();
-        }
+        await subscription.unsubscribe();
       }
       setStatus("default");
-      setSubscriptionEndpoint(null);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const sendTestNotification = async () => {
+    setTestLoading(true);
+    try {
+      const res = await fetch("/api/push/test", { method: "POST" });
+      return res.ok;
+    } finally {
+      setTestLoading(false);
     }
   };
 
   return {
     status,
     loading,
-    subscriptionEndpoint,
+    testLoading,
     enableNotifications,
     disableNotifications,
+    sendTestNotification,
     checkStatus,
-    isEnabled: status === "subscribed" || status === "granted",
+    isEnabled: status === "subscribed",
     isSubscribed: status === "subscribed",
   };
 }

@@ -20,20 +20,26 @@ self.addEventListener("push", (event) => {
   const body = data.body || "Rally notification";
   const rallyId = data.rallyId || "";
   const notificationType = data.notificationType || "";
+  const assignmentId = data.assignmentId || "";
 
   event.waitUntil(
     self.registration.showNotification(title, {
       body,
       icon: "/icons/icon-192.png",
       badge: "/icons/icon-192.png",
-      tag: `rally-${rallyId}-${notificationType}`,
+      tag: `rally-${rallyId}-${notificationType}-${assignmentId}`,
       renotify: true,
-      requireInteraction: notificationType === "T+0",
+      requireInteraction: notificationType === "LAUNCH",
       vibrate: [200, 100, 200],
       data: {
         rallyId,
+        assignmentId,
         notificationType,
-        url: rallyId ? `/rally/${rallyId}` : "/",
+        url: assignmentId
+          ? `/caller/events/${rallyId}`
+          : rallyId
+            ? `/caller/events/${rallyId}`
+            : "/caller",
       },
     })
   );
@@ -42,8 +48,7 @@ self.addEventListener("push", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
-  const rallyId = event.notification.data?.rallyId;
-  const url = rallyId ? `/rally/${rallyId}` : "/";
+  const url = event.notification.data?.url || "/caller";
 
   event.waitUntil(
     self.clients

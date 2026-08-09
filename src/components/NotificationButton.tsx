@@ -3,13 +3,18 @@
 import { useState } from "react";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 
-interface NotificationButtonProps {
-  rallyId?: string;
-}
+export function NotificationButton() {
+  const {
+    status,
+    loading,
+    testLoading,
+    enableNotifications,
+    disableNotifications,
+    sendTestNotification,
+    isSubscribed,
+  } = usePushNotifications();
 
-export function NotificationButton({ rallyId }: NotificationButtonProps) {
-  const { status, loading, enableNotifications, disableNotifications, isSubscribed } =
-    usePushNotifications(rallyId);
+  const [testSent, setTestSent] = useState(false);
 
   if (status === "unsupported") {
     return (
@@ -22,7 +27,7 @@ export function NotificationButton({ rallyId }: NotificationButtonProps) {
   if (status === "denied") {
     return (
       <div className="text-rally-danger text-sm text-center">
-        Notifications blocked. Enable in Safari Settings → Notifications.
+        Notifications blocked. Enable in device Settings → Notifications.
       </div>
     );
   }
@@ -45,47 +50,38 @@ export function NotificationButton({ rallyId }: NotificationButtonProps) {
             disabled={loading}
             className="w-full py-4 px-6 bg-rally-accent hover:bg-blue-600 disabled:opacity-50 text-white font-bold text-lg rounded-lg transition-colors"
           >
-            {loading ? "ENABLING..." : "ENABLE RALLY ALERTS"}
+            {loading ? "ENABLING..." : "ENABLE RALLY NOTIFICATIONS"}
           </button>
           <p className="text-rally-muted text-xs text-center px-2">
-            Enable notifications to receive rally alerts while Whiteout Survival is
-            open or your phone is locked.
+            Enable notifications so you can be alerted when it is time to throw your
+            rally, even when Whiteout Survival is open.
           </p>
         </>
       ) : (
         <>
-          <p className="text-rally-success text-sm font-bold">
-            ✓ Rally notifications enabled
-          </p>
+          <p className="text-rally-success text-sm font-bold">✓ NOTIFICATIONS ENABLED</p>
+          <button
+            onClick={async () => {
+              const ok = await sendTestNotification();
+              if (ok) {
+                setTestSent(true);
+                setTimeout(() => setTestSent(false), 3000);
+              }
+            }}
+            disabled={testLoading}
+            className="w-full py-3 px-6 bg-rally-surface border border-rally-border hover:border-rally-accent text-rally-text font-bold text-sm rounded-lg transition-colors"
+          >
+            {testLoading ? "SENDING..." : testSent ? "✓ TEST SENT" : "SEND TEST NOTIFICATION"}
+          </button>
           <button
             onClick={disableNotifications}
             disabled={loading}
-            className="w-full py-3 px-6 bg-rally-surface border border-rally-border hover:border-rally-danger text-rally-muted hover:text-rally-danger font-medium text-sm rounded-lg transition-colors"
+            className="w-full py-2 px-6 text-rally-muted hover:text-rally-danger text-xs transition-colors"
           >
-            {loading ? "DISABLING..." : "DISABLE ALERTS"}
+            {loading ? "DISABLING..." : "Disable notifications"}
           </button>
         </>
       )}
     </div>
-  );
-}
-
-export function CopyRallyLink({ rallyId }: { rallyId: string }) {
-  const [copied, setCopied] = useState(false);
-
-  const copyLink = async () => {
-    const url = `${window.location.origin}/rally/${rallyId}`;
-    await navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  return (
-    <button
-      onClick={copyLink}
-      className="w-full py-3 px-6 bg-rally-surface border border-rally-border hover:border-rally-accent text-rally-text font-bold text-sm rounded-lg transition-colors"
-    >
-      {copied ? "✓ LINK COPIED" : "COPY RALLY LINK"}
-    </button>
   );
 }

@@ -27,6 +27,17 @@ async function main() {
   } catch {
     execSync("npx prisma db push --accept-data-loss", { stdio: "inherit" });
   }
+
+  try {
+    execSync("npx tsx scripts/seed-admin.ts", { stdio: "inherit" });
+  } catch (err) {
+    console.warn(
+      JSON.stringify({
+        event: "seed_skipped",
+        reason: err instanceof Error ? err.message : String(err),
+      })
+    );
+  }
 }
 
 main().catch((err) => {

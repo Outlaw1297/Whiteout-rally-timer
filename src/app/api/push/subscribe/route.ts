@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { jsonResponse, errorResponse, isValidUuid } from "@/lib/api";
+import { jsonResponse, errorResponse } from "@/lib/api";
+import { requireAuth } from "@/lib/auth";
 import { rateLimit, RATE_LIMITS, getClientIp, rateLimitResponse } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
 import { getVapidPublicKey } from "@/lib/push";
@@ -14,17 +15,18 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const session = await requireAuth(request);
+  if (session instanceof Response) return session;
+
   const ip = getClientIp(request);
   const limit = rateLimit(`push-subscribe:${ip}`, RATE_LIMITS.pushSubscribe);
   if (!limit.allowed) return rateLimitResponse(limit.resetAt);
 
   let body: {
-    userId?: string;
     endpoint?: string;
     keys?: { p256dh?: string; auth?: string };
     userAgent?: string;
     platform?: string;
-    rallyId?: string;
   };
 
   try {
@@ -33,26 +35,16 @@ export async function POST(request: NextRequest) {
     return errorResponse("Invalid JSON body");
   }
 
-  const { userId, endpoint, keys, userAgent, platform, rallyId } = body;
+  const { endpoint, keys, userAgent, platform } = body;
 
-  if (!userId || !endpoint || !keys?.p256dh || !keys?.auth) {
-    return errorResponse("userId, endpoint, and keys (p256dh, auth) are required");
-  }
-
-  if (rallyId && !isValidUuid(rallyId)) {
-    return errorResponse("Invalid rally ID");
-  }
-
-  if (rallyId) {
-    const rally = await prisma.rally.findUnique({ where: { id: rallyId } });
-    if (!rally) return errorResponse("Rally not found", 404);
-    if (rally.cancelled) return errorResponse("Cannot subscribe to a cancelled rally", 400);
+  if (!endpoint || !keys?.p256dh || !keys?.auth) {
+    return errorResponse("endpoint and keys (p256dh, auth) are required");
   }
 
   const subscription = await prisma.pushSubscription.upsert({
     where: { endpoint },
     create: {
-      userId,
+      userId: session.id,
       endpoint,
       p256dh: keys.p256dh,
       auth: keys.auth,
@@ -61,7 +53,7 @@ export async function POST(request: NextRequest) {
       active: true,
     },
     update: {
-      userId,
+      userId: session.id,
       p256dh: keys.p256dh,
       auth: keys.auth,
       userAgent: userAgent || null,
@@ -70,23 +62,7 @@ export async function POST(request: NextRequest) {
     },
   });
 
-  logger.pushSubscriptionCreated(subscription.id, userId);
-
-  if (rallyId) {
-    await prisma.rallySubscriber.upsert({
-      where: {
-        rallyId_pushSubscriptionId: {
-          rallyId,
-          pushSubscriptionId: subscription.id,
-        },
-      },
-      create: {
-        rallyId,
-        pushSubscriptionId: subscription.id,
-      },
-      update: {},
-    });
-  }
+  logger.pushSubscriptionCreated(subscription.id, session.id);
 
   return jsonResponse({
     success: true,

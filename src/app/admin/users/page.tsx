@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { PushSetupCard } from "@/components/PushSetupCard";
+import { ChangePasswordForm } from "@/components/ChangePasswordForm";
 
 interface UserRow {
   id: string;
@@ -21,7 +22,11 @@ export default function AdminUsersPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [displayName, setDisplayName] = useState("");
   const [username, setUsername] = useState("");
+  const [newUserPassword, setNewUserPassword] = useState("");
   const [tempPassword, setTempPassword] = useState<string | null>(null);
+  const [settingPasswordFor, setSettingPasswordFor] = useState<string | null>(null);
+  const [setPasswordValue, setSetPasswordValue] = useState("");
+  const [passwordError, setPasswordError] = useState("");
 
   const loadUsers = () => {
     fetch("/api/admin/users")
@@ -47,13 +52,19 @@ export default function AdminUsersPage() {
     const res = await fetch("/api/admin/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, displayName, role: "CALLER" }),
+      body: JSON.stringify({
+        username,
+        displayName,
+        role: "CALLER",
+        ...(newUserPassword ? { password: newUserPassword } : {}),
+      }),
     });
     const data = await res.json();
     if (res.ok) {
       setTempPassword(data.temporaryPassword || null);
       setUsername("");
       setDisplayName("");
+      setNewUserPassword("");
       loadUsers();
     }
   };
@@ -76,7 +87,32 @@ export default function AdminUsersPage() {
     const data = await res.json();
     if (data.temporaryPassword) {
       setTempPassword(data.temporaryPassword);
+      setSettingPasswordFor(null);
+      setSetPasswordValue("");
     }
+  };
+
+  const setUserPassword = async (id: string) => {
+    setPasswordError("");
+    if (setPasswordValue.length < 8) {
+      setPasswordError("Password must be at least 8 characters");
+      return;
+    }
+
+    const res = await fetch(`/api/admin/users/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: setPasswordValue }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setPasswordError(data.error || "Failed to set password");
+      return;
+    }
+
+    setSettingPasswordFor(null);
+    setSetPasswordValue("");
+    setPasswordError("");
   };
 
   if (loading || !user) {
@@ -102,10 +138,12 @@ export default function AdminUsersPage() {
 
       <PushSetupCard onSubscribed={loadUsers} />
 
+      <ChangePasswordForm />
+
       <section className="p-3 mb-4 bg-rally-surface border border-rally-border rounded-lg text-sm">
         <p className="text-rally-muted text-xs mb-2">SETUP FOR EACH CALLER</p>
         <ol className="list-decimal list-inside space-y-1 text-rally-muted text-xs">
-          <li>Create account below (or use Reset PW to get a temp password)</li>
+          <li>Create account below (set a password or leave blank for a random one)</li>
           <li>Caller opens the app and logs in at /login</li>
           <li>Caller taps Enable Rally Notifications on their dashboard</li>
           <li>In your rally template, link that caller slot to their account</li>
@@ -136,6 +174,14 @@ export default function AdminUsersPage() {
           className="px-3 py-2 bg-rally-bg border border-rally-border rounded"
           required
         />
+        <input
+          type="password"
+          placeholder="Password (optional — random if blank)"
+          value={newUserPassword}
+          onChange={(e) => setNewUserPassword(e.target.value)}
+          autoComplete="new-password"
+          className="px-3 py-2 bg-rally-bg border border-rally-border rounded"
+        />
         <button type="submit" className="py-2 bg-rally-accent text-white font-bold rounded">
           CREATE CALLER
         </button>
@@ -145,41 +191,86 @@ export default function AdminUsersPage() {
         {users.map((u) => (
           <div
             key={u.id}
-            className="p-3 bg-rally-surface border border-rally-border rounded-lg flex justify-between items-center"
+            className="p-3 bg-rally-surface border border-rally-border rounded-lg"
           >
-            <div>
-              <p className="font-bold">
-                {u.displayName}
-                {u.id === user.id && (
-                  <span className="text-rally-accent text-xs ml-2">(you)</span>
+            <div className="flex justify-between items-center">
+              <div>
+                <p className="font-bold">
+                  {u.displayName}
+                  {u.id === user.id && (
+                    <span className="text-rally-accent text-xs ml-2">(you)</span>
+                  )}
+                </p>
+                <p className="text-rally-muted text-xs">
+                  @{u.username} ·{" "}
+                  <span className={u.activeDevices > 0 ? "text-rally-success" : "text-rally-warning"}>
+                    {u.activeDevices} device{u.activeDevices !== 1 ? "s" : ""}
+                  </span>
+                </p>
+                {u.activeDevices === 0 && u.role === "CALLER" && (
+                  <p className="text-rally-warning text-xs mt-1">Needs to log in and enable push</p>
                 )}
-              </p>
-              <p className="text-rally-muted text-xs">
-                @{u.username} ·{" "}
-                <span className={u.activeDevices > 0 ? "text-rally-success" : "text-rally-warning"}>
-                  {u.activeDevices} device{u.activeDevices !== 1 ? "s" : ""}
-                </span>
-              </p>
-              {u.activeDevices === 0 && u.role === "CALLER" && (
-                <p className="text-rally-warning text-xs mt-1">Needs to log in and enable push</p>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => resetPassword(u.id)}
-                className="text-xs text-rally-muted hover:text-rally-accent"
-              >
-                Reset PW
-              </button>
-              {u.role === "CALLER" && (
+              </div>
+              <div className="flex gap-2">
                 <button
-                  onClick={() => toggleActive(u.id, u.active)}
-                  className={`text-xs ${u.active ? "text-rally-danger" : "text-rally-success"}`}
+                  onClick={() => {
+                    setPasswordError("");
+                    setSetPasswordValue("");
+                    setSettingPasswordFor(settingPasswordFor === u.id ? null : u.id);
+                  }}
+                  className="text-xs text-rally-muted hover:text-rally-accent"
                 >
-                  {u.active ? "Disable" : "Enable"}
+                  Set PW
                 </button>
-              )}
+                <button
+                  onClick={() => resetPassword(u.id)}
+                  className="text-xs text-rally-muted hover:text-rally-accent"
+                >
+                  Random
+                </button>
+                {u.role === "CALLER" && (
+                  <button
+                    onClick={() => toggleActive(u.id, u.active)}
+                    className={`text-xs ${u.active ? "text-rally-danger" : "text-rally-success"}`}
+                  >
+                    {u.active ? "Disable" : "Enable"}
+                  </button>
+                )}
+              </div>
             </div>
+
+            {settingPasswordFor === u.id && (
+              <div className="mt-3 pt-3 border-t border-rally-border flex flex-col gap-2">
+                <input
+                  type="password"
+                  placeholder="New password (8+ characters)"
+                  value={setPasswordValue}
+                  onChange={(e) => setSetPasswordValue(e.target.value)}
+                  autoComplete="new-password"
+                  minLength={8}
+                  className="px-3 py-2 bg-rally-bg border border-rally-border rounded text-sm"
+                />
+                {passwordError && <p className="text-rally-danger text-xs">{passwordError}</p>}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setUserPassword(u.id)}
+                    className="px-3 py-1 bg-rally-accent text-white text-xs font-bold rounded"
+                  >
+                    Save Password
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSettingPasswordFor(null);
+                      setSetPasswordValue("");
+                      setPasswordError("");
+                    }}
+                    className="px-3 py-1 text-rally-muted text-xs"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>

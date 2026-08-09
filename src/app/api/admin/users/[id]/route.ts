@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonResponse, errorResponse, isValidUuid } from "@/lib/api";
-import { requireAdmin, hashPassword, generateTempPassword } from "@/lib/auth";
+import { requireAdmin, hashPassword, generateTempPassword, validatePassword } from "@/lib/auth";
 
 interface RouteParams {
   params: { id: string };
@@ -19,6 +19,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     active?: boolean;
     role?: "ADMIN" | "CALLER";
     resetPassword?: boolean;
+    password?: string;
   };
   try {
     body = await request.json();
@@ -35,7 +36,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   if (body.role !== undefined) updateData.role = body.role;
 
   let tempPassword: string | undefined;
-  if (body.resetPassword) {
+  if (body.password !== undefined) {
+    const passwordError = validatePassword(body.password);
+    if (passwordError) return errorResponse(passwordError);
+    updateData.passwordHash = await hashPassword(body.password);
+  } else if (body.resetPassword) {
     tempPassword = generateTempPassword();
     updateData.passwordHash = await hashPassword(tempPassword);
   }

@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useServerClock } from "@/hooks/useServerClock";
 import { useCountdown } from "@/hooks/useCountdown";
 import { NotificationButton } from "@/components/NotificationButton";
+import { ChangePasswordForm } from "@/components/ChangePasswordForm";
 import { formatArrivalTime, formatGather } from "@/lib/display";
 import type { SerializedEvent } from "@/hooks/useEventSocket";
 
@@ -94,6 +95,8 @@ export default function CallerDashboard() {
       </section>
 
       <NotificationPreferences />
+
+      <ChangePasswordForm />
 
       <section className="flex flex-col gap-4">
         <h2 className="text-rally-muted text-xs">UPCOMING ASSIGNMENTS</h2>

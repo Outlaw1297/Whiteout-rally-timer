@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonResponse, errorResponse } from "@/lib/api";
-import { requireAdmin, hashPassword, generateTempPassword } from "@/lib/auth";
+import { requireAdmin, hashPassword, generateTempPassword, validatePassword } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
   const session = await requireAdmin(request);
@@ -54,6 +54,10 @@ export async function POST(request: NextRequest) {
   if (existing) return errorResponse("Username already exists");
 
   const tempPassword = body.password || generateTempPassword();
+  if (body.password) {
+    const passwordError = validatePassword(body.password);
+    if (passwordError) return errorResponse(passwordError);
+  }
 
   const user = await prisma.user.create({
     data: {

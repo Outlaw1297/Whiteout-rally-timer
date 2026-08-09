@@ -81,25 +81,26 @@ export async function migrateTemplateSchema(): Promise<void> {
     `);
 
     await prisma.$executeRawUnsafe(`
-      WITH ranked AS (
-        SELECT
-          id,
-          ROW_NUMBER() OVER (
-            PARTITION BY "rallyEventId", "callerName"
-            ORDER BY "createdAt"
-          ) AS rn
-        FROM "RallyAssignment"
-      )
-      UPDATE "RallyAssignment" ra
-      SET "callerName" = ra."callerName" || ' (' || LEFT(ra.id::text, 4) || ')'
-      FROM ranked r
-      WHERE ra.id = r.id AND r.rn > 1
-    `);
-
-    await prisma.$executeRawUnsafe(`
       ALTER TABLE "RallyAssignment" ALTER COLUMN "callerName" SET NOT NULL
     `);
   }
+
+  // Always dedupe before unique constraint is applied by prisma db push
+  await prisma.$executeRawUnsafe(`
+    WITH ranked AS (
+      SELECT
+        id,
+        ROW_NUMBER() OVER (
+          PARTITION BY "rallyEventId", "callerName"
+          ORDER BY "createdAt"
+        ) AS rn
+      FROM "RallyAssignment"
+    )
+    UPDATE "RallyAssignment" ra
+    SET "callerName" = ra."callerName" || ' (' || LEFT(ra.id::text, 4) || ')'
+    FROM ranked r
+    WHERE ra.id = r.id AND r.rn > 1
+  `);
 
   await prisma.$executeRawUnsafe(`
     ALTER TABLE "RallyAssignment" ALTER COLUMN "userId" DROP NOT NULL

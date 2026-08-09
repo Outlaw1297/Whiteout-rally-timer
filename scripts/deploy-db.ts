@@ -23,7 +23,8 @@ async function main() {
     await prisma.$disconnect();
   }
 
-  execSync("npx prisma db push", { stdio: "inherit" });
+  // --accept-data-loss is required when adding unique constraints; data is preserved via pre-migration.
+  execSync("npx prisma db push --accept-data-loss", { stdio: "inherit" });
 
   try {
     execSync("npx tsx scripts/seed-admin.ts", { stdio: "inherit" });

@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
       successCount++;
     } else {
       lastError = result.error || lastError;
-      if (isExpiredSubscription(result.statusCode)) {
+      if (isExpiredSubscription(result.statusCode) || result.statusCode === 401) {
         await prisma.pushSubscription.update({
           where: { id: sub.id },
           data: { active: false },

@@ -1,4 +1,5 @@
 import webpush from "web-push";
+import crypto from "crypto";
 import { prisma } from "./prisma";
 import { logger } from "./logger";
 
@@ -37,8 +38,36 @@ function isPlausibleVapidKey(key: string): boolean {
   return key.length >= 40 && /^[A-Za-z0-9_-]+$/.test(key);
 }
 
+function urlBase64ToBuffer(base64: string): Buffer {
+  const padding = "=".repeat((4 - (base64.length % 4)) % 4);
+  return Buffer.from((base64 + padding).replace(/-/g, "+").replace(/_/g, "/"), "base64");
+}
+
+/** Verify public/private VAPID keys are a matching ECDH P-256 pair. */
+export function validateVapidKeyPair(publicKey: string, privateKey: string): boolean {
+  try {
+    const publicKeyBuffer = urlBase64ToBuffer(publicKey);
+    const privateKeyBuffer = urlBase64ToBuffer(privateKey);
+
+    if (publicKeyBuffer.length !== 65 || publicKeyBuffer[0] !== 0x04) return false;
+    if (privateKeyBuffer.length !== 32) return false;
+
+    const ecdh = crypto.createECDH("prime256v1");
+    ecdh.setPrivateKey(privateKeyBuffer);
+    const derivedPublic = ecdh.getPublicKey();
+
+    return publicKeyBuffer.equals(derivedPublic);
+  } catch {
+    return false;
+  }
+}
+
 function trySetVapid(subject: string, publicKey: string, privateKey: string): boolean {
   if (!isPlausibleVapidKey(publicKey) || !isPlausibleVapidKey(privateKey)) {
+    return false;
+  }
+
+  if (!validateVapidKeyPair(publicKey, privateKey)) {
     return false;
   }
 
@@ -102,20 +131,48 @@ async function generateAndStore(subject: string) {
   return keys;
 }
 
+async function clearStoredKeys() {
+  await prisma.vapidConfig.deleteMany({ where: { id: CONFIG_ID } });
+}
+
+async function invalidateAllSubscriptions(reason: string) {
+  const result = await prisma.pushSubscription.updateMany({
+    where: { active: true },
+    data: { active: false },
+  });
+  if (result.count > 0) {
+    console.log(
+      JSON.stringify({
+        event: "push_subscriptions_invalidated",
+        count: result.count,
+        reason,
+      })
+    );
+  }
+}
+
 async function resolveVapidKeys(): Promise<boolean> {
   const subject = getSubject();
 
-  // Prefer persisted keys so bad Render env vars cannot break push after auto-setup.
   const stored = await loadFromDatabase();
-  if (
-    stored &&
-    trySetVapid(stored.subject, stored.publicKey, stored.privateKey)
-  ) {
-    const source =
-      stored.source === "env" || stored.source === "generated"
-        ? stored.source
-        : "database";
-    return markReady(stored.publicKey, source);
+  if (stored) {
+    if (trySetVapid(stored.subject, stored.publicKey, stored.privateKey)) {
+      const source =
+        stored.source === "env" || stored.source === "generated"
+          ? stored.source
+          : "database";
+      return markReady(stored.publicKey, source);
+    }
+
+    console.warn(
+      JSON.stringify({
+        event: "vapid_stored_invalid",
+        message: "Stored VAPID keys are invalid or mismatched — regenerating",
+        previousSource: stored.source,
+      })
+    );
+    await clearStoredKeys();
+    await invalidateAllSubscriptions("vapid_keys_regenerated");
   }
 
   const envPublic = normalizeVapidKey(process.env.VAPID_PUBLIC_KEY);
@@ -125,7 +182,7 @@ async function resolveVapidKeys(): Promise<boolean> {
     console.log(
       JSON.stringify({
         event: "vapid_from_env",
-        message: "Using VAPID keys from environment variables",
+        message: "Using validated VAPID keys from environment variables",
       })
     );
     return markReady(envPublic, "env");
@@ -136,9 +193,10 @@ async function resolveVapidKeys(): Promise<boolean> {
       JSON.stringify({
         event: "vapid_env_ignored",
         message:
-          "Invalid or incomplete VAPID env vars ignored — auto-generating keys instead",
+          "Invalid or mismatched VAPID env vars ignored — auto-generating keys instead",
       })
     );
+    await invalidateAllSubscriptions("vapid_env_invalid");
   }
 
   const generated = await generateAndStore(subject);
@@ -231,11 +289,22 @@ export async function sendPushNotification(
     );
     return { success: true };
   } catch (err: unknown) {
-    const error = err as { statusCode?: number; message?: string };
+    const error = err as { statusCode?: number; message?: string; body?: string };
     logger.error("push_send_failed", {
       statusCode: error.statusCode,
       error: error.message,
+      body: error.body,
     });
+
+    if (error.statusCode === 401) {
+      return {
+        success: false,
+        statusCode: 401,
+        error:
+          "VAPID key mismatch — tap Disable then Enable notifications to re-register this device",
+      };
+    }
+
     return {
       success: false,
       statusCode: error.statusCode,

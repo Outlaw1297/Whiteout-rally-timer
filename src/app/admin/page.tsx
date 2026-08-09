@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { formatGather } from "@/lib/display";
 import { PushSetupCard } from "@/components/PushSetupCard";
+import { RolesNote } from "@/components/RolesNote";
 import type { SerializedEvent } from "@/hooks/useEventSocket";
 
 export default function AdminDashboard() {
@@ -71,6 +72,8 @@ export default function AdminDashboard() {
           </button>
         </div>
       </header>
+
+      <RolesNote compact />
 
       <PushSetupCard />
 

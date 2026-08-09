@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { PushSetupCard } from "@/components/PushSetupCard";
 import { ChangePasswordForm } from "@/components/ChangePasswordForm";
+import { RolesNote } from "@/components/RolesNote";
 
 interface UserRow {
   id: string;
@@ -160,6 +161,8 @@ export default function AdminUsersPage() {
         Create caller and admin accounts. Device counts show how many phones have enabled
         push for each account.
       </p>
+
+      <RolesNote />
 
       <PushSetupCard onSubscribed={loadUsers} />
 

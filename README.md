@@ -23,15 +23,19 @@ All rallies arrive at **8:00:00 PM**.
 
 ## Roles
 
+**Admins can be rally callers too** — link an admin account to a caller slot and they receive the same launch alerts. **Not every caller is an admin**; most alliance members only need a caller account.
+
 ### Admin
 - Create/edit rally events, assign callers, set march times
 - Start rally schedule (activates per-caller notifications)
 - Manage caller accounts, view notification monitor
+- Can also be linked to a caller slot to throw their own rally
 
 ### Caller
 - Log in, view assigned rallies and personal launch time
 - Enable Web Push notifications (iPhone PWA, Android, desktop)
 - Confirm rally launch
+- Cannot manage rallies or other users
 
 ## Quick Start (Local)
 

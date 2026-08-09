@@ -39,6 +39,9 @@ export default function LoginPage() {
           ⚔️ WHITEOUT RALLY TIMER
         </h1>
         <p className="text-rally-muted text-sm">Coordinate multi-caller rallies</p>
+        <p className="text-rally-muted text-xs mt-2 max-w-xs mx-auto">
+          Admins run rallies; callers receive their launch times. An admin can be a caller too.
+        </p>
       </header>
 
       <form onSubmit={handleSubmit} className="w-full max-w-sm flex flex-col gap-4">

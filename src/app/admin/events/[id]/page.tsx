@@ -319,7 +319,9 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
               Auto-link my account to new callers (for push testing)
             </label>
             <p className="text-rally-muted text-xs">
-              Callers do not need to be logged in. Link an account only to send push notifications.
+              Link an account to send push notifications for that caller slot. Admins can link
+              their own account too — you can run the rally and throw your own march. Most
+              callers are not admins.
             </p>
             <button onClick={addCaller} className="py-2 border border-rally-border rounded font-bold text-sm">
               ADD TO TEMPLATE

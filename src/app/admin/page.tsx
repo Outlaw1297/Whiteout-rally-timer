@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
-import { formatArrivalTime } from "@/lib/display";
+import { formatGather } from "@/lib/display";
 import type { SerializedEvent } from "@/hooks/useEventSocket";
 
 export default function AdminDashboard() {
@@ -40,6 +40,9 @@ export default function AdminDashboard() {
           <p className="text-rally-muted text-sm">{user.displayName}</p>
         </div>
         <div className="flex gap-2">
+          <Link href="/" className="text-rally-muted text-sm hover:text-rally-accent">
+            Schedule
+          </Link>
           <Link href="/admin/users" className="text-rally-muted text-sm hover:text-rally-accent">
             Users
           </Link>
@@ -53,21 +56,22 @@ export default function AdminDashboard() {
         onClick={() => setShowCreate(!showCreate)}
         className="w-full py-4 mb-4 bg-rally-accent text-white font-bold rounded-lg"
       >
-        {showCreate ? "CANCEL" : "+ CREATE RALLY"}
+        {showCreate ? "CANCEL" : "+ NEW RALLY TEMPLATE"}
       </button>
 
       {showCreate && (
-        <CreateEventForm
-          onCreated={() => {
+        <CreateTemplateForm
+          onCreated={(id) => {
             setShowCreate(false);
             loadEvents();
+            router.push(`/admin/events/${id}`);
           }}
         />
       )}
 
       <section className="flex flex-col gap-4">
         {events.length === 0 && (
-          <p className="text-rally-muted text-center py-8">No rallies yet</p>
+          <p className="text-rally-muted text-center py-8">No rally templates yet</p>
         )}
         {events.map((event) => (
           <Link
@@ -80,11 +84,15 @@ export default function AdminDashboard() {
               <span className="text-xs text-rally-muted">{event.status}</span>
             </div>
             <p className="text-rally-muted text-sm mt-1">
-              Arrival: {formatArrivalTime(event.targetArrivalTime)}
-            </p>
-            <p className="text-rally-muted text-sm">
+              Gather: {formatGather(event.gatherDurationSeconds)} ·{" "}
               {event.assignments.length} caller{event.assignments.length !== 1 ? "s" : ""}
             </p>
+            {event.status === "READY" && (
+              <p className="text-rally-warning text-xs font-bold mt-2">Ready — tap to GO</p>
+            )}
+            {event.status === "ACTIVE" && (
+              <p className="text-rally-success text-xs font-bold mt-2">● LIVE</p>
+            )}
           </Link>
         ))}
       </section>
@@ -92,12 +100,9 @@ export default function AdminDashboard() {
   );
 }
 
-function CreateEventForm({ onCreated }: { onCreated: () => void }) {
+function CreateTemplateForm({ onCreated }: { onCreated: (id: string) => void }) {
   const [name, setName] = useState("");
-  const [date, setDate] = useState("");
-  const [time, setTime] = useState("");
   const [gather, setGather] = useState("5:00");
-  const [isTest, setIsTest] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -108,11 +113,7 @@ function CreateEventForm({ onCreated }: { onCreated: () => void }) {
   };
 
   const handleTestMode = () => {
-    setIsTest(true);
     setName("TEST RALLY");
-    const target = new Date(Date.now() + 60_000);
-    setDate(target.toISOString().slice(0, 10));
-    setTime(target.toTimeString().slice(0, 5));
     setGather("0:10");
   };
 
@@ -128,16 +129,13 @@ function CreateEventForm({ onCreated }: { onCreated: () => void }) {
       return;
     }
 
-    const targetArrivalTime = new Date(`${date}T${time}:00`).toISOString();
-
     const res = await fetch("/api/events", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name,
-        targetArrivalTime,
         gatherDurationSeconds: gatherSeconds,
-        isTestMode: isTest,
+        isTestMode: name === "TEST RALLY",
       }),
     });
 
@@ -148,42 +146,29 @@ function CreateEventForm({ onCreated }: { onCreated: () => void }) {
       return;
     }
 
-    onCreated();
+    onCreated(data.id);
   };
 
   return (
-    <form onSubmit={handleSubmit} className="p-4 mb-4 bg-rally-surface border border-rally-border rounded-lg flex flex-col gap-3">
+    <form
+      onSubmit={handleSubmit}
+      className="p-4 mb-4 bg-rally-surface border border-rally-border rounded-lg flex flex-col gap-3"
+    >
       <button
         type="button"
         onClick={handleTestMode}
         className="text-rally-warning text-sm font-bold text-left"
       >
-        ⚡ Quick Test Mode (60s target, 10s gather)
+        ⚡ Quick test template (10s gather)
       </button>
 
       <input
-        placeholder="Rally Name"
+        placeholder="Rally Name (e.g. Bear Trap)"
         value={name}
         onChange={(e) => setName(e.target.value)}
         className="px-3 py-2 bg-rally-bg border border-rally-border rounded text-rally-text"
         required
       />
-      <div className="flex gap-2">
-        <input
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          className="flex-1 px-3 py-2 bg-rally-bg border border-rally-border rounded text-rally-text"
-          required
-        />
-        <input
-          type="time"
-          value={time}
-          onChange={(e) => setTime(e.target.value)}
-          className="flex-1 px-3 py-2 bg-rally-bg border border-rally-border rounded text-rally-text"
-          required
-        />
-      </div>
       <div>
         <label className="text-rally-muted text-xs">GATHER DURATION (M:SS)</label>
         <input
@@ -193,6 +178,11 @@ function CreateEventForm({ onCreated }: { onCreated: () => void }) {
         />
       </div>
 
+      <p className="text-rally-muted text-xs">
+        Add callers and march times on the next screen. Press GO when ready — launch times
+        are calculated from that moment.
+      </p>
+
       {error && <p className="text-rally-danger text-sm">{error}</p>}
 
       <button
@@ -200,7 +190,7 @@ function CreateEventForm({ onCreated }: { onCreated: () => void }) {
         disabled={loading}
         className="py-3 bg-rally-success text-white font-bold rounded-lg disabled:opacity-50"
       >
-        {loading ? "CREATING..." : "CREATE RALLY"}
+        {loading ? "CREATING..." : "CREATE TEMPLATE"}
       </button>
     </form>
   );

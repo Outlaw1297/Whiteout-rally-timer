@@ -32,7 +32,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   return jsonResponse({
     success: true,
     launchedConfirmedAt: new Date().toISOString(),
-    launchTime: assignment.launchTime.toISOString(),
-    expectedArrivalTime: assignment.expectedArrivalTime.toISOString(),
+    launchTime: assignment.launchTime?.toISOString() ?? null,
+    expectedArrivalTime: assignment.expectedArrivalTime?.toISOString() ?? null,
   });
 }

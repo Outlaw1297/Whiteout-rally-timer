@@ -1,16 +1,13 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { jsonResponse, errorResponse, isValidUuid, parseRallyTime } from "@/lib/api";
-import { requireAdmin, requireAuth } from "@/lib/auth";
+import { jsonResponse, errorResponse, isValidUuid } from "@/lib/api";
+import { requireAdmin } from "@/lib/auth";
 import { getSessionFromRequest } from "@/lib/session";
 import {
   serializeEvent,
   serializeNotificationMonitor,
-  recalculateAssignmentTimes,
 } from "@/lib/rally-event";
-import { rescheduleEventNotifications } from "@/lib/notifications";
 import { broadcastRallyUpdate, broadcastRallyCancelled } from "@/server/rally-hub";
-import { DEFAULT_GATHER_SECONDS } from "@/lib/timing";
 
 interface RouteParams {
   params: { id: string };
@@ -110,13 +107,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   if (event.status === "CANCELLED" || event.status === "COMPLETED") {
     return errorResponse("Cannot edit this event", 400);
   }
+  if (event.status === "ACTIVE") {
+    return errorResponse("Cannot edit template while rally is running", 400);
+  }
 
   let body: {
     name?: string;
-    targetArrivalTime?: string;
     gatherDurationSeconds?: number;
     status?: "DRAFT" | "READY";
-    reschedule?: boolean;
   };
   try {
     body = await request.json();
@@ -124,25 +122,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     return errorResponse("Invalid JSON");
   }
 
-  const isActiveEdit = event.status === "ACTIVE";
-  if (isActiveEdit && !body.reschedule) {
-    return errorResponse(
-      "Active event requires reschedule:true to modify timing",
-      409
-    );
-  }
-
   const updateData: Record<string, unknown> = {};
   if (body.name !== undefined) updateData.name = body.name.trim();
   if (body.gatherDurationSeconds !== undefined) {
     updateData.gatherDurationSeconds = body.gatherDurationSeconds;
   }
-  if (body.targetArrivalTime !== undefined) {
-    const t = parseRallyTime(body.targetArrivalTime);
-    if (!t) return errorResponse("Invalid targetArrivalTime");
-    updateData.targetArrivalTime = t;
-  }
-  if (body.status !== undefined && !isActiveEdit) {
+  if (body.status !== undefined) {
     updateData.status = body.status;
   }
 
@@ -151,25 +136,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     data: updateData,
     include: eventIncludeBasic,
   });
-
-  const gather = updated.gatherDurationSeconds;
-  const target = updated.targetArrivalTime;
-
-  for (const assignment of updated.assignments) {
-    const times = recalculateAssignmentTimes(
-      target,
-      gather,
-      assignment.marchDurationSeconds
-    );
-    await prisma.rallyAssignment.update({
-      where: { id: assignment.id },
-      data: times,
-    });
-  }
-
-  if (isActiveEdit && body.reschedule) {
-    await rescheduleEventNotifications(id);
-  }
 
   const final = await prisma.rallyEvent.findUnique({
     where: { id },

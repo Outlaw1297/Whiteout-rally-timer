@@ -9,6 +9,8 @@ export async function createNotificationEventsForAssignment(
   assignment: RallyAssignment,
   user: User
 ) {
+  if (!assignment.launchTime) return;
+
   const schedule = buildNotificationEventsForAssignment(assignment, user);
   for (const event of schedule) {
     await prisma.notificationEvent.upsert({
@@ -49,7 +51,7 @@ export async function rescheduleEventNotifications(eventId: string) {
       assignments: { include: { user: true, notificationEvents: true } },
     },
   });
-  if (!event) return;
+  if (!event || !event.targetArrivalTime) return;
 
   for (const assignment of event.assignments) {
     const { launchTime, expectedArrivalTime } = recalculateAssignmentTimes(
@@ -68,7 +70,7 @@ export async function rescheduleEventNotifications(eventId: string) {
     const updated = await prisma.rallyAssignment.findUnique({
       where: { id: assignment.id },
     });
-    if (updated) {
+    if (updated && assignment.user) {
       await createNotificationEventsForAssignment(updated, assignment.user);
     }
   }
@@ -82,6 +84,7 @@ export async function activateEventNotifications(eventId: string) {
   if (!event) return;
 
   for (const assignment of event.assignments) {
+    if (!assignment.user || !assignment.launchTime) continue;
     await createNotificationEventsForAssignment(assignment, assignment.user);
   }
 }

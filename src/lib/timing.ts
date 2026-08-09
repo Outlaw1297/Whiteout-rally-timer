@@ -22,6 +22,19 @@ export function calculateExpectedArrival(
   return new Date(launchTime.getTime() + offsetMs);
 }
 
+/**
+ * When GO is pressed: target arrival = now + gather + longest march.
+ * Longest-march caller launches immediately; others launch later so all arrive together.
+ */
+export function computeTargetArrivalOnGo(
+  startedAt: Date,
+  gatherDurationSeconds: number,
+  marchDurationsSeconds: number[]
+): Date {
+  const maxMarch = Math.max(...marchDurationsSeconds);
+  return new Date(startedAt.getTime() + (gatherDurationSeconds + maxMarch) * 1000);
+}
+
 /** Parse "8:00", "6:30", "4:15", "12:37" → seconds */
 export function parseMarchDuration(input: string): number | null {
   const trimmed = input.trim();

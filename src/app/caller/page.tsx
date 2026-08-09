@@ -22,7 +22,11 @@ export default function CallerDashboard() {
       return assignment ? { event, assignment } : null;
     })
     .filter(Boolean)
-    .sort((a, b) => a!.assignment.launchTime.localeCompare(b!.assignment.launchTime)) as Array<{
+    .sort((a, b) => {
+      const aTime = a!.assignment.launchTime ?? "";
+      const bTime = b!.assignment.launchTime ?? "";
+      return aTime.localeCompare(bTime);
+    }) as Array<{
     event: SerializedEvent;
     assignment: SerializedEvent["assignments"][0];
   }>;
@@ -31,10 +35,13 @@ export default function CallerDashboard() {
   const nextUp = myAssignments.find(
     (a) =>
       a.assignment.status === "WAITING" &&
+      a.assignment.launchTime &&
       new Date(a.assignment.launchTime).getTime() > now
   );
 
-  const nextLaunchMs = nextUp ? new Date(nextUp.assignment.launchTime).getTime() : null;
+  const nextLaunchMs = nextUp?.assignment.launchTime
+    ? new Date(nextUp.assignment.launchTime).getTime()
+    : null;
   const { display: countdown, isNow } = useCountdown(nextLaunchMs, correctedNow);
 
   useEffect(() => {

@@ -45,8 +45,8 @@ export default function HomePage() {
       </header>
 
       <p className="text-rally-muted text-sm mb-6">
-        View upcoming rally schedules below. Admin login is required to create or change
-        rallies. Callers log in to receive launch notifications.
+        Live rally countdowns — no login needed. Open your rally link and watch for your
+        launch time. Admin login is only required to create templates and press GO.
       </p>
 
       {fetching ? (

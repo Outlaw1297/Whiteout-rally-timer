@@ -23,7 +23,8 @@ export default function CallerEventPage({ params }: { params: { id: string } }) 
   });
 
   const assignment = event?.assignments.find((a) => a.userId === user?.id) ?? null;
-  const launchMs = assignment ? new Date(assignment.launchTime).getTime() : null;
+  const launchMs =
+    assignment?.launchTime ? new Date(assignment.launchTime).getTime() : null;
   const { display: countdown, isNow } = useCountdown(launchMs, correctedNow);
 
   const loadEvent = useCallback(() => {

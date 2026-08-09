@@ -5,19 +5,21 @@ import { useEffect, useRef, useState, useCallback } from "react";
 export interface SerializedEvent {
   id: string;
   name: string;
-  targetArrivalTime: string;
+  targetArrivalTime: string | null;
   gatherDurationSeconds: number;
   status: string;
   isTestMode: boolean;
+  isTemplate?: boolean;
   assignments: Array<{
     id: string;
-    userId: string;
+    userId: string | null;
     displayName: string;
     marchFormatted: string;
-    launchTime: string;
-    expectedArrivalTime: string;
+    launchTime: string | null;
+    expectedArrivalTime: string | null;
     status: string;
     launchedConfirmedAt: string | null;
+    hasPushAccount?: boolean;
   }>;
   nextCaller: { displayName: string; launchTime: string; assignmentId: string } | null;
   serverTime: { serverTime: string; unixMs: number };

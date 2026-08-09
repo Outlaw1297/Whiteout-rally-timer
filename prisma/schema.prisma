@@ -62,7 +62,7 @@ model User {
 model RallyEvent {
   id                    String           @id @default(uuid())
   name                  String
-  targetArrivalTime     DateTime         @db.Timestamptz(3)
+  targetArrivalTime     DateTime?        @db.Timestamptz(3)
   gatherDurationSeconds Int              @default(300)
   status                RallyEventStatus @default(DRAFT)
   isTestMode            Boolean          @default(false)
@@ -81,20 +81,21 @@ model RallyEvent {
 model RallyAssignment {
   id                   String           @id @default(uuid())
   rallyEventId         String
-  userId               String
+  callerName           String
+  userId               String?
   marchDurationSeconds Int
-  launchTime           DateTime         @db.Timestamptz(3)
-  expectedArrivalTime  DateTime         @db.Timestamptz(3)
+  launchTime           DateTime?        @db.Timestamptz(3)
+  expectedArrivalTime  DateTime?        @db.Timestamptz(3)
   status               AssignmentStatus @default(WAITING)
   launchedConfirmedAt  DateTime?        @db.Timestamptz(3)
   createdAt            DateTime         @default(now()) @db.Timestamptz(3)
   updatedAt            DateTime         @updatedAt @db.Timestamptz(3)
 
   rallyEvent         RallyEvent          @relation(fields: [rallyEventId], references: [id], onDelete: Cascade)
-  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user               User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
   notificationEvents NotificationEvent[]
 
-  @@unique([rallyEventId, userId])
+  @@unique([rallyEventId, callerName])
   @@index([rallyEventId])
   @@index([userId])
   @@index([launchTime])

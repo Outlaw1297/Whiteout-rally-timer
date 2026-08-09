@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonResponse, errorResponse, isValidUuid } from "@/lib/api";
 import { requireAdmin } from "@/lib/auth";
-import { recalculateAssignmentTimes, serializeEvent } from "@/lib/rally-event";
+import { serializeEvent } from "@/lib/rally-event";
 import { parseMarchDuration } from "@/lib/timing";
 
 interface RouteParams {
@@ -10,7 +10,7 @@ interface RouteParams {
 }
 
 const eventInclude = {
-  assignments: { include: { user: true }, orderBy: { launchTime: "asc" as const } },
+  assignments: { include: { user: true }, orderBy: { marchDurationSeconds: "desc" as const } },
 };
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
@@ -22,18 +22,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   const event = await prisma.rallyEvent.findUnique({ where: { id } });
   if (!event) return errorResponse("Event not found", 404);
-  if (event.status === "CANCELLED" || event.status === "COMPLETED") {
-    return errorResponse("Cannot modify assignments", 400);
+  if (event.status === "CANCELLED" || event.status === "COMPLETED" || event.status === "ACTIVE") {
+    return errorResponse("Cannot modify template while rally is running or finished", 400);
   }
 
-  let body: { userId?: string; marchDuration?: string; marchDurationSeconds?: number };
+  let body: {
+    callerName?: string;
+    userId?: string;
+    marchDuration?: string;
+    marchDurationSeconds?: number;
+  };
   try {
     body = await request.json();
   } catch {
     return errorResponse("Invalid JSON");
   }
-
-  if (!body.userId) return errorResponse("userId required");
 
   let marchSeconds = body.marchDurationSeconds;
   if (body.marchDuration) {
@@ -45,30 +48,32 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return errorResponse("marchDuration or marchDurationSeconds required");
   }
 
-  const user = await prisma.user.findUnique({ where: { id: body.userId } });
-  if (!user || user.role !== "CALLER" || !user.active) {
-    return errorResponse("Invalid caller", 400);
+  let callerName = body.callerName?.trim();
+  let userId: string | null = body.userId || null;
+
+  if (userId) {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user || user.role !== "CALLER" || !user.active) {
+      return errorResponse("Invalid caller account", 400);
+    }
+    callerName = callerName || user.displayName;
   }
 
-  const { launchTime, expectedArrivalTime } = recalculateAssignmentTimes(
-    event.targetArrivalTime,
-    event.gatherDurationSeconds,
-    marchSeconds
-  );
+  if (!callerName) {
+    return errorResponse("callerName required");
+  }
 
   await prisma.rallyAssignment.upsert({
-    where: { rallyEventId_userId: { rallyEventId: id, userId: body.userId } },
+    where: { rallyEventId_callerName: { rallyEventId: id, callerName } },
     create: {
       rallyEventId: id,
-      userId: body.userId,
+      callerName,
+      userId,
       marchDurationSeconds: marchSeconds,
-      launchTime,
-      expectedArrivalTime,
     },
     update: {
+      userId,
       marchDurationSeconds: marchSeconds,
-      launchTime,
-      expectedArrivalTime,
       status: "WAITING",
       launchedConfirmedAt: null,
     },

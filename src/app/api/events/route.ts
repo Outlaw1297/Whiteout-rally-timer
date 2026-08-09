@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { jsonResponse, errorResponse, parseRallyTime } from "@/lib/api";
+import { jsonResponse, errorResponse } from "@/lib/api";
 import { requireAdmin } from "@/lib/auth";
 import { getSessionFromRequest } from "@/lib/session";
 import { serializeEvent } from "@/lib/rally-event";
@@ -9,7 +9,7 @@ import { DEFAULT_GATHER_SECONDS } from "@/lib/timing";
 const eventInclude = {
   assignments: {
     include: { user: true },
-    orderBy: { launchTime: "asc" as const },
+    orderBy: { marchDurationSeconds: "desc" as const },
   },
 };
 
@@ -18,9 +18,9 @@ export async function GET(request: NextRequest) {
 
   if (!session) {
     const events = await prisma.rallyEvent.findMany({
-      where: { status: { in: ["READY", "ACTIVE", "COMPLETED"] } },
+      where: { status: { in: ["ACTIVE", "COMPLETED"] } },
       include: eventInclude,
-      orderBy: { targetArrivalTime: "asc" },
+      orderBy: { startedAt: "desc" },
       take: 50,
     });
     return jsonResponse({ events: events.map(serializeEvent) });
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     const events = await prisma.rallyEvent.findMany({
       where: { status: { not: "CANCELLED" } },
       include: eventInclude,
-      orderBy: { targetArrivalTime: "asc" },
+      orderBy: { createdAt: "desc" },
       take: 50,
     });
     return jsonResponse({ events: events.map(serializeEvent) });
@@ -64,7 +64,6 @@ export async function POST(request: NextRequest) {
 
   let body: {
     name?: string;
-    targetArrivalTime?: string;
     gatherDurationSeconds?: number;
     isTestMode?: boolean;
   };
@@ -75,20 +74,12 @@ export async function POST(request: NextRequest) {
   }
 
   if (!body.name?.trim()) return errorResponse("name required");
-  if (!body.targetArrivalTime) return errorResponse("targetArrivalTime required");
-
-  const targetArrivalTime = parseRallyTime(body.targetArrivalTime);
-  if (!targetArrivalTime) return errorResponse("Invalid targetArrivalTime");
-  if (targetArrivalTime.getTime() <= Date.now()) {
-    return errorResponse("Target arrival must be in the future");
-  }
 
   const gatherDurationSeconds = body.gatherDurationSeconds ?? DEFAULT_GATHER_SECONDS;
 
   const event = await prisma.rallyEvent.create({
     data: {
       name: body.name.trim(),
-      targetArrivalTime,
       gatherDurationSeconds,
       isTestMode: !!body.isTestMode,
       status: "DRAFT",

@@ -4,7 +4,7 @@ import { jsonResponse, errorResponse, isValidUuid } from "@/lib/api";
 import { requireAdmin } from "@/lib/auth";
 import { recalculateAssignmentTimes, serializeEvent } from "@/lib/rally-event";
 import { parseMarchDuration } from "@/lib/timing";
-import { cancelPendingNotifications } from "@/lib/notifications";
+import { cancelPendingNotifications, createNotificationEventsForAssignment } from "@/lib/notifications";
 
 interface RouteParams {
   params: { id: string; assignmentId: string };
@@ -26,6 +26,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   if (!event || !assignment || assignment.rallyEventId !== id) {
     return errorResponse("Not found", 404);
   }
+  if (event.status === "ACTIVE") {
+    return errorResponse("Cannot edit march times while rally is running", 400);
+  }
 
   let body: { marchDuration?: string; marchDurationSeconds?: number };
   try {
@@ -42,33 +45,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   }
   if (!marchSeconds) return errorResponse("marchDuration required");
 
-  const times = recalculateAssignmentTimes(
-    event.targetArrivalTime,
-    event.gatherDurationSeconds,
-    marchSeconds
-  );
-
   await prisma.rallyAssignment.update({
     where: { id: assignmentId },
-    data: { marchDurationSeconds: marchSeconds, ...times, status: "WAITING" },
+    data: { marchDurationSeconds: marchSeconds, status: "WAITING" },
   });
-
-  if (event.status === "ACTIVE") {
-    await cancelPendingNotifications(assignmentId);
-    const updatedAssignment = await prisma.rallyAssignment.findUnique({
-      where: { id: assignmentId },
-      include: { user: true },
-    });
-    if (updatedAssignment) {
-      const { createNotificationEventsForAssignment } = await import("@/lib/notifications");
-      await createNotificationEventsForAssignment(updatedAssignment, updatedAssignment.user);
-    }
-  }
 
   const updated = await prisma.rallyEvent.findUnique({
     where: { id },
     include: {
-      assignments: { include: { user: true }, orderBy: { launchTime: "asc" } },
+      assignments: { include: { user: true }, orderBy: { marchDurationSeconds: "desc" } },
     },
   });
 
@@ -80,6 +65,11 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
   if (session instanceof Response) return session;
 
   const { id, assignmentId } = params;
+  const event = await prisma.rallyEvent.findUnique({ where: { id } });
+  if (event?.status === "ACTIVE") {
+    return errorResponse("Cannot remove callers while rally is running", 400);
+  }
+
   await prisma.rallyAssignment.deleteMany({
     where: { id: assignmentId, rallyEventId: id },
   });
@@ -87,7 +77,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
   const updated = await prisma.rallyEvent.findUnique({
     where: { id },
     include: {
-      assignments: { include: { user: true }, orderBy: { launchTime: "asc" } },
+      assignments: { include: { user: true }, orderBy: { marchDurationSeconds: "desc" } },
     },
   });
 

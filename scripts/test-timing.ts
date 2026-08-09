@@ -4,6 +4,7 @@
 import {
   calculateLaunchTime,
   calculateExpectedArrival,
+  computeTargetArrivalOnGo,
   DEFAULT_GATHER_SECONDS,
 } from "../src/lib/timing";
 import { formatTimeLocal } from "../src/lib/time";
@@ -40,3 +41,15 @@ for (const c of cases) {
 }
 
 console.log("\nAll timing tests passed.");
+
+// GO workflow: target = now + gather + max march
+const goStart = new Date();
+goStart.setHours(19, 0, 0, 0);
+const marches = [480, 390, 255, 120];
+const targetOnGo = computeTargetArrivalOnGo(goStart, 300, marches);
+assertEqual(targetOnGo, 19, 13, 0, "GO target arrival");
+
+const aliceLaunch = calculateLaunchTime(targetOnGo, 300, 480);
+assertEqual(aliceLaunch, 19, 0, 0, "GO Alice launch (longest march throws first)");
+
+console.log("\nGO workflow tests passed.");

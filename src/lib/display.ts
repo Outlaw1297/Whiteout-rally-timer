@@ -1,7 +1,8 @@
 import { formatGatherDuration, formatMarchDuration } from "./timing";
 import { formatTimeLocal } from "./time";
 
-export function formatArrivalTime(iso: string): string {
+export function formatArrivalTime(iso: string | null | undefined): string {
+  if (!iso) return "—";
   return formatTimeLocal(new Date(iso));
 }
 

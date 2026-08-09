@@ -48,17 +48,33 @@ async function processNotificationEvent(eventId: string) {
 
   const { assignment } = notification;
   const { user, rallyEvent } = assignment;
+  const callerName = assignment.callerName;
   const sentAt = new Date();
   const latencyMs = sentAt.getTime() - notification.scheduledAt.getTime();
+
+  if (!rallyEvent.targetArrivalTime) return;
 
   const { title, body } = getNotificationPayload(
     notification.type as NotificationOffsetType,
     rallyEvent.name,
-    user.displayName,
+    callerName,
     rallyEvent.targetArrivalTime,
     assignment.marchDurationSeconds,
     rallyEvent.gatherDurationSeconds
   );
+
+  if (!user) {
+    await prisma.notificationEvent.update({
+      where: { id: eventId },
+      data: {
+        sentAt,
+        latencyMs,
+        status: "SKIPPED",
+        error: "no linked account",
+      },
+    });
+    return;
+  }
 
   const subscriptions = await prisma.pushSubscription.findMany({
     where: { userId: user.id, active: true },
@@ -107,7 +123,7 @@ async function processNotificationEvent(eventId: string) {
   });
 
   logger.info("notification_sent", {
-    caller: user.displayName,
+    caller: callerName,
     rally: rallyEvent.name,
     type: notification.type,
     scheduledAt: notification.scheduledAt.toISOString(),
@@ -125,7 +141,9 @@ async function processNotificationEvent(eventId: string) {
       },
     });
 
-    const pastArrival = rallyEvent.targetArrivalTime.getTime() <= now;
+    const pastArrival =
+      rallyEvent.targetArrivalTime &&
+      rallyEvent.targetArrivalTime.getTime() <= now;
     if (allLaunchSent === 0 && pastArrival) {
       const completed = await prisma.rallyEvent.update({
         where: { id: rallyEvent.id },
@@ -163,7 +181,7 @@ async function tick() {
   const activeEvents = await prisma.rallyEvent.findMany({
     where: {
       status: "ACTIVE",
-      targetArrivalTime: { lte: new Date(now) },
+      targetArrivalTime: { not: null, lte: new Date(now) },
     },
   });
 

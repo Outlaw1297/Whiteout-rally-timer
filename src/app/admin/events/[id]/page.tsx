@@ -7,14 +7,16 @@ import { useAuth } from "@/hooks/useAuth";
 import { useServerClock } from "@/hooks/useServerClock";
 import { useCountdown } from "@/hooks/useCountdown";
 import { useEventSocket, type SerializedEvent } from "@/hooks/useEventSocket";
+import { CallerCountdownRow } from "@/components/CallerCountdownRow";
 import { formatArrivalTime, formatGather, statusLabel } from "@/lib/display";
 
 interface NotificationMonitor {
   callerName: string;
   assignmentId: string;
-  launchTime: string;
+  launchTime: string | null;
   status: string;
   hasActiveDevice: boolean;
+  hasPushAccount: boolean;
   devices: Array<{ platform: string; active: boolean }>;
   notifications: Array<{
     type: string;
@@ -34,13 +36,14 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const [event, setEvent] = useState<EventDetail | null>(null);
   const [callers, setCallers] = useState<Array<{ id: string; displayName: string; username: string }>>([]);
-  const [addUserId, setAddUserId] = useState("");
+  const [callerName, setCallerName] = useState("");
+  const [linkUserId, setLinkUserId] = useState("");
   const [addMarch, setAddMarch] = useState("8:00");
-  const [rescheduleConfirm, setRescheduleConfirm] = useState(false);
+  const [starting, setStarting] = useState(false);
 
   const { correctedNow } = useServerClock({ activeRally: event?.status === "ACTIVE" });
 
-  const nextLaunchMs = event?.nextCaller
+  const nextLaunchMs = event?.nextCaller?.launchTime
     ? new Date(event.nextCaller.launchTime).getTime()
     : null;
   const { display: nextCountdown } = useCountdown(nextLaunchMs, correctedNow);
@@ -79,17 +82,30 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
   }, [user, loadEvent]);
 
   const addCaller = async () => {
-    if (!addUserId || !addMarch) return;
+    if (!callerName.trim() || !addMarch) return;
     await fetch(`/api/events/${params.id}/assignments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId: addUserId, marchDuration: addMarch }),
+      body: JSON.stringify({
+        callerName: callerName.trim(),
+        userId: linkUserId || undefined,
+        marchDuration: addMarch,
+      }),
     });
+    setCallerName("");
+    setLinkUserId("");
     loadEvent();
   };
 
-  const startRally = async () => {
+  const removeCaller = async (assignmentId: string) => {
+    await fetch(`/api/events/${params.id}/assignments/${assignmentId}`, { method: "DELETE" });
+    loadEvent();
+  };
+
+  const goRally = async () => {
+    setStarting(true);
     await fetch(`/api/events/${params.id}/start`, { method: "POST" });
+    setStarting(false);
     loadEvent();
   };
 
@@ -105,243 +121,190 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
 
   const canEdit = event.status === "DRAFT" || event.status === "READY";
   const isActive = event.status === "ACTIVE";
+  const isTemplate = canEdit;
 
   return (
     <main className="min-h-screen px-4 py-6 max-w-lg mx-auto">
       <Link href="/admin" className="text-rally-muted text-sm hover:text-rally-accent">
-        ← Back
+        ← Templates
       </Link>
 
       <header className="mt-4 mb-6">
         <h1 className="text-2xl font-bold">{event.name}</h1>
-        <p className="text-rally-muted text-sm">{event.status}{event.isTestMode ? " · TEST" : ""}</p>
+        <p className="text-rally-muted text-sm">
+          {isTemplate ? "TEMPLATE" : event.status}
+          {event.isTestMode ? " · TEST" : ""}
+        </p>
+        <Link href={`/events/${event.id}`} className="text-rally-accent text-xs mt-1 inline-block">
+          Public live view →
+        </Link>
       </header>
 
       <section className="p-4 mb-4 bg-rally-surface border border-rally-border rounded-lg">
-        <p className="text-rally-muted text-xs">TARGET ARRIVAL</p>
-        <p className="text-xl font-bold font-mono">{formatArrivalTime(event.targetArrivalTime)}</p>
-        <p className="text-rally-muted text-sm mt-2">GATHER: {formatGather(event.gatherDurationSeconds)}</p>
-        <p className="text-rally-muted text-sm">ALL ARRIVE: {formatArrivalTime(event.targetArrivalTime)}</p>
+        <p className="text-rally-muted text-xs">GATHER</p>
+        <p className="text-xl font-mono font-bold">{formatGather(event.gatherDurationSeconds)}</p>
+        {!isTemplate && event.targetArrivalTime && (
+          <>
+            <p className="text-rally-muted text-xs mt-3">TARGET ARRIVAL</p>
+            <p className="text-xl font-mono font-bold">{formatArrivalTime(event.targetArrivalTime)}</p>
+          </>
+        )}
+        {isTemplate && (
+          <p className="text-rally-muted text-sm mt-2">
+            Launch times are calculated when you press GO. Longest-march caller throws first.
+          </p>
+        )}
       </section>
 
       {event.nextCaller && isActive && (
         <section className="p-4 mb-4 bg-rally-accent/20 border border-rally-accent rounded-lg text-center">
           <p className="text-rally-muted text-xs">NEXT CALLER</p>
           <p className="text-2xl font-bold">{event.nextCaller.displayName.toUpperCase()}</p>
-          <p className="text-rally-muted text-xs mt-1">THROW IN</p>
           <p className="text-3xl font-mono font-bold text-rally-accent">{nextCountdown}</p>
         </section>
       )}
 
-      <section className="mb-4">
-        <h2 className="text-rally-muted text-xs mb-2">CALLERS</h2>
-        <div className="overflow-x-auto">
+      {isActive && (
+        <section className="flex flex-col gap-3 mb-6">
+          {event.assignments.map((a) => (
+            <CallerCountdownRow
+              key={a.id}
+              displayName={a.displayName}
+              marchFormatted={a.marchFormatted}
+              launchTime={a.launchTime}
+              status={a.status}
+              correctedNow={correctedNow}
+              highlight={event.nextCaller?.assignmentId === a.id}
+            />
+          ))}
+        </section>
+      )}
+
+      {isTemplate && (
+        <section className="mb-4">
+          <h2 className="text-rally-muted text-xs mb-2">TEMPLATE CALLERS</h2>
+          <div className="flex flex-col gap-2 mb-4">
+            {event.assignments.map((a) => (
+              <div
+                key={a.id}
+                className="flex justify-between items-center p-3 bg-rally-surface border border-rally-border rounded-lg"
+              >
+                <div>
+                  <p className="font-bold">{a.displayName}</p>
+                  <p className="text-rally-muted text-xs font-mono">March {a.marchFormatted}</p>
+                  {a.hasPushAccount && (
+                    <p className="text-rally-success text-xs">Push account linked</p>
+                  )}
+                </div>
+                <button
+                  onClick={() => removeCaller(a.id)}
+                  className="text-rally-danger text-xs"
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <div className="p-4 bg-rally-surface border border-rally-border rounded-lg flex flex-col gap-2">
+            <h3 className="text-rally-muted text-xs">ADD CALLER</h3>
+            <input
+              placeholder="Caller name (e.g. Alice)"
+              value={callerName}
+              onChange={(e) => setCallerName(e.target.value)}
+              className="px-3 py-2 bg-rally-bg border border-rally-border rounded"
+            />
+            <input
+              value={addMarch}
+              onChange={(e) => setAddMarch(e.target.value)}
+              placeholder="March (M:SS)"
+              className="px-3 py-2 bg-rally-bg border border-rally-border rounded"
+            />
+            <select
+              value={linkUserId}
+              onChange={(e) => setLinkUserId(e.target.value)}
+              className="px-3 py-2 bg-rally-bg border border-rally-border rounded text-rally-text"
+            >
+              <option value="">Link push account (optional)</option>
+              {callers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.displayName} (@{c.username})
+                </option>
+              ))}
+            </select>
+            <p className="text-rally-muted text-xs">
+              Callers do not need to be logged in. Link an account only to send push notifications.
+            </p>
+            <button onClick={addCaller} className="py-2 border border-rally-border rounded font-bold text-sm">
+              ADD TO TEMPLATE
+            </button>
+          </div>
+        </section>
+      )}
+
+      {!isTemplate && !isActive && (
+        <section className="mb-4 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-rally-muted text-left">
+              <tr className="text-rally-muted text-left text-xs">
                 <th className="pb-2">Caller</th>
                 <th className="pb-2">March</th>
                 <th className="pb-2">Launch</th>
-                <th className="pb-2">Expected</th>
                 <th className="pb-2">Status</th>
               </tr>
             </thead>
             <tbody>
               {event.assignments.map((a) => (
                 <tr key={a.id} className="border-t border-rally-border">
-                  <td className="py-2 font-medium">{a.displayName}</td>
+                  <td className="py-2">{a.displayName}</td>
                   <td className="py-2 font-mono">{a.marchFormatted}</td>
                   <td className="py-2 font-mono">{formatArrivalTime(a.launchTime)}</td>
-                  <td className="py-2 font-mono">{formatArrivalTime(a.expectedArrivalTime)}</td>
                   <td className="py-2 text-xs">{statusLabel(a.status)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
-      </section>
-
-      {canEdit && (
-        <section className="p-4 mb-4 bg-rally-surface border border-rally-border rounded-lg">
-          <h3 className="text-rally-muted text-xs mb-2">ADD CALLER</h3>
-          <div className="flex flex-col gap-2">
-            <select
-              value={addUserId}
-              onChange={(e) => setAddUserId(e.target.value)}
-              className="px-3 py-2 bg-rally-bg border border-rally-border rounded text-rally-text"
-            >
-              <option value="">Select caller...</option>
-              {callers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.displayName} ({c.username})
-                </option>
-              ))}
-            </select>
-            <input
-              value={addMarch}
-              onChange={(e) => setAddMarch(e.target.value)}
-              placeholder="March (M:SS)"
-              className="px-3 py-2 bg-rally-bg border border-rally-border rounded text-rally-text"
-            />
-            <button
-              onClick={addCaller}
-              className="py-2 bg-rally-surface border border-rally-border rounded font-bold text-sm"
-            >
-              ADD CALLER
-            </button>
-          </div>
         </section>
       )}
 
-      <Timeline event={event} />
-
       {canEdit && event.assignments.length > 0 && (
         <button
-          onClick={startRally}
-          className="w-full py-4 mb-3 bg-rally-success text-white font-bold text-lg rounded-lg"
+          onClick={goRally}
+          disabled={starting}
+          className="w-full py-6 mb-4 bg-rally-success text-white font-bold text-2xl rounded-xl disabled:opacity-50"
         >
-          START RALLY
+          {starting ? "STARTING..." : "GO"}
         </button>
       )}
 
-      {isActive && (
-        <button
-          onClick={() => setRescheduleConfirm(true)}
-          className="w-full py-3 mb-3 bg-rally-warning/20 border border-rally-warning text-rally-warning font-bold rounded-lg text-sm"
-        >
-          RESCHEDULE (EDIT TIMING)
-        </button>
-      )}
-
-      {rescheduleConfirm && (
-        <RescheduleForm
-          event={event}
-          onDone={() => {
-            setRescheduleConfirm(false);
-            loadEvent();
-          }}
-          onCancel={() => setRescheduleConfirm(false)}
-        />
-      )}
-
-      {(canEdit || isActive) && (
+      {canEdit && (
         <button
           onClick={cancelRally}
           className="w-full py-3 mb-6 bg-rally-danger/20 border border-rally-danger text-rally-danger font-bold rounded-lg text-sm"
         >
-          CANCEL RALLY
+          DELETE TEMPLATE
         </button>
       )}
 
-      {event.notificationMonitor && (
+      {event.notificationMonitor && isActive && (
         <section className="mb-8">
-          <h2 className="text-rally-muted text-xs mb-2">NOTIFICATION MONITOR</h2>
+          <h2 className="text-rally-muted text-xs mb-2">NOTIFICATIONS</h2>
           {event.notificationMonitor.map((m) => (
             <div key={m.assignmentId} className="p-3 mb-2 bg-rally-surface border border-rally-border rounded-lg text-sm">
               <div className="flex justify-between">
                 <span className="font-bold">{m.callerName}</span>
-                <span className={m.hasActiveDevice ? "text-rally-success" : "text-rally-warning"}>
-                  {m.hasActiveDevice
-                    ? `✓ ${m.devices.map((d) => d.platform).join(", ")}`
-                    : "⚠ No active device"}
+                <span className={m.hasActiveDevice ? "text-rally-success" : "text-rally-muted"}>
+                  {!m.hasPushAccount
+                    ? "No push account (use live view)"
+                    : m.hasActiveDevice
+                      ? `✓ ${m.devices.map((d) => d.platform).join(", ")}`
+                      : "No device subscribed"}
                 </span>
               </div>
-              {m.notifications.map((n) => (
-                <div key={n.type} className="flex justify-between text-xs text-rally-muted mt-1">
-                  <span>{n.type}</span>
-                  <span>
-                    {formatArrivalTime(n.scheduledAt)} · {n.status}
-                    {n.latencyMs != null ? ` (+${n.latencyMs}ms)` : ""}
-                  </span>
-                </div>
-              ))}
             </div>
           ))}
         </section>
       )}
     </main>
-  );
-}
-
-function Timeline({ event }: { event: SerializedEvent }) {
-  const arrival = formatArrivalTime(event.targetArrivalTime);
-  const gather = formatGather(event.gatherDurationSeconds);
-
-  return (
-    <section className="mb-4 p-4 bg-rally-surface border border-rally-border rounded-lg">
-      <h2 className="text-rally-muted text-xs mb-3">TIMELINE</h2>
-      <div className="flex flex-col gap-3 text-xs font-mono">
-        {event.assignments.map((a) => (
-          <div key={a.id} className="border-l-2 border-rally-accent pl-3">
-            <p className="font-bold">{formatArrivalTime(a.launchTime)}</p>
-            <p>{a.displayName} throws</p>
-            <p className="text-rally-muted">│ {gather} gather</p>
-            <p className="text-rally-muted">└→ {arrival}</p>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function RescheduleForm({
-  event,
-  onDone,
-  onCancel,
-}: {
-  event: SerializedEvent;
-  onDone: () => void;
-  onCancel: () => void;
-}) {
-  const [date, setDate] = useState(event.targetArrivalTime.slice(0, 10));
-  const [time, setTime] = useState(
-    new Date(event.targetArrivalTime).toTimeString().slice(0, 5)
-  );
-  const [loading, setLoading] = useState(false);
-
-  const submit = async () => {
-    setLoading(true);
-    const targetArrivalTime = new Date(`${date}T${time}:00`).toISOString();
-    await fetch(`/api/events/${event.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ targetArrivalTime, reschedule: true }),
-    });
-    setLoading(false);
-    onDone();
-  };
-
-  return (
-    <div className="p-4 mb-4 bg-rally-warning/10 border border-rally-warning rounded-lg">
-      <p className="text-sm mb-3">
-        Changing this rally will reschedule caller notifications.
-      </p>
-      <div className="flex gap-2 mb-3">
-        <input
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          className="flex-1 px-3 py-2 bg-rally-bg border border-rally-border rounded"
-        />
-        <input
-          type="time"
-          value={time}
-          onChange={(e) => setTime(e.target.value)}
-          className="flex-1 px-3 py-2 bg-rally-bg border border-rally-border rounded"
-        />
-      </div>
-      <div className="flex gap-2">
-        <button onClick={onCancel} className="flex-1 py-2 border border-rally-border rounded">
-          CANCEL
-        </button>
-        <button
-          onClick={submit}
-          disabled={loading}
-          className="flex-1 py-2 bg-rally-warning text-black font-bold rounded"
-        >
-          {loading ? "..." : "RESCHEDULE"}
-        </button>
-      </div>
-    </div>
   );
 }

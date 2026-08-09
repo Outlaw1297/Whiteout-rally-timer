@@ -63,6 +63,9 @@ export default function AdminDashboard() {
           <Link href="/admin/users" className="text-rally-muted text-sm hover:text-rally-accent">
             Users
           </Link>
+          <Link href="/admin/test-bench" className="text-rally-muted text-sm hover:text-rally-accent">
+            Test Bench
+          </Link>
           <button onClick={logout} className="text-rally-muted text-sm hover:text-rally-danger">
             Logout
           </button>

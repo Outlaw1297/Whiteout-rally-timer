@@ -35,6 +35,19 @@ async function syncNotificationEventsForAssignment(
   }
 
   for (const item of schedule) {
+    const existing = await prisma.notificationEvent.findUnique({
+      where: {
+        rallyAssignmentId_type: {
+          rallyAssignmentId: assignment.id,
+          type: item.type,
+        },
+      },
+    });
+
+    if (existing && ["SENT", "FAILED", "SKIPPED"].includes(existing.status)) {
+      continue;
+    }
+
     await prisma.notificationEvent.upsert({
       where: {
         rallyAssignmentId_type: {
@@ -81,6 +94,17 @@ export async function cancelAllEventNotifications(eventId: string) {
       status: "PENDING",
     },
     data: { status: "CANCELLED" },
+  });
+}
+
+/** Mark any still-pending notifications as skipped when a rally ends. */
+export async function skipRemainingEventNotifications(eventId: string, reason: string) {
+  await prisma.notificationEvent.updateMany({
+    where: {
+      assignment: { rallyEventId: eventId },
+      status: "PENDING",
+    },
+    data: { status: "SKIPPED", error: reason },
   });
 }
 

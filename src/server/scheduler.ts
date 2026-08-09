@@ -6,12 +6,12 @@ import {
   shouldSkipNotification,
   type NotificationOffsetType,
 } from "@/lib/timing";
+import { skipRemainingEventNotifications } from "@/lib/notifications";
 import { broadcastRallyUpdate } from "./rally-hub";
 import { serializeEvent } from "@/lib/rally-event";
 
 const POLL_INTERVAL_MS = 100;
-const LOOK_AHEAD_MS = 60_000;
-const LOOK_BEHIND_MS = 30_000;
+const DUE_GRACE_MS = 100;
 
 let schedulerRunning = false;
 let schedulerInterval: ReturnType<typeof setInterval> | null = null;
@@ -33,7 +33,7 @@ async function processNotificationEvent(eventId: string) {
     });
 
     if (!event || event.status !== "PENDING") return null;
-    if (event.scheduledAt.getTime() > now + 100) return null;
+    if (event.scheduledAt.getTime() > now + DUE_GRACE_MS) return null;
     if (event.assignment.rallyEvent.status !== "ACTIVE") return null;
 
     if (
@@ -41,7 +41,8 @@ async function processNotificationEvent(eventId: string) {
       shouldSkipNotification(
         event.type as NotificationOffsetType,
         event.assignment.launchTime,
-        new Date(now)
+        new Date(now),
+        event.scheduledAt
       )
     ) {
       await tx.notificationEvent.updateMany({
@@ -51,16 +52,16 @@ async function processNotificationEvent(eventId: string) {
       return null;
     }
 
-    const updated = await tx.notificationEvent.updateMany({
-      where: { id: eventId, status: "PENDING" },
-      data: { status: "SENT" },
-    });
-    if (updated.count === 0) return null;
-
     return event;
   });
 
   if (!notification) return;
+
+  const claimed = await prisma.notificationEvent.updateMany({
+    where: { id: eventId, status: "PENDING" },
+    data: { status: "SENT" },
+  });
+  if (claimed.count === 0) return;
 
   const { assignment } = notification;
   const { user, rallyEvent } = assignment;
@@ -68,7 +69,13 @@ async function processNotificationEvent(eventId: string) {
   const sentAt = new Date();
   const latencyMs = sentAt.getTime() - notification.scheduledAt.getTime();
 
-  if (!rallyEvent.targetArrivalTime) return;
+  if (!rallyEvent.targetArrivalTime) {
+    await prisma.notificationEvent.update({
+      where: { id: eventId },
+      data: { status: "SKIPPED", error: "no target arrival time" },
+    });
+    return;
+  }
 
   const { title, body } = getNotificationPayload(
     notification.type as NotificationOffsetType,
@@ -161,6 +168,7 @@ async function processNotificationEvent(eventId: string) {
       rallyEvent.targetArrivalTime &&
       rallyEvent.targetArrivalTime.getTime() <= now;
     if (allLaunchSent === 0 && pastArrival) {
+      await skipRemainingEventNotifications(rallyEvent.id, "rally ended");
       const completed = await prisma.rallyEvent.update({
         where: { id: rallyEvent.id },
         data: { status: "COMPLETED", completedAt: new Date() },
@@ -179,15 +187,13 @@ async function tick() {
   const pending = await prisma.notificationEvent.findMany({
     where: {
       status: "PENDING",
-      scheduledAt: {
-        gte: new Date(now - LOOK_BEHIND_MS),
-        lte: new Date(now + 100),
-      },
+      scheduledAt: { lte: new Date(now + DUE_GRACE_MS) },
       assignment: {
         rallyEvent: { status: "ACTIVE" },
       },
     },
-    take: 50,
+    orderBy: { scheduledAt: "asc" },
+    take: 100,
   });
 
   for (const event of pending) {
@@ -202,6 +208,7 @@ async function tick() {
   });
 
   for (const event of activeEvents) {
+    await skipRemainingEventNotifications(event.id, "rally ended");
     const completed = await prisma.rallyEvent.update({
       where: { id: event.id },
       data: { status: "COMPLETED", completedAt: new Date() },

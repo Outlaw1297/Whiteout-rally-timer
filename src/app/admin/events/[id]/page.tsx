@@ -33,6 +33,7 @@ interface NotificationMonitor {
     sentAt: string | null;
     status: string;
     latencyMs: number | null;
+    error?: string | null;
   }>;
 }
 
@@ -99,6 +100,12 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
         );
     }
   }, [user, loadEvent]);
+
+  useEffect(() => {
+    if (event?.status !== "ACTIVE") return;
+    const interval = setInterval(loadEvent, 2000);
+    return () => clearInterval(interval);
+  }, [event?.status, loadEvent]);
 
   const addCaller = async () => {
     if (!callerName.trim() || !addMarch) return;
@@ -542,28 +549,43 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
               )}
               {m.notifications.length > 0 && (
                 <div className="mt-2 pt-2 border-t border-rally-border space-y-1">
-                  {m.notifications.map((n) => (
+                  {m.notifications.map((n) => {
+                    const isOverdue =
+                      n.status === "PENDING" &&
+                      n.scheduledAt &&
+                      new Date(n.scheduledAt).getTime() < correctedNow() - 2000;
+                    return (
                     <div key={n.type} className="flex justify-between text-xs gap-2">
-                      <span className="text-rally-muted">{n.type.replace("WARNING_", "")}s</span>
+                      <span className="text-rally-muted">
+                        {n.type.replace("WARNING_", "")}
+                        {n.type === "LAUNCH" ? "" : "s"}
+                      </span>
                       <span
                         className={
                           n.status === "SENT"
                             ? "text-rally-success"
                             : n.status === "SKIPPED"
                               ? "text-rally-muted"
-                              : n.status === "PENDING"
-                                ? "text-rally-warning"
-                                : "text-rally-danger"
+                              : n.status === "PENDING" && isOverdue
+                                ? "text-rally-danger"
+                                : n.status === "PENDING"
+                                  ? "text-rally-warning"
+                                  : "text-rally-danger"
                         }
                       >
                         {n.status === "SENT" && n.latencyMs != null
                           ? `sent (+${n.latencyMs}ms)`
                           : n.status === "SKIPPED"
-                            ? "skipped"
-                            : n.status.toLowerCase()}
+                            ? n.error === "rally ended"
+                              ? "skipped (rally ended)"
+                              : "skipped"
+                            : n.status === "PENDING" && isOverdue
+                              ? "overdue"
+                              : n.status.toLowerCase()}
                       </span>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

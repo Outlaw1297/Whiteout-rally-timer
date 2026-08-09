@@ -161,4 +161,9 @@ if (shouldSkipNotification("LAUNCH", laterLaunch, goTime)) {
   console.error("FAIL should never skip LAUNCH");
   process.exit(1);
 }
+const scheduled10 = new Date(laterLaunch.getTime() - 10_000);
+if (shouldSkipNotification("WARNING_10", laterLaunch, goTime, scheduled10)) {
+  console.error("FAIL should honor scheduledAt even when lead time is short");
+  process.exit(1);
+}
 console.log("PASS runtime stale notification skip");

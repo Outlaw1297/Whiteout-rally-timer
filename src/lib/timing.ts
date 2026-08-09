@@ -91,9 +91,12 @@ export function getNotificationSecondsBefore(type: NotificationOffsetType): numb
 export function shouldSkipNotification(
   type: NotificationOffsetType,
   launchTime: Date,
-  now: Date = new Date()
+  now: Date = new Date(),
+  scheduledAt?: Date
 ): boolean {
   if (type === "LAUNCH") return false;
+  // Honor the built schedule once the send time arrives, even if slightly late.
+  if (scheduledAt && now.getTime() >= scheduledAt.getTime()) return false;
   const secondsUntilLaunch = (launchTime.getTime() - now.getTime()) / 1000;
   return secondsUntilLaunch < getNotificationSecondsBefore(type);
 }

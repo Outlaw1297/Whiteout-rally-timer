@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonResponse } from "@/lib/api";
 import { requireAuth } from "@/lib/auth";
-import { getVapidPublicKey } from "@/lib/push";
+import { getVapidPublicKey, isVapidConfigured } from "@/lib/push";
 
 export async function GET(request: NextRequest) {
   const session = await requireAuth(request);
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
   });
 
   return jsonResponse({
-    vapidConfigured: !!getVapidPublicKey(),
+    vapidConfigured: isVapidConfigured(),
     publicKey: getVapidPublicKey(),
     devices: subscriptions.map((sub) => ({
       id: sub.id,

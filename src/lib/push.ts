@@ -3,24 +3,69 @@ import { logger } from "./logger";
 
 let initialized = false;
 
+/** Strip quotes, accidental key prefixes, and base64 padding from env values. */
+export function normalizeVapidKey(key: string | undefined): string | null {
+  if (!key) return null;
+
+  let normalized = key.trim();
+  if (
+    (normalized.startsWith('"') && normalized.endsWith('"')) ||
+    (normalized.startsWith("'") && normalized.endsWith("'"))
+  ) {
+    normalized = normalized.slice(1, -1).trim();
+  }
+
+  normalized = normalized.replace(/^VAPID_(PUBLIC|PRIVATE)_KEY=/i, "").trim();
+  // web-push requires URL-safe base64 without padding
+  normalized = normalized.replace(/=+$/, "");
+
+  return normalized || null;
+}
+
+export function isVapidConfigured(): boolean {
+  return initialized;
+}
+
 export function initWebPush() {
   if (initialized) return;
 
-  const publicKey = process.env.VAPID_PUBLIC_KEY;
-  const privateKey = process.env.VAPID_PRIVATE_KEY;
-  const subject = process.env.VAPID_SUBJECT || "mailto:admin@example.com";
+  const publicKey = normalizeVapidKey(process.env.VAPID_PUBLIC_KEY);
+  const privateKey = normalizeVapidKey(process.env.VAPID_PRIVATE_KEY);
+  const subject = (process.env.VAPID_SUBJECT || "mailto:admin@example.com").trim();
 
   if (!publicKey || !privateKey) {
-    console.warn("VAPID keys not configured. Push notifications will not work.");
+    console.warn(
+      JSON.stringify({
+        event: "vapid_not_configured",
+        message: "Push notifications disabled — set valid VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY",
+      })
+    );
     return;
   }
 
-  webpush.setVapidDetails(subject, publicKey, privateKey);
-  initialized = true;
+  try {
+    webpush.setVapidDetails(subject, publicKey, privateKey);
+    initialized = true;
+    console.log(JSON.stringify({ event: "vapid_initialized" }));
+  } catch (err) {
+    console.error(
+      JSON.stringify({
+        event: "vapid_init_failed",
+        error: String(err),
+        hint: "Run npm run generate:vapid and paste keys into Render without quotes or padding",
+      })
+    );
+  }
 }
 
 export function getVapidPublicKey(): string | null {
-  return process.env.VAPID_PUBLIC_KEY || null;
+  if (!initialized) {
+    const publicKey = normalizeVapidKey(process.env.VAPID_PUBLIC_KEY);
+    const privateKey = normalizeVapidKey(process.env.VAPID_PRIVATE_KEY);
+    if (!publicKey || !privateKey) return null;
+    return publicKey;
+  }
+  return normalizeVapidKey(process.env.VAPID_PUBLIC_KEY);
 }
 
 export interface PushPayload {

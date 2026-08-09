@@ -20,7 +20,11 @@ const handle = app.getRequestHandler();
 app
   .prepare()
   .then(async () => {
-    initWebPush();
+    try {
+      initWebPush();
+    } catch (err) {
+      console.error(JSON.stringify({ event: "vapid_startup_error", error: String(err) }));
+    }
 
     try {
       await migrateLegacyData();

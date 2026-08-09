@@ -1,0 +1,86 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RallyStatus {
+  SCHEDULED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+model Rally {
+  id                  String   @id @default(uuid())
+  title               String
+  rallyTime           DateTime @db.Timestamptz(3)
+  createdAt           DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime @updatedAt @db.Timestamptz(3)
+  createdBy           String?
+  status              RallyStatus @default(SCHEDULED)
+  notification30Sent  Boolean  @default(false)
+  notification10Sent  Boolean  @default(false)
+  notification5Sent   Boolean  @default(false)
+  notification1Sent   Boolean  @default(false)
+  notificationNowSent Boolean @default(false)
+  cancelled           Boolean  @default(false)
+  isTestMode          Boolean  @default(false)
+
+  subscribers RallySubscriber[]
+  notificationLogs NotificationLog[]
+
+  @@index([rallyTime])
+  @@index([status, cancelled])
+}
+
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  userAgent String?
+  platform  String?
+  active    Boolean  @default(true)
+
+  rallySubscriptions RallySubscriber[]
+
+  @@index([userId])
+  @@index([active])
+}
+
+model RallySubscriber {
+  id                 String   @id @default(uuid())
+  rallyId            String
+  pushSubscriptionId String
+  createdAt          DateTime @default(now()) @db.Timestamptz(3)
+
+  rally            Rally            @relation(fields: [rallyId], references: [id], onDelete: Cascade)
+  pushSubscription PushSubscription @relation(fields: [pushSubscriptionId], references: [id], onDelete: Cascade)
+
+  @@unique([rallyId, pushSubscriptionId])
+  @@index([rallyId])
+}
+
+model NotificationLog {
+  id                String   @id @default(uuid())
+  rallyId           String
+  notificationType  String
+  scheduledAt       DateTime @db.Timestamptz(3)
+  sentAt            DateTime? @db.Timestamptz(3)
+  latencyMs         Int?
+  success           Boolean  @default(false)
+  errorMessage      String?
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+
+  rally Rally @relation(fields: [rallyId], references: [id], onDelete: Cascade)
+
+  @@index([rallyId])
+  @@index([notificationType])
+}

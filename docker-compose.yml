@@ -33,7 +33,7 @@ services:
       db:
         condition: service_healthy
     command: >
-      sh -c "npx prisma db push && npx tsx server.ts"
+      sh -c "npm run db:deploy && npx tsx server.ts"
 
 volumes:
   postgres_data:

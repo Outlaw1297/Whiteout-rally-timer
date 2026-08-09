@@ -109,9 +109,21 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
     loadEvent();
   };
 
-  const cancelRally = async () => {
-    if (!confirm("Cancel this rally?")) return;
-    await fetch(`/api/events/${params.id}`, { method: "DELETE" });
+  const resetTemplate = async () => {
+    if (!confirm("Reset this rally back to template? Launch times and notifications will be cleared.")) return;
+    await fetch(`/api/events/${params.id}/reset`, { method: "POST" });
+    loadEvent();
+  };
+
+  const deleteRally = async (hard = false) => {
+    const msg = hard
+      ? "Permanently delete this template? This cannot be undone."
+      : event?.status === "ACTIVE"
+        ? "Stop this rally and cancel remaining notifications?"
+        : "Delete this rally template?";
+    if (!confirm(msg)) return;
+    const url = hard ? `/api/events/${params.id}?hard=true` : `/api/events/${params.id}`;
+    await fetch(url, { method: "DELETE" });
     router.push("/admin");
   };
 
@@ -121,6 +133,7 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
 
   const canEdit = event.status === "DRAFT" || event.status === "READY";
   const isActive = event.status === "ACTIVE";
+  const isFinished = event.status === "COMPLETED";
   const isTemplate = canEdit;
 
   return (
@@ -279,11 +292,31 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
 
       {canEdit && (
         <button
-          onClick={cancelRally}
-          className="w-full py-3 mb-6 bg-rally-danger/20 border border-rally-danger text-rally-danger font-bold rounded-lg text-sm"
+          onClick={() => deleteRally(false)}
+          className="w-full py-3 mb-3 bg-rally-danger/20 border border-rally-danger text-rally-danger font-bold rounded-lg text-sm"
         >
           DELETE TEMPLATE
         </button>
+      )}
+
+      {(isActive || isFinished) && (
+        <section className="flex flex-col gap-3 mb-6">
+          <button
+            onClick={resetTemplate}
+            className="w-full py-4 bg-rally-warning/20 border border-rally-warning text-rally-warning font-bold rounded-lg"
+          >
+            RESET TO TEMPLATE
+          </button>
+          <p className="text-rally-muted text-xs text-center -mt-1">
+            Clears launch times so you can edit callers and press GO again.
+          </p>
+          <button
+            onClick={() => deleteRally(false)}
+            className="w-full py-3 bg-rally-danger/20 border border-rally-danger text-rally-danger font-bold rounded-lg text-sm"
+          >
+            {isActive ? "STOP & DELETE RALLY" : "DELETE RALLY"}
+          </button>
+        </section>
       )}
 
       {event.notificationMonitor && isActive && (

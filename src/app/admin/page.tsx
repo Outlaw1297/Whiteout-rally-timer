@@ -28,6 +28,22 @@ export default function AdminDashboard() {
     if (user?.role === "ADMIN") loadEvents();
   }, [user]);
 
+  const deleteEvent = async (id: string, status: string) => {
+    const msg =
+      status === "ACTIVE"
+        ? "Stop this live rally and delete it?"
+        : "Delete this rally template?";
+    if (!confirm(msg)) return;
+    await fetch(`/api/events/${id}`, { method: "DELETE" });
+    loadEvents();
+  };
+
+  const resetEvent = async (id: string) => {
+    if (!confirm("Reset back to template? Launch times will be cleared.")) return;
+    await fetch(`/api/events/${id}/reset`, { method: "POST" });
+    loadEvents();
+  };
+
   if (loading || !user) {
     return <div className="p-8 text-center text-rally-muted">Loading...</div>;
   }
@@ -74,26 +90,46 @@ export default function AdminDashboard() {
           <p className="text-rally-muted text-center py-8">No rally templates yet</p>
         )}
         {events.map((event) => (
-          <Link
+          <div
             key={event.id}
-            href={`/admin/events/${event.id}`}
-            className="block p-4 bg-rally-surface border border-rally-border rounded-lg hover:border-rally-accent"
+            className="p-4 bg-rally-surface border border-rally-border rounded-lg"
           >
-            <div className="flex justify-between items-start">
-              <h2 className="font-bold text-lg">{event.name}</h2>
-              <span className="text-xs text-rally-muted">{event.status}</span>
+            <div className="flex justify-between items-start gap-2">
+              <Link href={`/admin/events/${event.id}`} className="flex-1 min-w-0">
+                <h2 className="font-bold text-lg">{event.name}</h2>
+                <span className="text-xs text-rally-muted">{event.status}</span>
+                <p className="text-rally-muted text-sm mt-1">
+                  Gather: {formatGather(event.gatherDurationSeconds)} ·{" "}
+                  {event.assignments.length} caller{event.assignments.length !== 1 ? "s" : ""}
+                </p>
+                {event.status === "READY" && (
+                  <p className="text-rally-warning text-xs font-bold mt-2">Ready — tap to GO</p>
+                )}
+                {event.status === "ACTIVE" && (
+                  <p className="text-rally-success text-xs font-bold mt-2">● LIVE</p>
+                )}
+                {event.status === "COMPLETED" && (
+                  <p className="text-rally-muted text-xs font-bold mt-2">Completed — reset to run again</p>
+                )}
+              </Link>
+              <div className="flex flex-col gap-1 shrink-0">
+                {(event.status === "ACTIVE" || event.status === "COMPLETED") && (
+                  <button
+                    onClick={() => resetEvent(event.id)}
+                    className="text-rally-warning text-xs font-bold px-2 py-1 border border-rally-warning rounded"
+                  >
+                    Reset
+                  </button>
+                )}
+                <button
+                  onClick={() => deleteEvent(event.id, event.status)}
+                  className="text-rally-danger text-xs font-bold px-2 py-1 border border-rally-danger rounded"
+                >
+                  Delete
+                </button>
+              </div>
             </div>
-            <p className="text-rally-muted text-sm mt-1">
-              Gather: {formatGather(event.gatherDurationSeconds)} ·{" "}
-              {event.assignments.length} caller{event.assignments.length !== 1 ? "s" : ""}
-            </p>
-            {event.status === "READY" && (
-              <p className="text-rally-warning text-xs font-bold mt-2">Ready — tap to GO</p>
-            )}
-            {event.status === "ACTIVE" && (
-              <p className="text-rally-success text-xs font-bold mt-2">● LIVE</p>
-            )}
-          </Link>
+          </div>
         ))}
       </section>
     </main>

@@ -44,6 +44,43 @@ export async function cancelPendingNotifications(assignmentId: string) {
   });
 }
 
+export async function cancelAllEventNotifications(eventId: string) {
+  await prisma.notificationEvent.updateMany({
+    where: {
+      assignment: { rallyEventId: eventId },
+      status: "PENDING",
+    },
+    data: { status: "CANCELLED" },
+  });
+}
+
+export async function resetEventToTemplate(eventId: string) {
+  await cancelAllEventNotifications(eventId);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.rallyEvent.update({
+      where: { id: eventId },
+      data: {
+        status: "READY",
+        targetArrivalTime: null,
+        startedAt: null,
+        completedAt: null,
+        cancelledAt: null,
+      },
+    });
+
+    await tx.rallyAssignment.updateMany({
+      where: { rallyEventId: eventId },
+      data: {
+        launchTime: null,
+        expectedArrivalTime: null,
+        status: "WAITING",
+        launchedConfirmedAt: null,
+      },
+    });
+  });
+}
+
 export async function rescheduleEventNotifications(eventId: string) {
   const event = await prisma.rallyEvent.findUnique({
     where: { id: eventId },

@@ -7,6 +7,7 @@ import {
   serializeEvent,
   serializeNotificationMonitor,
 } from "@/lib/rally-event";
+import { cancelAllEventNotifications } from "@/lib/notifications";
 import { broadcastRallyUpdate, broadcastRallyCancelled } from "@/server/rally-hub";
 
 interface RouteParams {
@@ -153,6 +154,21 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
   const { id } = params;
   if (!isValidUuid(id)) return errorResponse("Invalid event ID");
+
+  const event = await prisma.rallyEvent.findUnique({ where: { id } });
+  if (!event) return errorResponse("Event not found", 404);
+
+  const hard = request.nextUrl.searchParams.get("hard") === "true";
+
+  if (event.status === "ACTIVE") {
+    await cancelAllEventNotifications(id);
+  }
+
+  if (hard && event.status !== "ACTIVE") {
+    await prisma.rallyEvent.delete({ where: { id } });
+    broadcastRallyCancelled(id);
+    return jsonResponse({ success: true, id, deleted: true });
+  }
 
   await prisma.rallyEvent.update({
     where: { id },

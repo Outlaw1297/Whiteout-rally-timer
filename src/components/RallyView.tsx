@@ -32,7 +32,7 @@ export function RallyView({ rallyId, showDebug }: RallyViewProps) {
   const { display, isNow } = useCountdown(rallyTimeMs, correctedNow);
 
   const isController = rally?.createdBy === userId;
-  const isReady = rally?.status === "READY";
+  const isReady = rally?.status === "READY" || (rally?.status === "SCHEDULED" && !rally.rallyTime);
   const isCancelled = rally?.cancelled || rally?.status === "CANCELLED";
   const isCompleted = rally?.status === "COMPLETED";
 

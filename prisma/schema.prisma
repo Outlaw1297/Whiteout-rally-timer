@@ -13,6 +13,7 @@ enum RallyStatus {
   ACTIVE
   COMPLETED
   CANCELLED
+  SCHEDULED // legacy — kept for DB compatibility with existing deployments
 }
 
 enum NotificationStatus {

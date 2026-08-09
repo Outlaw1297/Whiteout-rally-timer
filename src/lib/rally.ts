@@ -12,6 +12,10 @@ export const NOTIFICATION_RESET = {
   notificationNowSent: false,
 } as const;
 
+export function normalizeRallyStatus(status: string): string {
+  return status === "SCHEDULED" ? "READY" : status;
+}
+
 export function serializeRally(
   rally: Rally & {
     notificationLogs?: NotificationLog[];
@@ -22,7 +26,7 @@ export function serializeRally(
     id: rally.id,
     title: rally.title,
     rallyTime: rally.rallyTime?.toISOString() ?? null,
-    status: rally.status,
+    status: normalizeRallyStatus(rally.status),
     cancelled: rally.cancelled,
     isTestMode: rally.isTestMode,
     createdBy: rally.createdBy,
@@ -56,11 +60,10 @@ export function isController(rally: Rally, userId?: string | null): boolean {
 }
 
 export function canStart(rally: Rally): boolean {
-  return (
-    !rally.cancelled &&
-    rally.status === "READY" &&
-    rally.rallyTime === null
-  );
+  const status = rally.status as string;
+  const isReadyLike =
+    status === "READY" || (status === "SCHEDULED" && rally.rallyTime === null);
+  return !rally.cancelled && isReadyLike && rally.rallyTime === null;
 }
 
 export function canCancel(rally: Rally): boolean {

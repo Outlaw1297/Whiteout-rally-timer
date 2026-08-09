@@ -15,8 +15,8 @@ services:
     plan: free
     region: oregon
     branch: cursor/whiteout-rally-timer-pwa-930d
-    buildCommand: npm ci --include=dev && npx tsx scripts/generate-icons.ts && npx prisma generate && npm run build
-    startCommand: npm run db:deploy && npx tsx server.ts
+    buildCommand: npm ci --include=dev && npx tsx scripts/generate-icons.ts && npx prisma generate && npm run build && npm run db:deploy
+    startCommand: npx tsx server.ts
     healthCheckPath: /api/health/time
     envVars:
       - key: NODE_ENV

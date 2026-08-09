@@ -10,7 +10,7 @@ export async function GET() {
   const rallies = await prisma.rally.findMany({
     where: {
       cancelled: false,
-      status: { in: ["READY", "ACTIVE"] },
+      status: { in: ["READY", "ACTIVE", "SCHEDULED"] },
     },
     orderBy: { createdAt: "desc" },
     take: 50,

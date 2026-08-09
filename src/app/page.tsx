@@ -8,7 +8,7 @@ export default function HomePage() {
         <h1 className="text-2xl font-bold text-rally-accent mb-1">
           ⚔️ WHITEOUT RALLY TIMER
         </h1>
-        <p className="text-rally-muted text-sm">Server-authoritative timing</p>
+        <p className="text-rally-muted text-sm">Create → Start → Alert your alliance</p>
       </header>
 
       <section className="w-full flex flex-col items-center gap-8">

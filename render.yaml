@@ -1,0 +1,35 @@
+# Whiteout Rally Timer — Render Blueprint
+# Deploy: https://dashboard.render.com/blueprint/new?repo=https://github.com/Outlaw1297/Whitout-rally-timer
+
+databases:
+  - name: rally-timer-db
+    plan: free
+    databaseName: rally_timer
+    user: rally
+    region: oregon
+
+services:
+  - type: web
+    name: whiteout-rally-timer
+    runtime: node
+    plan: free
+    region: oregon
+    branch: cursor/whiteout-rally-timer-pwa-930d
+    buildCommand: npm ci && npx tsx scripts/generate-icons.ts && npx prisma generate && npm run build
+    startCommand: npx prisma db push && npx tsx server.ts
+    healthCheckPath: /api/health/time
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOSTNAME
+        value: "0.0.0.0"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: rally-timer-db
+          property: connectionString
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_SUBJECT
+        value: mailto:admin@example.com

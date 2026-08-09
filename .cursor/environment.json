@@ -1,0 +1,11 @@
+{
+  "name": "Whiteout Rally Timer",
+  "install": "npm ci",
+  "terminals": [
+    {
+      "name": "dev-server",
+      "command": "npm run dev"
+    }
+  ],
+  "ports": [5173]
+}

@@ -5,7 +5,7 @@ import { WebSocketServer } from "ws";
 import { setupWebSocket } from "./src/server/websocket";
 import { startScheduler } from "./src/server/scheduler";
 import { initWebPush } from "./src/lib/push";
-import { migrateLegacyData, migrateTemplateSchema } from "./src/lib/db-migrate";
+import { migrateLegacyData, migrateTemplateSchema, migrateNotificationEnum } from "./src/lib/db-migrate";
 
 const dev = process.env.NODE_ENV !== "production";
 const hostname = process.env.HOSTNAME || "0.0.0.0";
@@ -20,6 +20,7 @@ app.prepare().then(async () => {
   try {
     await migrateLegacyData();
     await migrateTemplateSchema();
+    await migrateNotificationEnum();
   } catch (err) {
     console.error(JSON.stringify({ event: "startup_migration_failed", error: String(err) }));
   }

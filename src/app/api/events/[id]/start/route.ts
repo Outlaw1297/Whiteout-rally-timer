@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { jsonResponse, errorResponse, isValidUuid } from "@/lib/api";
 import { requireAdmin } from "@/lib/auth";
 import { serializeEvent, recalculateAssignmentTimes } from "@/lib/rally-event";
-import { activateEventNotifications } from "@/lib/notifications";
+import { activateEventNotifications, cancelAllEventNotifications } from "@/lib/notifications";
 import { broadcastRallyUpdate } from "@/server/rally-hub";
 import { computeTargetArrivalOnGo } from "@/lib/timing";
 
@@ -28,7 +28,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   });
 
   if (!event) return errorResponse("Event not found", 404);
-  if (event.status === "CANCELLED" || event.status === "COMPLETED") {
+  if (event.status === "CANCELLED") {
     return errorResponse("Cannot start this event", 400);
   }
   if (event.status === "ACTIVE") {
@@ -36,6 +36,30 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   }
   if (event.assignments.length === 0) {
     return errorResponse("Add at least one caller before GO", 400);
+  }
+
+  if (event.status === "COMPLETED") {
+    await cancelAllEventNotifications(id);
+    await prisma.$transaction(async (tx) => {
+      await tx.rallyEvent.update({
+        where: { id },
+        data: {
+          status: "READY",
+          targetArrivalTime: null,
+          startedAt: null,
+          completedAt: null,
+        },
+      });
+      await tx.rallyAssignment.updateMany({
+        where: { rallyEventId: id },
+        data: {
+          launchTime: null,
+          expectedArrivalTime: null,
+          status: "WAITING",
+          launchedConfirmedAt: null,
+        },
+      });
+    });
   }
 
   const startedAt = new Date();

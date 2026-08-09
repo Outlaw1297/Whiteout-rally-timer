@@ -1,6 +1,9 @@
 /** Default gather duration: 5 minutes */
 export const DEFAULT_GATHER_SECONDS = 300;
 
+/** Lead time before first caller launches so a 3-second warning can fire after GO */
+export const FIRST_CALLER_WARNING_SECONDS = 3;
+
 /**
  * launchTime = targetArrivalTime - gatherDurationSeconds - marchDurationSeconds
  */
@@ -32,7 +35,10 @@ export function computeTargetArrivalOnGo(
   marchDurationsSeconds: number[]
 ): Date {
   const maxMarch = Math.max(...marchDurationsSeconds);
-  return new Date(startedAt.getTime() + (gatherDurationSeconds + maxMarch) * 1000);
+  return new Date(
+    startedAt.getTime() +
+      (gatherDurationSeconds + maxMarch + FIRST_CALLER_WARNING_SECONDS) * 1000
+  );
 }
 
 /** Parse "8:00", "6:30", "4:15", "12:37" → seconds */
@@ -67,6 +73,7 @@ export function parseGatherDuration(input: string): number | null {
 export const NOTIFICATION_OFFSETS = [
   { type: "WARNING_10" as const, secondsBefore: 10 },
   { type: "WARNING_5" as const, secondsBefore: 5 },
+  { type: "WARNING_3" as const, secondsBefore: 3 },
   { type: "LAUNCH" as const, secondsBefore: 0 },
 ];
 
@@ -76,11 +83,18 @@ export function getNotificationSchedule(
   launchTime: Date,
   warn10: boolean,
   warn5: boolean,
-  launch: boolean
+  launch: boolean,
+  warn3 = false
 ): Array<{ type: NotificationOffsetType; scheduledAt: Date }> {
   const events: Array<{ type: NotificationOffsetType; scheduledAt: Date }> = [];
   const launchMs = launchTime.getTime();
 
+  if (warn3) {
+    events.push({
+      type: "WARNING_3",
+      scheduledAt: new Date(launchMs - 3_000),
+    });
+  }
   if (warn10) {
     events.push({
       type: "WARNING_10",
@@ -98,6 +112,43 @@ export function getNotificationSchedule(
   }
 
   return events;
+}
+
+export interface NextCallerAssignment {
+  id: string;
+  displayName: string;
+  launchTime: string | null;
+  status: string;
+}
+
+export interface NextCallerInfo {
+  displayName: string;
+  launchTime: string;
+  assignmentId: string;
+}
+
+/** Pick the current next caller: earliest upcoming WAITING, or earliest overdue WAITING. */
+export function getNextCaller(
+  assignments: NextCallerAssignment[],
+  nowMs: number
+): NextCallerInfo | null {
+  const waiting = assignments
+    .filter((a) => a.launchTime && a.status === "WAITING")
+    .sort(
+      (a, b) =>
+        new Date(a.launchTime!).getTime() - new Date(b.launchTime!).getTime()
+    );
+
+  if (waiting.length === 0) return null;
+
+  const upcoming = waiting.find((a) => new Date(a.launchTime!).getTime() > nowMs);
+  const current = upcoming ?? waiting[0];
+
+  return {
+    displayName: current.displayName,
+    launchTime: current.launchTime!,
+    assignmentId: current.id,
+  };
 }
 
 export function getNotificationPayload(
@@ -127,6 +178,11 @@ export function getNotificationPayload(
       return {
         title: `⚠️ ${eventName}`,
         body: `Rally in 5 seconds — ${callerName}`,
+      };
+    case "WARNING_3":
+      return {
+        title: `⚠️ ${eventName}`,
+        body: `Rally in 3 seconds — ${callerName}`,
       };
     case "LAUNCH":
       return {

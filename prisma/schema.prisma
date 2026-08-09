@@ -29,6 +29,7 @@ enum AssignmentStatus {
 enum NotificationEventType {
   WARNING_10
   WARNING_5
+  WARNING_3
   LAUNCH
 }
 

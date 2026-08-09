@@ -6,6 +6,7 @@ import {
   calculateExpectedArrival,
   computeTargetArrivalOnGo,
   DEFAULT_GATHER_SECONDS,
+  getNextCaller,
 } from "../src/lib/timing";
 import { formatTimeLocal } from "../src/lib/time";
 
@@ -47,9 +48,44 @@ const goStart = new Date();
 goStart.setHours(19, 0, 0, 0);
 const marches = [480, 390, 255, 120];
 const targetOnGo = computeTargetArrivalOnGo(goStart, 300, marches);
-assertEqual(targetOnGo, 19, 13, 0, "GO target arrival");
+assertEqual(targetOnGo, 19, 13, 3, "GO target arrival");
 
 const aliceLaunch = calculateLaunchTime(targetOnGo, 300, 480);
-assertEqual(aliceLaunch, 19, 0, 0, "GO Alice launch (longest march throws first)");
+assertEqual(aliceLaunch, 19, 0, 3, "GO Alice launch (longest march throws first)");
 
 console.log("\nGO workflow tests passed.");
+
+// Next caller progression
+const base = Date.now();
+const assignments = [
+  { id: "1", displayName: "call4", launchTime: new Date(base + 10_000).toISOString(), status: "WAITING" },
+  { id: "2", displayName: "call2", launchTime: new Date(base + 20_000).toISOString(), status: "WAITING" },
+  { id: "3", displayName: "call3", launchTime: new Date(base + 30_000).toISOString(), status: "WAITING" },
+];
+
+const first = getNextCaller(assignments, base + 5_000);
+if (first?.assignmentId !== "1") {
+  console.error("FAIL next caller before first launch");
+  process.exit(1);
+}
+
+const second = getNextCaller(assignments, base + 15_000);
+if (second?.assignmentId !== "2") {
+  console.error("FAIL next caller after first launch");
+  process.exit(1);
+}
+
+const third = getNextCaller(assignments, base + 25_000);
+if (third?.assignmentId !== "3") {
+  console.error("FAIL next caller after second launch");
+  process.exit(1);
+}
+
+const overdue = getNextCaller(assignments, base + 35_000);
+if (overdue?.assignmentId !== "1") {
+  console.error("FAIL next caller when all overdue");
+  process.exit(1);
+}
+
+console.log("PASS next caller progression");
+console.log("\nAll timing tests passed.");

@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useServerClock } from "@/hooks/useServerClock";
 import { useCountdown } from "@/hooks/useCountdown";
 import { useEventSocket } from "@/hooks/useEventSocket";
+import { useNextCaller } from "@/hooks/useNextCaller";
 import { CallerCountdownRow } from "@/components/CallerCountdownRow";
 import { formatArrivalTime, formatGather } from "@/lib/display";
 import type { SerializedEvent } from "@/hooks/useEventSocket";
@@ -16,9 +17,8 @@ export default function PublicEventPage({ params }: { params: { id: string } }) 
   const [error, setError] = useState(false);
   const { correctedNow } = useServerClock({ activeRally: event?.status === "ACTIVE" });
 
-  const nextLaunchMs = event?.nextCaller?.launchTime
-    ? new Date(event.nextCaller.launchTime).getTime()
-    : null;
+  const nextCaller = useNextCaller(event?.assignments, correctedNow, event?.status === "ACTIVE");
+  const nextLaunchMs = nextCaller?.launchTime ? new Date(nextCaller.launchTime).getTime() : null;
   const { display: nextCountdown } = useCountdown(nextLaunchMs, correctedNow);
 
   useEventSocket({
@@ -78,10 +78,10 @@ export default function PublicEventPage({ params }: { params: { id: string } }) 
         )}
       </section>
 
-      {event.nextCaller && isActive && (
+      {nextCaller && isActive && (
         <section className="p-4 mb-4 bg-rally-accent/20 border border-rally-accent rounded-lg text-center">
           <p className="text-rally-muted text-xs">NEXT CALLER</p>
-          <p className="text-2xl font-bold">{event.nextCaller.displayName.toUpperCase()}</p>
+          <p className="text-2xl font-bold">{nextCaller.displayName.toUpperCase()}</p>
           <p className="text-3xl font-mono font-bold text-rally-accent">{nextCountdown}</p>
         </section>
       )}
@@ -104,7 +104,7 @@ export default function PublicEventPage({ params }: { params: { id: string } }) 
               launchTime={a.launchTime}
               status={a.status}
               correctedNow={correctedNow}
-              highlight={event.nextCaller?.assignmentId === a.id}
+              highlight={nextCaller?.assignmentId === a.id}
             />
           ))
         )}

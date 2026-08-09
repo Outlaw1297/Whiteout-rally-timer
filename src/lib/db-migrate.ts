@@ -126,3 +126,18 @@ export async function migrateTemplateSchema(): Promise<void> {
 
   logger.info("migrated_template_schema");
 }
+
+/** Add WARNING_3 to NotificationEventType enum when upgrading. */
+export async function migrateNotificationEnum(): Promise<void> {
+  if (!(await tableExists("NotificationEvent"))) return;
+
+  await prisma.$executeRawUnsafe(`
+    DO $$ BEGIN
+      ALTER TYPE "NotificationEventType" ADD VALUE IF NOT EXISTS 'WARNING_3';
+    EXCEPTION
+      WHEN duplicate_object THEN null;
+    END $$;
+  `);
+
+  logger.info("migrated_notification_enum");
+}

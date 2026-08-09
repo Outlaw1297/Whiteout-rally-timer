@@ -7,11 +7,12 @@ import type { RallyAssignment, User } from "@prisma/client";
 
 export async function createNotificationEventsForAssignment(
   assignment: RallyAssignment,
-  user: User
+  user: User,
+  isFirstCaller = false
 ) {
   if (!assignment.launchTime) return;
 
-  const schedule = buildNotificationEventsForAssignment(assignment, user);
+  const schedule = buildNotificationEventsForAssignment(assignment, user, isFirstCaller);
   for (const event of schedule) {
     await prisma.notificationEvent.upsert({
       where: {
@@ -108,7 +109,21 @@ export async function rescheduleEventNotifications(eventId: string) {
       where: { id: assignment.id },
     });
     if (updated && assignment.user) {
-      await createNotificationEventsForAssignment(updated, assignment.user);
+      const firstAssignmentId = event.assignments
+        .map((a) => ({
+          id: a.id,
+          launchTime: recalculateAssignmentTimes(
+            event.targetArrivalTime!,
+            event.gatherDurationSeconds,
+            a.marchDurationSeconds
+          ).launchTime,
+        }))
+        .sort((a, b) => a.launchTime.getTime() - b.launchTime.getTime())[0]?.id;
+      await createNotificationEventsForAssignment(
+        updated,
+        assignment.user,
+        assignment.id === firstAssignmentId
+      );
     }
   }
 }
@@ -120,8 +135,16 @@ export async function activateEventNotifications(eventId: string) {
   });
   if (!event) return;
 
+  const firstAssignmentId = [...event.assignments]
+    .filter((a) => a.launchTime)
+    .sort((a, b) => a.launchTime!.getTime() - b.launchTime!.getTime())[0]?.id;
+
   for (const assignment of event.assignments) {
     if (!assignment.user || !assignment.launchTime) continue;
-    await createNotificationEventsForAssignment(assignment, assignment.user);
+    await createNotificationEventsForAssignment(
+      assignment,
+      assignment.user,
+      assignment.id === firstAssignmentId
+    );
   }
 }

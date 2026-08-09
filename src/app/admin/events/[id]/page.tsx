@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useServerClock } from "@/hooks/useServerClock";
 import { useCountdown } from "@/hooks/useCountdown";
 import { useEventSocket, type SerializedEvent } from "@/hooks/useEventSocket";
+import { useNextCaller } from "@/hooks/useNextCaller";
 import { CallerCountdownRow } from "@/components/CallerCountdownRow";
 import { formatArrivalTime, formatGather, statusLabel } from "@/lib/display";
 
@@ -43,9 +44,8 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
 
   const { correctedNow } = useServerClock({ activeRally: event?.status === "ACTIVE" });
 
-  const nextLaunchMs = event?.nextCaller?.launchTime
-    ? new Date(event.nextCaller.launchTime).getTime()
-    : null;
+  const nextCaller = useNextCaller(event?.assignments, correctedNow, event?.status === "ACTIVE");
+  const nextLaunchMs = nextCaller?.launchTime ? new Date(nextCaller.launchTime).getTime() : null;
   const { display: nextCountdown } = useCountdown(nextLaunchMs, correctedNow);
 
   const loadEvent = useCallback(() => {
@@ -169,10 +169,10 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
         )}
       </section>
 
-      {event.nextCaller && isActive && (
+      {nextCaller && isActive && (
         <section className="p-4 mb-4 bg-rally-accent/20 border border-rally-accent rounded-lg text-center">
           <p className="text-rally-muted text-xs">NEXT CALLER</p>
-          <p className="text-2xl font-bold">{event.nextCaller.displayName.toUpperCase()}</p>
+          <p className="text-2xl font-bold">{nextCaller.displayName.toUpperCase()}</p>
           <p className="text-3xl font-mono font-bold text-rally-accent">{nextCountdown}</p>
         </section>
       )}
@@ -187,7 +187,7 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
               launchTime={a.launchTime}
               status={a.status}
               correctedNow={correctedNow}
-              highlight={event.nextCaller?.assignmentId === a.id}
+              highlight={nextCaller?.assignmentId === a.id}
             />
           ))}
         </section>
@@ -280,13 +280,13 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
         </section>
       )}
 
-      {canEdit && event.assignments.length > 0 && (
+      {(canEdit || isFinished) && event.assignments.length > 0 && (
         <button
           onClick={goRally}
           disabled={starting}
           className="w-full py-6 mb-4 bg-rally-success text-white font-bold text-2xl rounded-xl disabled:opacity-50"
         >
-          {starting ? "STARTING..." : "GO"}
+          {starting ? "STARTING..." : isFinished ? "GO AGAIN" : "GO"}
         </button>
       )}
 

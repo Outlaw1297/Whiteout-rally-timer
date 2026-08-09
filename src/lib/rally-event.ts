@@ -9,6 +9,7 @@ import {
   calculateLaunchTime,
   calculateExpectedArrival,
   getNotificationSchedule,
+  getNextCaller,
 } from "./timing";
 import { getServerTime } from "./time";
 
@@ -84,9 +85,7 @@ export function serializeEvent(event: EventWithAssignments) {
   );
 
   const now = Date.now();
-  const nextAssignment = assignments.find(
-    (a) => a.launchTime && new Date(a.launchTime).getTime() > now && a.status === "WAITING"
-  );
+  const nextCaller = getNextCaller(assignments, now);
 
   return {
     id: event.id,
@@ -102,27 +101,23 @@ export function serializeEvent(event: EventWithAssignments) {
     createdAt: event.createdAt.toISOString(),
     updatedAt: event.updatedAt.toISOString(),
     assignments,
-    nextCaller: nextAssignment
-      ? {
-          displayName: nextAssignment.displayName,
-          launchTime: nextAssignment.launchTime!,
-          assignmentId: nextAssignment.id,
-        }
-      : null,
+    nextCaller,
     serverTime: getServerTime(),
   };
 }
 
 export function buildNotificationEventsForAssignment(
   assignment: RallyAssignment,
-  user: User
+  user: User,
+  isFirstCaller = false
 ) {
   if (!assignment.launchTime) return [];
   return getNotificationSchedule(
     assignment.launchTime,
     user.warn10Enabled,
     user.warn5Enabled,
-    user.launchEnabled
+    user.launchEnabled,
+    isFirstCaller
   );
 }
 

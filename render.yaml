@@ -21,7 +21,7 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - key: HOSTNAME
+      - key: BIND_HOST
         value: "0.0.0.0"
       - key: DATABASE_URL
         fromDatabase:

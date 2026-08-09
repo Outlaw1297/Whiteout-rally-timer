@@ -23,6 +23,8 @@ export default function AdminUsersPage() {
   const [displayName, setDisplayName] = useState("");
   const [username, setUsername] = useState("");
   const [newUserPassword, setNewUserPassword] = useState("");
+  const [newUserRole, setNewUserRole] = useState<"CALLER" | "ADMIN">("CALLER");
+  const [createError, setCreateError] = useState("");
   const [tempPassword, setTempPassword] = useState<string | null>(null);
   const [settingPasswordFor, setSettingPasswordFor] = useState<string | null>(null);
   const [setPasswordValue, setSetPasswordValue] = useState("");
@@ -49,24 +51,47 @@ export default function AdminUsersPage() {
 
   const createUser = async (e: React.FormEvent) => {
     e.preventDefault();
+    setCreateError("");
     const res = await fetch("/api/admin/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         username,
         displayName,
-        role: "CALLER",
+        role: newUserRole,
         ...(newUserPassword ? { password: newUserPassword } : {}),
       }),
     });
     const data = await res.json();
-    if (res.ok) {
-      setTempPassword(data.temporaryPassword || null);
-      setUsername("");
-      setDisplayName("");
-      setNewUserPassword("");
-      loadUsers();
+    if (!res.ok) {
+      setCreateError(data.error || "Failed to create user");
+      return;
     }
+    setTempPassword(data.temporaryPassword || null);
+    setUsername("");
+    setDisplayName("");
+    setNewUserPassword("");
+    setNewUserRole("CALLER");
+    loadUsers();
+  };
+
+  const changeRole = async (id: string, role: "ADMIN" | "CALLER", displayName: string) => {
+    const action = role === "ADMIN" ? "grant admin access to" : "remove admin access from";
+    if (!confirm(`${action} ${displayName}? They must log out and back in for the change to take effect.`)) {
+      return;
+    }
+
+    const res = await fetch(`/api/admin/users/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.error || "Failed to update role");
+      return;
+    }
+    loadUsers();
   };
 
   const toggleActive = async (id: string, active: boolean) => {
@@ -130,10 +155,10 @@ export default function AdminUsersPage() {
         </button>
       </header>
 
-      <h1 className="text-xl font-bold mb-2">Manage Callers</h1>
+      <h1 className="text-xl font-bold mb-2">Manage Users</h1>
       <p className="text-rally-muted text-sm mb-4">
-        Device counts show how many phones have enabled push for each account. Each person
-        must log in on their phone and tap Enable Notifications.
+        Create caller and admin accounts. Device counts show how many phones have enabled
+        push for each account.
       </p>
 
       <PushSetupCard onSubscribed={loadUsers} />
@@ -160,6 +185,31 @@ export default function AdminUsersPage() {
       )}
 
       <form onSubmit={createUser} className="p-4 mb-6 bg-rally-surface border border-rally-border rounded-lg flex flex-col gap-2">
+        <p className="text-rally-muted text-xs">CREATE ACCOUNT</p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setNewUserRole("CALLER")}
+            className={`flex-1 py-2 text-sm font-bold rounded border ${
+              newUserRole === "CALLER"
+                ? "bg-rally-accent text-white border-rally-accent"
+                : "bg-rally-bg text-rally-muted border-rally-border"
+            }`}
+          >
+            Caller
+          </button>
+          <button
+            type="button"
+            onClick={() => setNewUserRole("ADMIN")}
+            className={`flex-1 py-2 text-sm font-bold rounded border ${
+              newUserRole === "ADMIN"
+                ? "bg-rally-warning text-black border-rally-warning"
+                : "bg-rally-bg text-rally-muted border-rally-border"
+            }`}
+          >
+            Admin
+          </button>
+        </div>
         <input
           placeholder="Display Name (Alice)"
           value={displayName}
@@ -182,9 +232,15 @@ export default function AdminUsersPage() {
           autoComplete="new-password"
           className="px-3 py-2 bg-rally-bg border border-rally-border rounded"
         />
-        <button type="submit" className="py-2 bg-rally-accent text-white font-bold rounded">
-          CREATE CALLER
+        <button
+          type="submit"
+          className={`py-2 text-white font-bold rounded ${
+            newUserRole === "ADMIN" ? "bg-rally-warning text-black" : "bg-rally-accent"
+          }`}
+        >
+          {newUserRole === "ADMIN" ? "CREATE ADMIN" : "CREATE CALLER"}
         </button>
+        {createError && <p className="text-rally-danger text-xs">{createError}</p>}
       </form>
 
       <div className="flex flex-col gap-2">
@@ -203,6 +259,14 @@ export default function AdminUsersPage() {
                 </p>
                 <p className="text-rally-muted text-xs">
                   @{u.username} ·{" "}
+                  <span
+                    className={
+                      u.role === "ADMIN" ? "text-rally-warning font-bold" : "text-rally-muted"
+                    }
+                  >
+                    {u.role === "ADMIN" ? "ADMIN" : "CALLER"}
+                  </span>
+                  {" · "}
                   <span className={u.activeDevices > 0 ? "text-rally-success" : "text-rally-warning"}>
                     {u.activeDevices} device{u.activeDevices !== 1 ? "s" : ""}
                   </span>
@@ -211,7 +275,24 @@ export default function AdminUsersPage() {
                   <p className="text-rally-warning text-xs mt-1">Needs to log in and enable push</p>
                 )}
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2 justify-end">
+                {u.role === "CALLER" ? (
+                  <button
+                    onClick={() => changeRole(u.id, "ADMIN", u.displayName)}
+                    className="text-xs text-rally-warning hover:text-rally-accent"
+                  >
+                    Make Admin
+                  </button>
+                ) : (
+                  u.id !== user.id && (
+                    <button
+                      onClick={() => changeRole(u.id, "CALLER", u.displayName)}
+                      className="text-xs text-rally-muted hover:text-rally-accent"
+                    >
+                      Make Caller
+                    </button>
+                  )
+                )}
                 <button
                   onClick={() => {
                     setPasswordError("");

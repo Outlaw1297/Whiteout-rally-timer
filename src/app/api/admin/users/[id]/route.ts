@@ -30,6 +30,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const user = await prisma.user.findUnique({ where: { id } });
   if (!user) return errorResponse("User not found", 404);
 
+  if (body.role !== undefined && body.role !== user.role) {
+    if (id === session.id && body.role === "CALLER") {
+      return errorResponse("You cannot demote your own admin account", 400);
+    }
+  }
+
   const updateData: Record<string, unknown> = {};
   if (body.displayName !== undefined) updateData.displayName = body.displayName.trim();
   if (body.active !== undefined) updateData.active = body.active;

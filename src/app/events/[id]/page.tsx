@@ -12,8 +12,8 @@ import { MarchDuplicateNotice } from "@/components/MarchDuplicateNotice";
 import { ServerClock } from "@/components/ServerClock";
 import { formatArrivalTime, formatGather } from "@/lib/display";
 import {
-  getMarchDuplicateGroupForAssignment,
   getMarchDuplicateGroups,
+  groupAssignmentsByLaunchSlot,
 } from "@/lib/march-groups";
 import type { SerializedEvent } from "@/hooks/useEventSocket";
 
@@ -60,6 +60,10 @@ export default function PublicEventPage({ params }: { params: { id: string } }) 
   const isActive = event.status === "ACTIVE";
   const isTemplate = event.status === "READY" || event.status === "DRAFT";
   const marchDuplicateGroups = getMarchDuplicateGroups(event.assignments);
+  const launchSlots = groupAssignmentsByLaunchSlot(event.assignments);
+  const templateSlots = groupAssignmentsByLaunchSlot(
+    event.assignments.map((a) => ({ ...a, launchTime: null }))
+  );
 
   return (
     <main className="min-h-screen px-4 py-6 max-w-lg mx-auto">
@@ -102,41 +106,30 @@ export default function PublicEventPage({ params }: { params: { id: string } }) 
       <section className="flex flex-col gap-3 mb-6">
         <h2 className="text-rally-muted text-xs">CALLERS</h2>
         {isTemplate ? (
-          event.assignments.map((a) => {
-            const jointGroup = getMarchDuplicateGroupForAssignment(a.id, marchDuplicateGroups);
-            return (
-            <div key={a.id} className="p-3 bg-rally-surface border border-rally-border rounded-lg">
-              <p className="font-bold">{a.displayName}</p>
-              <p className="text-rally-muted text-sm font-mono">March {a.marchFormatted}</p>
-              {jointGroup && (
-                <p className="text-rally-warning text-xs mt-1">
-                  Joint launch with{" "}
-                  {jointGroup.displayNames.filter((name) => name !== a.displayName).join(", ")}
-                </p>
+          templateSlots.map((slot) => (
+            <div
+              key={slot.assignmentIds.join("-")}
+              className="p-3 bg-rally-surface border border-rally-border rounded-lg"
+            >
+              <p className="font-bold">{slot.displayNames.join(", ")}</p>
+              <p className="text-rally-muted text-sm font-mono">March {slot.marchFormatted}</p>
+              {slot.displayNames.length > 1 && (
+                <p className="text-rally-warning text-xs mt-1">Launch together</p>
               )}
             </div>
-            );
-          })
+          ))
         ) : (
-          event.assignments.map((a) => {
-            const jointGroup = getMarchDuplicateGroupForAssignment(a.id, marchDuplicateGroups);
-            return (
+          launchSlots.map((slot) => (
             <CallerCountdownRow
-              key={a.id}
-              displayName={a.displayName}
-              marchFormatted={a.marchFormatted}
-              launchTime={a.launchTime}
-              status={a.status}
+              key={slot.assignmentIds.join("-")}
+              displayNames={slot.displayNames}
+              marchFormatted={slot.marchFormatted}
+              launchTime={slot.launchTime}
+              status={slot.status}
               correctedNow={correctedNow}
-              highlight={nextCaller?.assignmentId === a.id}
-              jointLaunchWith={
-                jointGroup
-                  ? jointGroup.displayNames.filter((name) => name !== a.displayName)
-                  : undefined
-              }
+              highlight={slot.assignmentIds.some((id) => nextCaller?.assignmentIds.includes(id))}
             />
-            );
-          })
+          ))
         )}
       </section>
 

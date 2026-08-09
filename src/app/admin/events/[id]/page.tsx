@@ -14,9 +14,8 @@ import { ServerClock } from "@/components/ServerClock";
 import { formatArrivalTime, formatGather, statusLabel } from "@/lib/display";
 import { parseMarchDuration } from "@/lib/timing";
 import {
-  formatJointLaunchNames,
-  getMarchDuplicateGroupForAssignment,
   getMarchDuplicateGroups,
+  groupAssignmentsByLaunchSlot,
 } from "@/lib/march-groups";
 
 interface NotificationMonitor {
@@ -117,6 +116,15 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
     loadEvent();
   };
 
+  const restartRally = async () => {
+    const msg =
+      event?.status === "ACTIVE"
+        ? "Restart this rally now? Countdowns will reset from the current server time."
+        : "Run this template again now?";
+    if (!confirm(msg)) return;
+    await goRally();
+  };
+
   const resetTemplate = async () => {
     if (!confirm("Reset this rally back to template? Launch times and notifications will be cleared.")) return;
     await fetch(`/api/events/${params.id}/reset`, { method: "POST" });
@@ -148,6 +156,10 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
   const matchingMarchCallers = addMarchSeconds
     ? event.assignments.filter((a) => a.marchDurationSeconds === addMarchSeconds)
     : [];
+  const launchSlots = groupAssignmentsByLaunchSlot(event.assignments);
+  const templateSlots = groupAssignmentsByLaunchSlot(
+    event.assignments.map((a) => ({ ...a, launchTime: null }))
+  );
 
   return (
     <main className="min-h-screen px-4 py-6 max-w-lg mx-auto">
@@ -198,25 +210,17 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
 
       {isActive && (
         <section className="flex flex-col gap-3 mb-6">
-          {event.assignments.map((a) => {
-            const jointGroup = getMarchDuplicateGroupForAssignment(a.id, marchDuplicateGroups);
-            return (
+          {launchSlots.map((slot) => (
             <CallerCountdownRow
-              key={a.id}
-              displayName={a.displayName}
-              marchFormatted={a.marchFormatted}
-              launchTime={a.launchTime}
-              status={a.status}
+              key={slot.assignmentIds.join("-")}
+              displayNames={slot.displayNames}
+              marchFormatted={slot.marchFormatted}
+              launchTime={slot.launchTime}
+              status={slot.status}
               correctedNow={correctedNow}
-              highlight={nextCaller?.assignmentId === a.id}
-              jointLaunchWith={
-                jointGroup
-                  ? jointGroup.displayNames.filter((name) => name !== a.displayName)
-                  : undefined
-              }
+              highlight={slot.assignmentIds.some((id) => nextCaller?.assignmentIds.includes(id))}
             />
-            );
-          })}
+          ))}
         </section>
       )}
 
@@ -224,35 +228,35 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
         <section className="mb-4">
           <h2 className="text-rally-muted text-xs mb-2">TEMPLATE CALLERS</h2>
           <div className="flex flex-col gap-2 mb-4">
-            {event.assignments.map((a) => {
-              const jointGroup = getMarchDuplicateGroupForAssignment(a.id, marchDuplicateGroups);
-              return (
+            {templateSlots.map((slot) => (
               <div
-                key={a.id}
+                key={slot.assignmentIds.join("-")}
                 className="flex justify-between items-center p-3 bg-rally-surface border border-rally-border rounded-lg"
               >
                 <div>
-                  <p className="font-bold">{a.displayName}</p>
-                  <p className="text-rally-muted text-xs font-mono">March {a.marchFormatted}</p>
-                  {jointGroup && (
-                    <p className="text-rally-warning text-xs mt-0.5">
-                      Joint launch with{" "}
-                      {formatJointLaunchNames(jointGroup.displayNames, a.displayName)}
-                    </p>
-                  )}
-                  {a.hasPushAccount && (
-                    <p className="text-rally-success text-xs">Push account linked</p>
+                  <p className="font-bold">{slot.displayNames.join(", ")}</p>
+                  <p className="text-rally-muted text-xs font-mono">March {slot.marchFormatted}</p>
+                  {slot.displayNames.length > 1 && (
+                    <p className="text-rally-warning text-xs mt-0.5">Launch together</p>
                   )}
                 </div>
-                <button
-                  onClick={() => removeCaller(a.id)}
-                  className="text-rally-danger text-xs"
-                >
-                  Remove
-                </button>
+                <div className="flex flex-col items-end gap-1">
+                  {slot.assignmentIds.map((id) => {
+                    const caller = event.assignments.find((a) => a.id === id);
+                    if (!caller) return null;
+                    return (
+                      <button
+                        key={id}
+                        onClick={() => removeCaller(id)}
+                        className="text-rally-danger text-xs"
+                      >
+                        Remove {caller.displayName}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-              );
-            })}
+            ))}
           </div>
 
           <div className="p-4 bg-rally-surface border border-rally-border rounded-lg flex flex-col gap-2">
@@ -322,15 +326,23 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
         </section>
       )}
 
-      {isFinished && event.assignments.length > 0 && (
+      {(isActive || isFinished) && event.assignments.length > 0 && (
         <section className="flex flex-col gap-3 mb-4">
           <button
-            onClick={goRally}
+            onClick={restartRally}
             disabled={starting}
             className="w-full py-6 bg-rally-success text-white font-bold text-2xl rounded-xl disabled:opacity-50"
           >
-            {starting ? "STARTING..." : "GO AGAIN"}
+            {starting ? "STARTING..." : isFinished ? "GO AGAIN" : "RESTART RALLY"}
           </button>
+          <p className="text-rally-muted text-xs text-center -mt-1">
+            Reruns this template immediately from the current server time.
+          </p>
+        </section>
+      )}
+
+      {isFinished && event.assignments.length > 0 && (
+        <section className="flex flex-col gap-3 mb-4">
           <button
             onClick={resetTemplate}
             className="w-full py-4 bg-rally-accent/20 border border-rally-accent text-rally-accent font-bold rounded-lg"
@@ -338,7 +350,7 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
             START TEMPLATE AGAIN
           </button>
           <p className="text-rally-muted text-xs text-center -mt-1">
-            GO AGAIN reruns immediately. START TEMPLATE AGAIN lets you edit callers first.
+            Clears launch times so you can edit callers before pressing GO.
           </p>
         </section>
       )}

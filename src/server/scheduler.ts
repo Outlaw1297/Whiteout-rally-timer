@@ -186,23 +186,14 @@ async function tick() {
   });
 
   for (const event of activeEvents) {
-    const pendingLaunch = await prisma.notificationEvent.count({
-      where: {
-        assignment: { rallyEventId: event.id },
-        type: "LAUNCH",
-        status: "PENDING",
+    const completed = await prisma.rallyEvent.update({
+      where: { id: event.id },
+      data: { status: "COMPLETED", completedAt: new Date() },
+      include: {
+        assignments: { include: { user: true }, orderBy: { launchTime: "asc" } },
       },
     });
-    if (pendingLaunch === 0) {
-      const completed = await prisma.rallyEvent.update({
-        where: { id: event.id },
-        data: { status: "COMPLETED", completedAt: new Date() },
-        include: {
-          assignments: { include: { user: true }, orderBy: { launchTime: "asc" } },
-        },
-      });
-      broadcastRallyUpdate(event.id, serializeEvent(completed));
-    }
+    broadcastRallyUpdate(event.id, serializeEvent(completed));
   }
 }
 

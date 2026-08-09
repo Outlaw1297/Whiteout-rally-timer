@@ -123,11 +123,13 @@ export interface NextCallerAssignment {
 
 export interface NextCallerInfo {
   displayName: string;
+  displayNames: string[];
   launchTime: string;
   assignmentId: string;
+  assignmentIds: string[];
 }
 
-/** Pick the current next caller: earliest upcoming WAITING, or earliest overdue WAITING. */
+/** Pick the current next caller slot: earliest upcoming WAITING, or earliest overdue WAITING. */
 export function getNextCaller(
   assignments: NextCallerAssignment[],
   nowMs: number
@@ -143,11 +145,15 @@ export function getNextCaller(
 
   const upcoming = waiting.find((a) => new Date(a.launchTime!).getTime() > nowMs);
   const current = upcoming ?? waiting[0];
+  const launchTime = current.launchTime!;
+  const slot = waiting.filter((a) => a.launchTime === launchTime);
 
   return {
-    displayName: current.displayName,
-    launchTime: current.launchTime!,
+    displayName: slot.map((a) => a.displayName).join(", "),
+    displayNames: slot.map((a) => a.displayName),
+    launchTime,
     assignmentId: current.id,
+    assignmentIds: slot.map((a) => a.id),
   };
 }
 

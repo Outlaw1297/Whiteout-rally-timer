@@ -81,6 +81,17 @@ if (third?.assignmentId !== "3") {
   process.exit(1);
 }
 
+const jointMarch = [
+  { id: "a", displayName: "call2", launchTime: new Date(base + 20_000).toISOString(), status: "WAITING" },
+  { id: "b", displayName: "call3", launchTime: new Date(base + 20_000).toISOString(), status: "WAITING" },
+];
+const joint = getNextCaller(jointMarch, base + 15_000);
+if (joint?.displayName !== "call2, call3" || joint.assignmentIds.length !== 2) {
+  console.error("FAIL joint next caller names");
+  process.exit(1);
+}
+console.log("PASS joint next caller names");
+
 const overdue = getNextCaller(assignments, base + 35_000);
 if (overdue?.assignmentId !== "1") {
   console.error("FAIL next caller when all overdue");

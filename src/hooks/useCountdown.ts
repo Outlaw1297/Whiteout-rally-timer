@@ -13,7 +13,12 @@ export function useCountdown(
   const rafRef = useRef<number>(0);
 
   useEffect(() => {
-    if (rallyTimeMs === null) return;
+    if (rallyTimeMs === null) {
+      setDisplay("--:--.---");
+      setRemainingMs(0);
+      setIsNow(false);
+      return;
+    }
 
     const tick = () => {
       const now = correctedNow();
@@ -21,7 +26,7 @@ export function useCountdown(
       setRemainingMs(remaining);
 
       if (remaining <= 0) {
-        setDisplay("RALLY NOW");
+        setDisplay("🚨 RALLY NOW");
         setIsNow(true);
       } else {
         setDisplay(formatCountdown(remaining));

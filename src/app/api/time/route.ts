@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { jsonResponse } from "@/lib/api";
-import { getServerTime, calculateClockOffset } from "@/lib/time";
+import { getServerTime } from "@/lib/time";
 import { rateLimit, RATE_LIMITS, getClientIp, rateLimitResponse } from "@/lib/rate-limit";
 
 export async function GET(request: NextRequest) {
@@ -12,18 +12,11 @@ export async function GET(request: NextRequest) {
     const serverTime = getServerTime();
     const serverSendTime = Date.now();
 
-    const offset = calculateClockOffset(
-      clientSendTime,
-      serverReceiveTime,
-      serverSendTime,
-      serverSendTime
-    );
-
     return jsonResponse({
       ...serverTime,
-      offset,
       serverReceiveTime,
       serverSendTime,
+      clientSendTime,
     });
   }
 

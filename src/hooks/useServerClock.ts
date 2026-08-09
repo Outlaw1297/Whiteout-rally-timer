@@ -1,15 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { calculateClockOffset } from "@/lib/time";
+import { calculateClockOffset, estimateRoundTripLatency } from "@/lib/time";
 
 interface UseServerClockOptions {
   syncIntervalMs?: number;
   useWebSocket?: boolean;
+  activeRally?: boolean;
 }
 
 interface ServerClockState {
   offset: number;
+  rtt: number;
   isLive: boolean;
   lastSyncAt: number | null;
   correctedNow: () => number;
@@ -17,17 +19,27 @@ interface ServerClockState {
 }
 
 export function useServerClock(options: UseServerClockOptions = {}): ServerClockState {
-  const { syncIntervalMs = 30_000, useWebSocket = true } = options;
+  const {
+    syncIntervalMs = 30_000,
+    useWebSocket = true,
+    activeRally = false,
+  } = options;
+
+  const effectiveSyncInterval = activeRally ? 5_000 : syncIntervalMs;
+
   const offsetRef = useRef(0);
   const [offset, setOffset] = useState(0);
+  const [rtt, setRtt] = useState(0);
   const [isLive, setIsLive] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastHttpSyncRef = useRef(0);
 
-  const applyOffset = useCallback((newOffset: number) => {
+  const applyOffset = useCallback((newOffset: number, newRtt: number) => {
     offsetRef.current = newOffset;
     setOffset(newOffset);
+    setRtt(newRtt);
     setLastSyncAt(Date.now());
   }, []);
 
@@ -36,20 +48,25 @@ export function useServerClock(options: UseServerClockOptions = {}): ServerClock
     try {
       const res = await fetch("/api/time", {
         headers: { "x-client-send-time": String(clientSendTime) },
+        cache: "no-store",
       });
       const clientReceiveTime = Date.now();
       const data = await res.json();
 
-      if (data.offset !== undefined) {
-        applyOffset(data.offset);
-      } else if (data.unixMs) {
+      if (data.serverReceiveTime && data.serverSendTime) {
         const newOffset = calculateClockOffset(
           clientSendTime,
-          data.serverReceiveTime || data.unixMs,
-          data.serverSendTime || data.unixMs,
+          data.serverReceiveTime,
+          data.serverSendTime,
           clientReceiveTime
         );
-        applyOffset(newOffset);
+        applyOffset(newOffset, estimateRoundTripLatency(clientSendTime, clientReceiveTime));
+        lastHttpSyncRef.current = Date.now();
+      } else if (data.unixMs) {
+        applyOffset(
+          data.unixMs - clientReceiveTime,
+          estimateRoundTripLatency(clientSendTime, clientReceiveTime)
+        );
       }
     } catch {
       // keep last known offset
@@ -70,8 +87,17 @@ export function useServerClock(options: UseServerClockOptions = {}): ServerClock
         const data = JSON.parse(event.data);
         if (data.type === "time_sync" && typeof data.serverTime === "number") {
           const clientReceiveTime = Date.now();
-          const newOffset = data.serverTime - clientReceiveTime;
-          applyOffset(newOffset);
+          const wsOffset = data.serverTime - clientReceiveTime;
+
+          // Blend WS offset with HTTP NTP offset when HTTP sync is recent
+          if (Date.now() - lastHttpSyncRef.current < 10_000) {
+            applyOffset(
+              offsetRef.current * 0.7 + wsOffset * 0.3,
+              estimateRoundTripLatency(clientReceiveTime - 500, clientReceiveTime)
+            );
+          } else {
+            applyOffset(wsOffset, 0);
+          }
           setIsLive(true);
         }
       } catch {
@@ -92,7 +118,7 @@ export function useServerClock(options: UseServerClockOptions = {}): ServerClock
 
   useEffect(() => {
     sync();
-    const interval = setInterval(sync, syncIntervalMs);
+    const interval = setInterval(sync, effectiveSyncInterval);
     connectWebSocket();
 
     return () => {
@@ -100,9 +126,9 @@ export function useServerClock(options: UseServerClockOptions = {}): ServerClock
       if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
       wsRef.current?.close();
     };
-  }, [sync, syncIntervalMs, connectWebSocket]);
+  }, [sync, effectiveSyncInterval, connectWebSocket]);
 
   const correctedNow = useCallback(() => Date.now() + offsetRef.current, []);
 
-  return { offset, isLive, lastSyncAt, correctedNow, sync };
+  return { offset, rtt, isLive, lastSyncAt, correctedNow, sync };
 }

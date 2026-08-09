@@ -6,7 +6,7 @@ import { useServerClock } from "@/hooks/useServerClock";
 import { formatTimeWithMs } from "@/lib/time";
 
 export default function DebugPage() {
-  const { offset, isLive, lastSyncAt, sync } = useServerClock({ useWebSocket: false });
+  const { offset, rtt, isLive, lastSyncAt, sync } = useServerClock({ useWebSocket: false });
   const [health, setHealth] = useState<Record<string, unknown> | null>(null);
 
   useEffect(() => {
@@ -28,6 +28,7 @@ export default function DebugPage() {
         <section className="p-4 bg-rally-surface border border-rally-border rounded-lg space-y-2">
           <h2 className="text-rally-accent font-bold">Clock Sync</h2>
           <div>Offset: {offset.toFixed(1)}ms</div>
+          <div>Round-trip: {rtt.toFixed(1)}ms</div>
           <div>Live: {isLive ? "yes" : "no"}</div>
           <div>Last sync: {lastSyncAt ? formatTimeWithMs(new Date(lastSyncAt)) : "never"}</div>
           <button

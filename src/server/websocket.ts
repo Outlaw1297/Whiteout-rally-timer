@@ -2,26 +2,28 @@ import { WebSocketServer, WebSocket } from "ws";
 import { IncomingMessage } from "http";
 import { v4 as uuidv4 } from "uuid";
 import { logger } from "@/lib/logger";
+import {
+  registerClient,
+  unregisterClient,
+  subscribeClientToRally,
+} from "./rally-hub";
 
 const SYNC_INTERVAL_MS = 1000;
-
-interface TimeSyncMessage {
-  type: "time_sync";
-  serverTime: number;
-}
 
 export function setupWebSocket(wss: WebSocketServer) {
   wss.on("connection", (ws: WebSocket, _req: IncomingMessage) => {
     const clientId = uuidv4();
+    registerClient(ws);
     logger.websocketConnected(clientId);
 
     const sendTimeSync = () => {
       if (ws.readyState === WebSocket.OPEN) {
-        const message: TimeSyncMessage = {
-          type: "time_sync",
-          serverTime: Date.now(),
-        };
-        ws.send(JSON.stringify(message));
+        ws.send(
+          JSON.stringify({
+            type: "time_sync",
+            serverTime: Date.now(),
+          })
+        );
       }
     };
 
@@ -30,19 +32,34 @@ export function setupWebSocket(wss: WebSocketServer) {
 
     ws.on("close", () => {
       clearInterval(syncInterval);
+      unregisterClient(ws);
       logger.websocketDisconnected(clientId);
     });
 
     ws.on("error", () => {
       clearInterval(syncInterval);
+      unregisterClient(ws);
       logger.websocketDisconnected(clientId);
     });
 
     ws.on("message", (data) => {
       try {
         const message = JSON.parse(data.toString());
+
         if (message.type === "ping") {
           ws.send(JSON.stringify({ type: "pong", serverTime: Date.now() }));
+          return;
+        }
+
+        if (message.type === "subscribe_rally" && message.rallyId) {
+          subscribeClientToRally(ws, message.rallyId);
+          ws.send(
+            JSON.stringify({
+              type: "subscribed",
+              rallyId: message.rallyId,
+              serverTime: Date.now(),
+            })
+          );
         }
       } catch {
         // ignore malformed messages

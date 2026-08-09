@@ -8,29 +8,39 @@ datasource db {
 }
 
 enum RallyStatus {
-  SCHEDULED
+  DRAFT
+  READY
   ACTIVE
   COMPLETED
   CANCELLED
 }
 
-model Rally {
-  id                  String   @id @default(uuid())
-  title               String
-  rallyTime           DateTime @db.Timestamptz(3)
-  createdAt           DateTime @default(now()) @db.Timestamptz(3)
-  updatedAt           DateTime @updatedAt @db.Timestamptz(3)
-  createdBy           String?
-  status              RallyStatus @default(SCHEDULED)
-  notification30Sent  Boolean  @default(false)
-  notification10Sent  Boolean  @default(false)
-  notification5Sent   Boolean  @default(false)
-  notification1Sent   Boolean  @default(false)
-  notificationNowSent Boolean @default(false)
-  cancelled           Boolean  @default(false)
-  isTestMode          Boolean  @default(false)
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED
+}
 
-  subscribers RallySubscriber[]
+model Rally {
+  id                  String      @id @default(uuid())
+  title               String
+  rallyTime           DateTime?   @db.Timestamptz(3)
+  createdAt           DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime    @updatedAt @db.Timestamptz(3)
+  startedAt           DateTime?   @db.Timestamptz(3)
+  createdBy           String?
+  status              RallyStatus @default(READY)
+  notification30Sent  Boolean     @default(false)
+  notification10Sent  Boolean     @default(false)
+  notification5Sent   Boolean     @default(false)
+  notification1Sent   Boolean     @default(false)
+  notificationNowSent Boolean     @default(false)
+  cancelled           Boolean     @default(false)
+  isTestMode          Boolean     @default(false)
+  startDelaySeconds   Int?
+
+  subscribers      RallySubscriber[]
   notificationLogs NotificationLog[]
 
   @@index([rallyTime])
@@ -69,18 +79,20 @@ model RallySubscriber {
 }
 
 model NotificationLog {
-  id                String   @id @default(uuid())
-  rallyId           String
-  notificationType  String
-  scheduledAt       DateTime @db.Timestamptz(3)
-  sentAt            DateTime? @db.Timestamptz(3)
-  latencyMs         Int?
-  success           Boolean  @default(false)
-  errorMessage      String?
-  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+  id               String             @id @default(uuid())
+  rallyId          String
+  notificationType String
+  scheduledAt      DateTime           @db.Timestamptz(3)
+  sentAt           DateTime?          @db.Timestamptz(3)
+  latencyMs        Int?
+  status           NotificationStatus @default(PENDING)
+  success          Boolean            @default(false)
+  errorMessage     String?
+  createdAt        DateTime           @default(now()) @db.Timestamptz(3)
 
   rally Rally @relation(fields: [rallyId], references: [id], onDelete: Cascade)
 
   @@index([rallyId])
   @@index([notificationType])
+  @@index([status])
 }

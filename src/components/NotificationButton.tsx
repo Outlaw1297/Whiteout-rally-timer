@@ -22,40 +22,49 @@ export function NotificationButton({ rallyId }: NotificationButtonProps) {
   if (status === "denied") {
     return (
       <div className="text-rally-danger text-sm text-center">
-        Notifications blocked. Enable in browser settings.
+        Notifications blocked. Enable in Safari Settings → Notifications.
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col items-center gap-3">
+    <div className="flex flex-col items-center gap-3 w-full">
       <div className="flex items-center gap-2 text-sm">
-        <span className="text-rally-muted">NOTIFICATIONS:</span>
+        <span className="text-rally-muted">NOTIFICATIONS</span>
         {isSubscribed ? (
           <span className="text-rally-success font-bold">✓ ENABLED</span>
-        ) : status === "granted" ? (
-          <span className="text-rally-warning font-bold">○ PERMITTED</span>
         ) : (
           <span className="text-rally-muted font-bold">○ DISABLED</span>
         )}
       </div>
 
       {!isSubscribed ? (
-        <button
-          onClick={enableNotifications}
-          disabled={loading}
-          className="w-full py-4 px-6 bg-rally-accent hover:bg-blue-600 disabled:opacity-50 text-white font-bold text-lg rounded-lg transition-colors"
-        >
-          {loading ? "ENABLING..." : "ENABLE RALLY NOTIFICATIONS"}
-        </button>
+        <>
+          <button
+            onClick={enableNotifications}
+            disabled={loading}
+            className="w-full py-4 px-6 bg-rally-accent hover:bg-blue-600 disabled:opacity-50 text-white font-bold text-lg rounded-lg transition-colors"
+          >
+            {loading ? "ENABLING..." : "ENABLE RALLY ALERTS"}
+          </button>
+          <p className="text-rally-muted text-xs text-center px-2">
+            Enable notifications to receive rally alerts while Whiteout Survival is
+            open or your phone is locked.
+          </p>
+        </>
       ) : (
-        <button
-          onClick={disableNotifications}
-          disabled={loading}
-          className="w-full py-3 px-6 bg-rally-surface border border-rally-border hover:border-rally-danger text-rally-muted hover:text-rally-danger font-medium text-sm rounded-lg transition-colors"
-        >
-          {loading ? "DISABLING..." : "DISABLE NOTIFICATIONS"}
-        </button>
+        <>
+          <p className="text-rally-success text-sm font-bold">
+            ✓ Rally notifications enabled
+          </p>
+          <button
+            onClick={disableNotifications}
+            disabled={loading}
+            className="w-full py-3 px-6 bg-rally-surface border border-rally-border hover:border-rally-danger text-rally-muted hover:text-rally-danger font-medium text-sm rounded-lg transition-colors"
+          >
+            {loading ? "DISABLING..." : "DISABLE ALERTS"}
+          </button>
+        </>
       )}
     </div>
   );

@@ -21,17 +21,20 @@ export function calculateClockOffset(
   serverSendTime: number,
   clientReceiveTime: number
 ): number {
-  const offset =
-    (serverReceiveTime - clientSendTime + (serverSendTime - clientReceiveTime)) / 2;
-  return offset;
+  return (
+    (serverReceiveTime - clientSendTime + (serverSendTime - clientReceiveTime)) / 2
+  );
 }
 
-export function getCorrectedServerTime(offsetMs: number): number {
-  return Date.now() + offsetMs;
+export function estimateRoundTripLatency(
+  clientSendTime: number,
+  clientReceiveTime: number
+): number {
+  return clientReceiveTime - clientSendTime;
 }
 
 export function formatCountdown(remainingMs: number): string {
-  if (remainingMs <= 0) return "RALLY NOW";
+  if (remainingMs <= 0) return "🚨 RALLY NOW";
 
   const totalSeconds = remainingMs / 1000;
   const minutes = Math.floor(totalSeconds / 60);
@@ -72,13 +75,24 @@ export const NOTIFICATION_OFFSETS = [
 export type NotificationType = (typeof NOTIFICATION_OFFSETS)[number]["type"];
 export type NotificationField = (typeof NOTIFICATION_OFFSETS)[number]["field"];
 
-export const NOTIFICATION_MESSAGES: Record<NotificationType, string> = {
-  "T-30": "⚔️ Rally in 30 seconds",
-  "T-10": "⚔️ Rally in 10 seconds",
-  "T-5": "⚔️ Rally in 5 seconds",
-  "T-1": "⚔️ RALLY IN 1 SECOND",
-  "T+0": "⚔️ RALLY NOW",
+const NOTIFICATION_BODIES: Record<NotificationType, string> = {
+  "T-30": "Rally in 30 seconds",
+  "T-10": "Rally in 10 seconds",
+  "T-5": "Rally in 5 seconds",
+  "T-1": "Rally in 1 second",
+  "T+0": "RALLY NOW",
 };
+
+export function getNotificationPayload(
+  notificationType: NotificationType,
+  rallyTitle: string
+): { title: string; body: string } {
+  const prefix = notificationType === "T+0" ? "🚨" : "⚔️";
+  return {
+    title: `${prefix} ${rallyTitle.toUpperCase()}`,
+    body: NOTIFICATION_BODIES[notificationType],
+  };
+}
 
 export function getScheduledNotificationTime(
   rallyTimeMs: number,
@@ -86,3 +100,11 @@ export function getScheduledNotificationTime(
 ): number {
   return rallyTimeMs - secondsBefore * 1000;
 }
+
+export const RALLY_STATUS_LABELS: Record<string, string> = {
+  DRAFT: "DRAFT",
+  READY: "READY",
+  ACTIVE: "ACTIVE",
+  COMPLETED: "COMPLETED",
+  CANCELLED: "CANCELLED",
+};

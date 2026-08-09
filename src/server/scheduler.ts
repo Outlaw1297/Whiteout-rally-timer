@@ -2,20 +2,25 @@ import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 import {
   NOTIFICATION_OFFSETS,
-  NOTIFICATION_MESSAGES,
+  getNotificationPayload,
   getScheduledNotificationTime,
   type NotificationField,
   type NotificationType,
 } from "@/lib/time";
 import { sendPushNotification, isExpiredSubscription } from "@/lib/push";
+import { broadcastRallyUpdate } from "./rally-hub";
+import { serializeRally } from "@/lib/rally";
 
 const POLL_INTERVAL_MS = 100;
+const LOOK_AHEAD_MS = 35_000;
+const LOOK_BEHIND_MS = 30_000;
 
 let schedulerRunning = false;
 let schedulerInterval: ReturnType<typeof setInterval> | null = null;
 
 async function processNotification(
   rallyId: string,
+  rallyTitle: string,
   rallyTimeMs: number,
   notificationType: NotificationType,
   field: NotificationField,
@@ -29,7 +34,7 @@ async function processNotification(
 
   const result = await prisma.$transaction(async (tx) => {
     const rally = await tx.rally.findUnique({ where: { id: rallyId } });
-    if (!rally || rally.cancelled || rally[field]) return null;
+    if (!rally || rally.cancelled || rally[field] || !rally.rallyTime) return null;
 
     const updated = await tx.rally.updateMany({
       where: { id: rallyId, [field]: false },
@@ -50,14 +55,13 @@ async function processNotification(
 
   const subscribers = await prisma.rallySubscriber.findMany({
     where: { rallyId },
-    include: {
-      pushSubscription: true,
-    },
+    include: { pushSubscription: true },
   });
 
-  const message = NOTIFICATION_MESSAGES[notificationType];
+  const { title, body } = getNotificationPayload(notificationType, rallyTitle);
   let successCount = 0;
   let failCount = 0;
+  let lastError: string | null = null;
 
   for (const sub of subscribers) {
     if (!sub.pushSubscription.active) continue;
@@ -68,18 +72,14 @@ async function processNotification(
         p256dh: sub.pushSubscription.p256dh,
         auth: sub.pushSubscription.auth,
       },
-      {
-        title: "Whiteout Rally",
-        body: message,
-        rallyId,
-        notificationType,
-      }
+      { title, body, rallyId, notificationType }
     );
 
     if (pushResult.success) {
       successCount++;
     } else {
       failCount++;
+      lastError = pushResult.error || "delivery failed";
       if (isExpiredSubscription(pushResult.statusCode)) {
         await prisma.pushSubscription.update({
           where: { id: sub.pushSubscription.id },
@@ -93,6 +93,9 @@ async function processNotification(
     }
   }
 
+  const noSubscribers = subscribers.length === 0;
+  const success = successCount > 0 || noSubscribers;
+
   await prisma.notificationLog.create({
     data: {
       rallyId,
@@ -100,12 +103,18 @@ async function processNotification(
       scheduledAt,
       sentAt,
       latencyMs,
-      success: successCount > 0 || subscribers.length === 0,
-      errorMessage: failCount > 0 ? `${failCount} delivery failures` : null,
+      status: success ? "SENT" : "FAILED",
+      success,
+      errorMessage:
+        failCount > 0
+          ? `${failCount} delivery failures${lastError ? `: ${lastError}` : ""}`
+          : noSubscribers
+            ? "no subscribers"
+            : null,
     },
   });
 
-  if (successCount > 0 || subscribers.length === 0) {
+  if (success) {
     logger.notificationSent(
       rallyId,
       notificationType,
@@ -114,43 +123,39 @@ async function processNotification(
       latencyMs
     );
   } else {
-    logger.notificationFailed(rallyId, notificationType, "All deliveries failed");
+    logger.notificationFailed(rallyId, notificationType, lastError || "All deliveries failed");
   }
 
   if (notificationType === "T+0") {
-    await prisma.rally.update({
+    const completed = await prisma.rally.update({
       where: { id: rallyId },
       data: { status: "COMPLETED" },
+      include: {
+        notificationLogs: { orderBy: { scheduledAt: "asc" } },
+        _count: { select: { subscribers: true } },
+      },
     });
+    broadcastRallyUpdate(rallyId, serializeRally(completed));
   }
 }
 
 async function tick() {
   const now = Date.now();
-  const lookAheadMs = 35_000;
-  const lookBehindMs = 5_000;
 
   const rallies = await prisma.rally.findMany({
     where: {
       cancelled: false,
-      rallyTime: {
-        gte: new Date(now - lookBehindMs),
-        lte: new Date(now + lookAheadMs),
-      },
+      status: { in: ["ACTIVE", "COMPLETED"] },
+      rallyTime: { not: null },
     },
   });
 
   for (const rally of rallies) {
+    if (!rally.rallyTime) continue;
     const rallyTimeMs = rally.rallyTime.getTime();
 
-    if (rallyTimeMs > now + lookAheadMs) continue;
-
-    if (rally.status === "SCHEDULED" && rallyTimeMs <= now + 30_000) {
-      await prisma.rally.update({
-        where: { id: rally.id },
-        data: { status: "ACTIVE" },
-      });
-    }
+    if (rallyTimeMs < now - LOOK_BEHIND_MS) continue;
+    if (rallyTimeMs > now + LOOK_AHEAD_MS) continue;
 
     for (const offset of NOTIFICATION_OFFSETS) {
       if (rally[offset.field]) continue;
@@ -159,6 +164,7 @@ async function tick() {
       if (scheduledMs <= now + 100) {
         await processNotification(
           rally.id,
+          rally.title,
           rallyTimeMs,
           offset.type,
           offset.field,

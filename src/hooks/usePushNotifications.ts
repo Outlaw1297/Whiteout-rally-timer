@@ -76,6 +76,13 @@ export function usePushNotifications() {
       }
 
       const keyRes = await fetch("/api/push/subscribe");
+      if (!keyRes.ok) {
+        throw new Error(
+          keyRes.status === 503
+            ? "Push not configured on server (VAPID keys missing)"
+            : "Could not fetch push configuration"
+        );
+      }
       const { publicKey } = await keyRes.json();
       if (!publicKey) throw new Error("VAPID public key not available");
 

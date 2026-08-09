@@ -10,6 +10,7 @@ import { useEventSocket, type SerializedEvent } from "@/hooks/useEventSocket";
 import { useNextCaller } from "@/hooks/useNextCaller";
 import { CallerCountdownRow } from "@/components/CallerCountdownRow";
 import { MarchDuplicateNotice } from "@/components/MarchDuplicateNotice";
+import { PushSetupCard } from "@/components/PushSetupCard";
 import { ServerClock } from "@/components/ServerClock";
 import { formatArrivalTime, formatGather, statusLabel } from "@/lib/display";
 import { parseMarchDuration } from "@/lib/timing";
@@ -47,6 +48,7 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
   const [callerName, setCallerName] = useState("");
   const [linkUserId, setLinkUserId] = useState("");
   const [addMarch, setAddMarch] = useState("8:00");
+  const [useMyAccount, setUseMyAccount] = useState(true);
   const [starting, setStarting] = useState(false);
 
   const { correctedNow, isLive } = useServerClock({ activeRally: event?.status === "ACTIVE" });
@@ -95,7 +97,7 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         callerName: callerName.trim(),
-        userId: linkUserId || undefined,
+        userId: linkUserId || (useMyAccount && user ? user.id : undefined),
         marchDuration: addMarch,
       }),
     });
@@ -128,6 +130,16 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
   const resetTemplate = async () => {
     if (!confirm("Reset this rally back to template? Launch times and notifications will be cleared.")) return;
     await fetch(`/api/events/${params.id}/reset`, { method: "POST" });
+    loadEvent();
+  };
+
+  const linkMyAccount = async (assignmentId: string) => {
+    if (!user) return;
+    await fetch(`/api/events/${params.id}/assignments/${assignmentId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: user.id }),
+    });
     loadEvent();
   };
 
@@ -179,6 +191,8 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
       </header>
 
       <ServerClock correctedNow={correctedNow} isLive={isLive} />
+
+      <PushSetupCard onSubscribed={loadEvent} />
 
       {marchDuplicateGroups.length > 0 && (
         <MarchDuplicateNotice groups={marchDuplicateGroups} />
@@ -285,12 +299,25 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
               className="px-3 py-2 bg-rally-bg border border-rally-border rounded text-rally-text"
             >
               <option value="">Link push account (optional)</option>
+              {user && (
+                <option value={user.id}>
+                  Me ({user.displayName}) — recommended for testing
+                </option>
+              )}
               {callers.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.displayName} (@{c.username})
                 </option>
               ))}
             </select>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={useMyAccount}
+                onChange={(e) => setUseMyAccount(e.target.checked)}
+              />
+              Auto-link my account to new callers (for push testing)
+            </label>
             <p className="text-rally-muted text-xs">
               Callers do not need to be logged in. Link an account only to send push notifications.
             </p>
@@ -398,21 +425,38 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
         </section>
       )}
 
-      {event.notificationMonitor && isActive && (
+      {event.notificationMonitor && (
         <section className="mb-8">
-          <h2 className="text-rally-muted text-xs mb-2">NOTIFICATIONS</h2>
+          <h2 className="text-rally-muted text-xs mb-2">CALLER PUSH STATUS</h2>
+          <p className="text-rally-muted text-xs mb-3">
+            Each caller must be linked to an account, and that account must enable notifications
+            on their device. Use the section above to register this phone first.
+          </p>
           {event.notificationMonitor.map((m) => (
             <div key={m.assignmentId} className="p-3 mb-2 bg-rally-surface border border-rally-border rounded-lg text-sm">
-              <div className="flex justify-between">
+              <div className="flex justify-between items-start gap-2">
                 <span className="font-bold">{m.callerName}</span>
                 <span className={m.hasActiveDevice ? "text-rally-success" : "text-rally-muted"}>
                   {!m.hasPushAccount
-                    ? "No push account (use live view)"
+                    ? "No account linked"
                     : m.hasActiveDevice
                       ? `✓ ${m.devices.map((d) => d.platform).join(", ")}`
-                      : "No device subscribed"}
+                      : "Account linked, no device"}
                 </span>
               </div>
+              {!m.hasPushAccount && user && (
+                <button
+                  onClick={() => linkMyAccount(m.assignmentId)}
+                  className="mt-2 text-rally-accent text-xs font-bold"
+                >
+                  Link my account ({user.displayName})
+                </button>
+              )}
+              {m.hasPushAccount && !m.hasActiveDevice && (
+                <p className="text-rally-warning text-xs mt-2">
+                  Linked account has not enabled notifications on any device yet.
+                </p>
+              )}
             </div>
           ))}
         </section>

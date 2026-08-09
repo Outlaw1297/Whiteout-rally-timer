@@ -2,9 +2,9 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonResponse, errorResponse, isValidUuid } from "@/lib/api";
 import { requireAdmin } from "@/lib/auth";
-import { recalculateAssignmentTimes, serializeEvent } from "@/lib/rally-event";
+import { serializeEvent } from "@/lib/rally-event";
 import { parseMarchDuration } from "@/lib/timing";
-import { cancelPendingNotifications, createNotificationEventsForAssignment } from "@/lib/notifications";
+import { createNotificationEventsForAssignment } from "@/lib/notifications";
 
 interface RouteParams {
   params: { id: string; assignmentId: string };
@@ -26,15 +26,23 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   if (!event || !assignment || assignment.rallyEventId !== id) {
     return errorResponse("Not found", 404);
   }
-  if (event.status === "ACTIVE") {
-    return errorResponse("Cannot edit march times while rally is running", 400);
-  }
 
-  let body: { marchDuration?: string; marchDurationSeconds?: number };
+  let body: {
+    marchDuration?: string;
+    marchDurationSeconds?: number;
+    userId?: string | null;
+  };
   try {
     body = await request.json();
   } catch {
     return errorResponse("Invalid JSON");
+  }
+
+  if (
+    event.status === "ACTIVE" &&
+    (body.marchDuration !== undefined || body.marchDurationSeconds !== undefined)
+  ) {
+    return errorResponse("Cannot edit march times while rally is running", 400);
   }
 
   let marchSeconds = body.marchDurationSeconds;
@@ -43,12 +51,40 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (parsed === null) return errorResponse("Invalid march duration");
     marchSeconds = parsed;
   }
-  if (!marchSeconds) return errorResponse("marchDuration required");
+  if (!marchSeconds && body.userId === undefined) {
+    return errorResponse("marchDuration or userId required");
+  }
+
+  const updateData: {
+    marchDurationSeconds?: number;
+    userId?: string | null;
+  } = {};
+
+  if (marchSeconds) updateData.marchDurationSeconds = marchSeconds;
+  if (body.userId !== undefined) updateData.userId = body.userId;
 
   await prisma.rallyAssignment.update({
     where: { id: assignmentId },
-    data: { marchDurationSeconds: marchSeconds, status: "WAITING" },
+    data: updateData,
   });
+
+  if (body.userId && event.status === "ACTIVE") {
+    const linked = await prisma.rallyAssignment.findUnique({
+      where: { id: assignmentId },
+      include: { user: true },
+    });
+    if (linked?.user && linked.launchTime) {
+      const firstAssignment = await prisma.rallyAssignment.findFirst({
+        where: { rallyEventId: id, launchTime: { not: null } },
+        orderBy: { launchTime: "asc" },
+      });
+      await createNotificationEventsForAssignment(
+        linked,
+        linked.user,
+        firstAssignment?.id === assignmentId
+      );
+    }
+  }
 
   const updated = await prisma.rallyEvent.findUnique({
     where: { id },

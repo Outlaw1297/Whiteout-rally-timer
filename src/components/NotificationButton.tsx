@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 
-export function NotificationButton() {
+export function NotificationButton({ onStatusChange }: { onStatusChange?: () => void }) {
   const {
     status,
     loading,
@@ -14,7 +14,35 @@ export function NotificationButton() {
     isSubscribed,
   } = usePushNotifications();
 
+  const [error, setError] = useState<string | null>(null);
   const [testSent, setTestSent] = useState(false);
+
+  const handleEnable = async () => {
+    setError(null);
+    const ok = await enableNotifications();
+    if (!ok) {
+      setError("Could not enable notifications. Check browser permission and server VAPID keys.");
+    } else {
+      onStatusChange?.();
+    }
+  };
+
+  const handleDisable = async () => {
+    setError(null);
+    await disableNotifications();
+    onStatusChange?.();
+  };
+
+  const handleTest = async () => {
+    setError(null);
+    const ok = await sendTestNotification();
+    if (ok) {
+      setTestSent(true);
+      setTimeout(() => setTestSent(false), 3000);
+    } else {
+      setError("Test notification failed. Confirm VAPID keys are set on the server.");
+    }
+  };
 
   if (status === "unsupported") {
     return (
@@ -46,35 +74,29 @@ export function NotificationButton() {
       {!isSubscribed ? (
         <>
           <button
-            onClick={enableNotifications}
+            onClick={handleEnable}
             disabled={loading}
             className="w-full py-4 px-6 bg-rally-accent hover:bg-blue-600 disabled:opacity-50 text-white font-bold text-lg rounded-lg transition-colors"
           >
             {loading ? "ENABLING..." : "ENABLE RALLY NOTIFICATIONS"}
           </button>
           <p className="text-rally-muted text-xs text-center px-2">
-            Enable notifications so you can be alerted when it is time to throw your
-            rally, even when Whiteout Survival is open.
+            Required after installing the app. Allows rally alerts even when the app is in the
+            background.
           </p>
         </>
       ) : (
         <>
           <p className="text-rally-success text-sm font-bold">✓ NOTIFICATIONS ENABLED</p>
           <button
-            onClick={async () => {
-              const ok = await sendTestNotification();
-              if (ok) {
-                setTestSent(true);
-                setTimeout(() => setTestSent(false), 3000);
-              }
-            }}
+            onClick={handleTest}
             disabled={testLoading}
             className="w-full py-3 px-6 bg-rally-surface border border-rally-border hover:border-rally-accent text-rally-text font-bold text-sm rounded-lg transition-colors"
           >
             {testLoading ? "SENDING..." : testSent ? "✓ TEST SENT" : "SEND TEST NOTIFICATION"}
           </button>
           <button
-            onClick={disableNotifications}
+            onClick={handleDisable}
             disabled={loading}
             className="w-full py-2 px-6 text-rally-muted hover:text-rally-danger text-xs transition-colors"
           >
@@ -82,6 +104,8 @@ export function NotificationButton() {
           </button>
         </>
       )}
+
+      {error && <p className="text-rally-danger text-xs text-center">{error}</p>}
     </div>
   );
 }

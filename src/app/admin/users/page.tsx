@@ -187,6 +187,12 @@ export default function AdminUsersPage() {
           </li>
           <li>Caller opens the installed app and logs in at /login</li>
           <li>Caller taps Enable Rally Notifications</li>
+          <li>
+            Android callers must set Chrome battery to Unrestricted — send{" "}
+            <a href="/fix-notifications" className="text-rally-accent font-bold">
+              /fix-notifications
+            </a>
+          </li>
           <li>In your rally template, link that caller slot to their account</li>
         </ol>
       </section>

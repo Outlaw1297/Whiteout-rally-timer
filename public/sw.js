@@ -66,6 +66,13 @@ self.addEventListener("push", (event) => {
     url,
   };
 
+  // Keep critical rally alerts on-screen until tapped (helps Android Doze / OEM kill).
+  const isCritical =
+    !preferSilent &&
+    (notificationType === "LAUNCH" ||
+      notificationType === "RALLY_STARTED" ||
+      String(notificationType).startsWith("WARNING"));
+
   const notificationOptions = {
     body: preferSilent && isLivePing ? " " : body,
     icon: "/icons/icon-192.png",
@@ -74,13 +81,19 @@ self.addEventListener("push", (event) => {
       ? `calibration-${isLivePing ? "live" : "setup"}-${calibrationIndex}-${receivedAtMs}`
       : `rally-${rallyId}-${notificationType}-${assignmentId}-${scheduledAt}`,
     renotify: !preferSilent,
-    requireInteraction: !preferSilent && notificationType === "LAUNCH",
+    requireInteraction: isCritical,
     silent: preferSilent,
     vibrate: preferSilent
       ? []
       : notificationType === "LAUNCH"
-        ? [300, 100, 300, 100, 300]
-        : [200, 100, 200],
+        ? [400, 120, 400, 120, 400, 120, 400]
+        : [220, 100, 220, 100, 220],
+    actions: preferSilent
+      ? []
+      : [
+          { action: "open", title: "Open rally" },
+          { action: "dismiss", title: "Dismiss" },
+        ],
     data: {
       rallyId,
       assignmentId,
@@ -96,17 +109,14 @@ self.addEventListener("push", (event) => {
 
       // Live silent pings: when the app is open, skip the OS banner entirely.
       // Setup calibration still shows a silent notification so iOS delivers it.
-      const shouldShow =
-        !(isLivePing && preferSilent && hasOpenClient) &&
-        !(isLivePing && preferSilent === false);
+      const skipBanner = isLivePing && preferSilent && hasOpenClient;
 
-      const showPromise =
-        isLivePing && preferSilent && hasOpenClient
-          ? Promise.resolve()
-          : self.registration.showNotification(
-              preferSilent && isLivePing ? " " : title,
-              notificationOptions
-            );
+      const showPromise = skipBanner
+        ? Promise.resolve()
+        : self.registration.showNotification(
+            preferSilent && isLivePing ? " " : title,
+            notificationOptions
+          );
 
       // Close ephemeral silent live notifications quickly if shown (no open clients).
       const closePromise =
@@ -135,32 +145,45 @@ self.addEventListener("push", (event) => {
           }).catch(() => {})
         : Promise.resolve();
 
-      void shouldShow;
       await Promise.all([showPromise, closePromise, feedbackPromise]);
     })().catch(() =>
-      Promise.all([
-        broadcastToClients(payload),
-        targetAt
-          ? fetch("/api/push/delivery-feedback", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              credentials: "include",
-              body: JSON.stringify({
-                targetAt,
-                receivedAtMs,
-                assignmentId,
-                notificationType,
-                rallyId,
-              }),
-            }).catch(() => {})
-          : Promise.resolve(),
-      ])
+      // Last resort: still try to surface a notification if the main path failed.
+      self.registration
+        .showNotification(title, {
+          body,
+          icon: "/icons/icon-192.png",
+          badge: "/icons/icon-192.png",
+          requireInteraction: true,
+          data: { url },
+        })
+        .catch(() => {})
+        .then(() =>
+          Promise.all([
+            broadcastToClients(payload),
+            targetAt
+              ? fetch("/api/push/delivery-feedback", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  credentials: "include",
+                  body: JSON.stringify({
+                    targetAt,
+                    receivedAtMs,
+                    assignmentId,
+                    notificationType,
+                    rallyId,
+                  }),
+                }).catch(() => {})
+              : Promise.resolve(),
+          ])
+        )
     )
   );
 });
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
+
+  if (event.action === "dismiss") return;
 
   const url = event.notification.data?.url || "/caller";
 
@@ -169,8 +192,8 @@ self.addEventListener("notificationclick", (event) => {
       .matchAll({ type: "window", includeUncontrolled: true })
       .then((clientList) => {
         for (const client of clientList) {
-          if (client.url.includes(url) && "focus" in client) {
-            return client.focus();
+          if ("focus" in client) {
+            if (client.url.includes(url)) return client.focus();
           }
         }
         if (self.clients.openWindow) {

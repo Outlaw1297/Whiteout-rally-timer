@@ -281,6 +281,11 @@ export async function sendPushNotification(
     return { success: false, error: lastInitError || "VAPID not configured" };
   }
 
+  // Short TTL + Android Doze = messages expire before Chrome wakes.
+  // Rally alerts need minutes of headroom; silent pings can stay brief.
+  const isEphemeral = !!payload.silent || !!payload.livePing || payload.notificationType === "CALIBRATION";
+  const ttlSeconds = isEphemeral ? 90 : 900;
+
   try {
     await webpush.sendNotification(
       {
@@ -291,7 +296,10 @@ export async function sendPushNotification(
         },
       },
       JSON.stringify(payload),
-      { TTL: 60, urgency: "high" }
+      {
+        TTL: ttlSeconds,
+        urgency: "high",
+      }
     );
     return { success: true };
   } catch (err: unknown) {

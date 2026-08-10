@@ -1,8 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { usePushNotificationsContext } from "@/components/PushNotificationsProvider";
 import { usePushCalibration } from "@/hooks/usePushCalibration";
+import {
+  AndroidNotificationFix,
+  clearAndroidPushFixAck,
+} from "@/components/AndroidNotificationFix";
+import { isAndroidDevice } from "@/lib/push-support";
 
 export function NotificationButton({ onStatusChange }: { onStatusChange?: () => void }) {
   const {
@@ -27,6 +33,11 @@ export function NotificationButton({ onStatusChange }: { onStatusChange?: () => 
 
   const [error, setError] = useState<string | null>(null);
   const [testSent, setTestSent] = useState(false);
+  const [showAndroidFix, setShowAndroidFix] = useState(false);
+
+  useEffect(() => {
+    if (isSubscribed && isAndroidDevice()) setShowAndroidFix(true);
+  }, [isSubscribed]);
 
   useEffect(() => {
     if (isSubscribed) {
@@ -45,6 +56,10 @@ export function NotificationButton({ onStatusChange }: { onStatusChange?: () => 
     if (!result.ok) {
       setError(result.error || "Could not enable notifications.");
       return;
+    }
+    if (isAndroidDevice()) {
+      clearAndroidPushFixAck();
+      setShowAndroidFix(true);
     }
     onStatusChange?.();
     await runCalibration();
@@ -291,6 +306,16 @@ export function NotificationButton({ onStatusChange }: { onStatusChange?: () => 
       )}
 
       {error && <p className="text-rally-danger text-xs text-center">{error}</p>}
+
+      {showAndroidFix && isSubscribed && <AndroidNotificationFix />}
+      {isAndroidDevice() && isSubscribed && (
+        <Link
+          href="/fix-notifications"
+          className="text-rally-muted text-xs hover:text-rally-accent text-center"
+        >
+          Alerts only when app is open? Fix Android settings →
+        </Link>
+      )}
     </div>
   );
 }

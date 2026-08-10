@@ -5,6 +5,7 @@ import { ForegroundNotificationListener } from "@/components/ForegroundNotificat
 import { SilentLivePing } from "@/components/SilentLivePing";
 import { GlobalSyncedClock } from "@/components/GlobalSyncedClock";
 import { PwaInstallRequired } from "@/components/PwaInstallRequired";
+import { BackgroundPushNotice } from "@/components/BackgroundPushNotice";
 
 export const metadata: Metadata = {
   title: "Whiteout Rally Timer",
@@ -42,6 +43,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <SilentLivePing />
         <GlobalSyncedClock />
         <PwaInstallRequired />
+        <BackgroundPushNotice />
         {children}
       </body>
     </html>

@@ -8,6 +8,15 @@ interface RouteParams {
   params: { id: string };
 }
 
+async function sessionIsDeveloper(sessionId: string, sessionRole: string): Promise<boolean> {
+  if (isDeveloperRole(sessionRole)) return true;
+  const dbUser = await prisma.user.findUnique({
+    where: { id: sessionId },
+    select: { role: true, active: true },
+  });
+  return !!dbUser?.active && isDeveloperRole(dbUser.role);
+}
+
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const session = await requireAdmin(request);
   if (session instanceof Response) return session;
@@ -32,8 +41,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   if (!user) return errorResponse("User not found", 404);
 
   if (body.role !== undefined && body.role !== user.role) {
-    if (body.role === "DEVELOPER" && !isDeveloperRole(session.role)) {
-      return errorResponse("Only developers can grant the developer role", 403);
+    if (body.role === "DEVELOPER") {
+      const ok = await sessionIsDeveloper(session.id, session.role);
+      if (!ok) {
+        return errorResponse("Only developers can grant the developer role", 403);
+      }
     }
     if (
       id === session.id &&

@@ -59,8 +59,17 @@ export async function POST(request: NextRequest) {
   const requestedRole: AppRole =
     body.role === "DEVELOPER" ? "DEVELOPER" : body.role === "ADMIN" ? "ADMIN" : "CALLER";
 
-  if (requestedRole === "DEVELOPER" && !isDeveloperRole(session.role)) {
-    return errorResponse("Only developers can create developer accounts", 403);
+  if (requestedRole === "DEVELOPER") {
+    const dbUser = await prisma.user.findUnique({
+      where: { id: session.id },
+      select: { role: true, active: true },
+    });
+    const ok =
+      isDeveloperRole(session.role) ||
+      (!!dbUser?.active && isDeveloperRole(dbUser.role));
+    if (!ok) {
+      return errorResponse("Only developers can create developer accounts", 403);
+    }
   }
 
   const username = body.username.toLowerCase().trim();

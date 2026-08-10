@@ -1,7 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { assessPushEnvironment, detectPlatform } from "@/lib/push-support";
+import {
+  assessPushEnvironment,
+  detectPlatform,
+  isDesktopEdge,
+  pushEnableHint,
+} from "@/lib/push-support";
 
 export type NotificationStatus =
   | "checking"
@@ -25,15 +30,33 @@ function urlBase64ToUint8Array(base64String: string) {
   return outputArray;
 }
 
-async function fetchPublicKey(): Promise<string | null> {
-  const keyRes = await fetch("/api/push/subscribe");
-  if (!keyRes.ok) return null;
-  const data = await keyRes.json();
-  return data.publicKey || null;
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function registerOnServer(subscription: PushSubscription) {
+function errorMessage(err: unknown): string {
+  if (err instanceof Error && err.message) return err.message;
+  if (typeof err === "string") return err;
+  return "Unknown push error";
+}
+
+async function fetchPublicKey(): Promise<string> {
+  const keyRes = await fetch("/api/push/subscribe");
+  if (!keyRes.ok) {
+    const data = await keyRes.json().catch(() => ({}));
+    throw new Error(data.error || `Could not load push keys (HTTP ${keyRes.status})`);
+  }
+  const data = await keyRes.json();
+  if (!data.publicKey) throw new Error("VAPID public key not available");
+  return data.publicKey as string;
+}
+
+async function registerOnServer(subscription: PushSubscription): Promise<void> {
   const subJson = subscription.toJSON();
+  if (!subJson.keys?.p256dh || !subJson.keys?.auth) {
+    throw new Error("Browser subscription is missing encryption keys");
+  }
+
   const res = await fetch("/api/push/subscribe", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -44,7 +67,14 @@ async function registerOnServer(subscription: PushSubscription) {
       platform: detectPlatform(),
     }),
   });
-  return res.ok;
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      throw new Error("Session expired — log in again, then enable notifications");
+    }
+    throw new Error(data.error || `Server rejected subscription (HTTP ${res.status})`);
+  }
 }
 
 async function verifyEndpoint(endpoint: string) {
@@ -57,11 +87,39 @@ async function verifyEndpoint(endpoint: string) {
   return res.json() as Promise<{ registered: boolean; active: boolean }>;
 }
 
+async function subscribeWithKey(
+  registration: ServiceWorkerRegistration,
+  publicKey: string
+): Promise<PushSubscription> {
+  try {
+    return await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(publicKey),
+    });
+  } catch (err) {
+    const message = errorMessage(err);
+    // Edge/Chromium often throw AbortError when an old subscription is stuck.
+    if (/abort|invalidstate|push service|registration failed/i.test(message)) {
+      const existing = await registration.pushManager.getSubscription();
+      if (existing) {
+        await existing.unsubscribe().catch(() => {});
+        await sleep(250);
+      }
+      return registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+      });
+    }
+    throw err;
+  }
+}
+
 export function usePushNotifications() {
   const [status, setStatus] = useState<NotificationStatus>("checking");
   const [loading, setLoading] = useState(false);
   const [testLoading, setTestLoading] = useState(false);
   const [thisDeviceRegistered, setThisDeviceRegistered] = useState(false);
+  const [lastError, setLastError] = useState<string | null>(null);
 
   const registerServiceWorker = async () => {
     if (!("serviceWorker" in navigator)) return null;
@@ -89,58 +147,26 @@ export function usePushNotifications() {
       return "unsupported";
     }
 
-    let localSub = await registration.pushManager.getSubscription();
-
-    // Permission granted but browser lost the subscription after SW/deploy — recreate it.
-    if (!localSub && permission === "granted") {
-      const publicKey = await fetchPublicKey();
-      if (publicKey) {
-        try {
-          localSub = await registration.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array(publicKey),
-          });
-        } catch (err) {
-          console.warn("Auto re-subscribe failed:", err);
-        }
-      }
-    }
-
+    const localSub = await registration.pushManager.getSubscription();
     if (!localSub) {
       setThisDeviceRegistered(false);
       return permission === "granted" ? "granted" : "default";
     }
 
-    const verified = await verifyEndpoint(localSub.endpoint);
-    if (verified.registered && verified.active) {
-      setThisDeviceRegistered(true);
-      return "subscribed";
-    }
-
-    // Local sub exists but server lost it (redeploy / VAPID rotation) — re-register.
-    const ok = await registerOnServer(localSub);
-    if (ok) {
-      setThisDeviceRegistered(true);
-      return "subscribed";
-    }
-
-    // Keys may be mismatched — drop and recreate against current VAPID.
     try {
-      await localSub.unsubscribe();
-      const publicKey = await fetchPublicKey();
-      if (!publicKey) {
-        setThisDeviceRegistered(false);
-        return "stale";
+      const verified = await verifyEndpoint(localSub.endpoint);
+      if (verified.registered && verified.active) {
+        setThisDeviceRegistered(true);
+        return "subscribed";
       }
-      const fresh = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey),
-      });
-      const registered = await registerOnServer(fresh);
-      setThisDeviceRegistered(registered);
-      return registered ? "subscribed" : "stale";
-    } catch (err) {
-      console.warn("Subscription repair failed:", err);
+
+      // Local sub exists but server lost it — re-register without forcing a new browser sub.
+      await registerOnServer(localSub);
+      setThisDeviceRegistered(true);
+      setLastError(null);
+      return "subscribed";
+    } catch {
+      // Don't auto-unsubscribe during status checks — leave that to explicit Enable.
       setThisDeviceRegistered(false);
       return "stale";
     }
@@ -160,57 +186,71 @@ export function usePushNotifications() {
     checkStatus();
   }, [checkStatus]);
 
-  const enableNotifications = async () => {
+  const enableNotifications = async (): Promise<{ ok: boolean; error?: string }> => {
     setLoading(true);
+    setLastError(null);
     try {
       const environment = await assessPushEnvironment();
       if (environment !== "ready") {
         setStatus(environment);
         setThisDeviceRegistered(false);
-        return false;
+        const msg =
+          environment === "unsupported"
+            ? "Push notifications are not supported in this browser"
+            : "Complete the browser setup steps shown above";
+        setLastError(msg);
+        return { ok: false, error: msg };
       }
 
       const registration = await registerServiceWorker();
-      if (!registration) throw new Error("Service worker not supported");
+      if (!registration) {
+        const msg = "Service worker not supported in this browser";
+        setStatus("unsupported");
+        setLastError(msg);
+        return { ok: false, error: msg };
+      }
 
       const permission = await Notification.requestPermission();
       if (permission !== "granted") {
         setStatus("denied");
         setThisDeviceRegistered(false);
-        return false;
+        const msg = isDesktopEdge()
+          ? "Edge blocked notifications. Click the lock icon → Notifications → Allow, and enable Windows notifications for Edge."
+          : "Notification permission was blocked. Allow notifications for this site in browser settings.";
+        setLastError(msg);
+        return { ok: false, error: msg };
       }
 
       const publicKey = await fetchPublicKey();
-      if (!publicKey) {
-        throw new Error("VAPID public key not available");
-      }
 
       const existing = await registration.pushManager.getSubscription();
       if (existing) {
-        await fetch("/api/push/unsubscribe", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ endpoint: existing.endpoint }),
-        }).catch(() => {});
-        await existing.unsubscribe();
+        // Prefer reusing the existing subscription if the server will accept it.
+        try {
+          await registerOnServer(existing);
+          setThisDeviceRegistered(true);
+          setStatus("subscribed");
+          return { ok: true };
+        } catch {
+          await existing.unsubscribe().catch(() => {});
+          await sleep(300);
+        }
       }
 
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey),
-      });
-
-      const ok = await registerOnServer(subscription);
-      if (!ok) throw new Error("Failed to subscribe");
+      const subscription = await subscribeWithKey(registration, publicKey);
+      await registerOnServer(subscription);
 
       setThisDeviceRegistered(true);
       setStatus("subscribed");
-      return true;
+      return { ok: true };
     } catch (err) {
       console.error("Push subscription failed:", err);
+      const raw = errorMessage(err);
+      const msg = pushEnableHint(raw);
       setThisDeviceRegistered(false);
       setStatus("stale");
-      return false;
+      setLastError(msg);
+      return { ok: false, error: msg };
     } finally {
       setLoading(false);
     }
@@ -231,6 +271,7 @@ export function usePushNotifications() {
       }
       setThisDeviceRegistered(false);
       setStatus("default");
+      setLastError(null);
     } finally {
       setLoading(false);
     }
@@ -254,6 +295,7 @@ export function usePushNotifications() {
     sendTestNotification,
     checkStatus,
     thisDeviceRegistered,
+    lastError,
     isEnabled: status === "subscribed",
     isSubscribed: status === "subscribed",
   };

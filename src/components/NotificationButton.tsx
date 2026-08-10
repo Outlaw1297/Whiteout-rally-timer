@@ -14,6 +14,7 @@ export function NotificationButton({ onStatusChange }: { onStatusChange?: () => 
     sendTestNotification,
     isSubscribed,
     checkStatus,
+    lastError,
   } = usePushNotificationsContext();
 
   const {
@@ -33,12 +34,16 @@ export function NotificationButton({ onStatusChange }: { onStatusChange?: () => 
     }
   }, [isSubscribed, loadCalibrationStatus]);
 
+  useEffect(() => {
+    if (lastError) setError(lastError);
+  }, [lastError]);
+
   const handleEnable = async () => {
     setError(null);
     dismissCalibration();
-    const ok = await enableNotifications();
-    if (!ok) {
-      setError("Could not enable notifications. Check browser permission and server VAPID keys.");
+    const result = await enableNotifications();
+    if (!result.ok) {
+      setError(result.error || "Could not enable notifications.");
       return;
     }
     onStatusChange?.();
@@ -124,8 +129,12 @@ export function NotificationButton({ onStatusChange }: { onStatusChange?: () => 
 
   if (status === "denied") {
     return (
-      <div className="text-rally-danger text-sm text-center">
-        Notifications blocked. Enable in device Settings → Notifications.
+      <div className="text-rally-danger text-sm text-center space-y-2">
+        <p>Notifications blocked for this site.</p>
+        <p className="text-rally-muted text-xs">
+          In Edge: lock icon in the address bar → Notifications → Allow. Also check Windows
+          Settings → System → Notifications → Microsoft Edge.
+        </p>
       </div>
     );
   }
@@ -135,6 +144,11 @@ export function NotificationButton({ onStatusChange }: { onStatusChange?: () => 
       <div className="flex flex-col items-center gap-3 w-full">
         <p className="text-rally-warning text-sm text-center font-bold">
           Registration expired — re-enable notifications
+        </p>
+        <p className="text-rally-muted text-xs text-center">
+          Edge and Chrome on desktop both support rally alerts. If Enable fails, allow
+          notifications for this site (lock icon in the address bar) and confirm Windows
+          notifications are on for the browser.
         </p>
         <button
           onClick={handleEnable}

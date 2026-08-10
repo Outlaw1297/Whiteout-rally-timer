@@ -96,5 +96,30 @@ export function detectPlatform(): string {
   const ua = navigator.userAgent;
   if (isIOSDevice()) return "iOS";
   if (/Android/i.test(ua)) return "Android";
+  if (/Edg\//i.test(ua)) return "Edge";
+  if (/Chrome\//i.test(ua) && !/Edg\//i.test(ua)) return "Chrome";
+  if (/Firefox\//i.test(ua)) return "Firefox";
   return "Desktop";
+}
+
+export function isDesktopEdge(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /Edg\//i.test(navigator.userAgent) && !isIOSDevice();
+}
+
+/** Human-readable guidance when subscribe fails on a given browser. */
+export function pushEnableHint(errMessage: string): string {
+  const lower = errMessage.toLowerCase();
+  if (isDesktopEdge()) {
+    if (lower.includes("denied") || lower.includes("permission")) {
+      return "Edge blocked permission. Open the lock icon in the address bar → Notifications → Allow, and also check Windows Settings → System → Notifications.";
+    }
+    if (lower.includes("push service") || lower.includes("registration failed") || lower.includes("abort")) {
+      return "Edge push service failed. Confirm Windows notifications are on for Microsoft Edge, then reload and try again.";
+    }
+  }
+  if (lower.includes("vapid") || lower.includes("public key")) {
+    return "Server push keys are missing or invalid — redeploy or check /api/push/health.";
+  }
+  return errMessage;
 }

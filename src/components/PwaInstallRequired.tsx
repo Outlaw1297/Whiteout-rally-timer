@@ -1,23 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import {
   getMobileInstallKind,
   isStandalonePWA,
   type MobileInstallKind,
 } from "@/lib/push-support";
+import {
+  removePwaInstallBootGate,
+  takeDeferredInstallPrompt,
+  type BeforeInstallPromptEvent,
+} from "@/lib/pwa-install-boot";
 
 const SESSION_DISMISS_KEY = "pwa-install-remind-later";
 
-type BeforeInstallPromptEvent = Event & {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
-};
-
 function useInstallKind(): MobileInstallKind {
-  const [kind, setKind] = useState<MobileInstallKind>("none");
+  const [kind, setKind] = useState<MobileInstallKind>(() =>
+    typeof window === "undefined" ? "none" : getMobileInstallKind()
+  );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const refresh = () => setKind(getMobileInstallKind());
     refresh();
     const mq = window.matchMedia("(display-mode: standalone)");
@@ -38,10 +40,17 @@ function useInstallKind(): MobileInstallKind {
  */
 export function PwaInstallRequired() {
   const kind = useInstallKind();
-  const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
+  const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(() =>
+    takeDeferredInstallPrompt()
+  );
   const [copied, setCopied] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [remindLater, setRemindLater] = useState(false);
+
+  useLayoutEffect(() => {
+    // React owns the gate now (modal, remind chip, or nothing for desktop).
+    removePwaInstallBootGate();
+  }, [kind]);
 
   useEffect(() => {
     try {
@@ -54,9 +63,12 @@ export function PwaInstallRequired() {
   useEffect(() => {
     const onBip = (e: Event) => {
       e.preventDefault();
-      setDeferred(e as BeforeInstallPromptEvent);
+      const ev = e as BeforeInstallPromptEvent;
+      window.__PWA_DEFERRED_INSTALL = ev;
+      setDeferred(ev);
     };
     const onInstalled = () => {
+      window.__PWA_DEFERRED_INSTALL = null;
       setDeferred(null);
       setRemindLater(false);
       try {
@@ -65,6 +77,8 @@ export function PwaInstallRequired() {
         /* ignore */
       }
     };
+    const existing = takeDeferredInstallPrompt();
+    if (existing) setDeferred(existing);
     window.addEventListener("beforeinstallprompt", onBip);
     window.addEventListener("appinstalled", onInstalled);
     return () => {
@@ -74,7 +88,7 @@ export function PwaInstallRequired() {
   }, []);
 
   const copyLink = useCallback(async () => {
-    const url = window.location.origin;
+    const url = window.location.href;
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);
@@ -85,7 +99,7 @@ export function PwaInstallRequired() {
   }, []);
 
   const shareLink = useCallback(async () => {
-    const url = window.location.origin;
+    const url = window.location.href;
     if (navigator.share) {
       try {
         await navigator.share({
@@ -107,6 +121,7 @@ export function PwaInstallRequired() {
     try {
       await deferred.prompt();
       await deferred.userChoice;
+      window.__PWA_DEFERRED_INSTALL = null;
       setDeferred(null);
     } finally {
       setInstalling(false);

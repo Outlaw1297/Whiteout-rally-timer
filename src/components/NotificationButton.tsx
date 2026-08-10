@@ -6,6 +6,7 @@ import { usePushNotificationsContext } from "@/components/PushNotificationsProvi
 import { usePushCalibration } from "@/hooks/usePushCalibration";
 import {
   AndroidNotificationFix,
+  AndroidHeadsUpTip,
   clearAndroidPushFixAck,
 } from "@/components/AndroidNotificationFix";
 import { isAndroidDevice } from "@/lib/push-support";
@@ -34,6 +35,7 @@ export function NotificationButton({ onStatusChange }: { onStatusChange?: () => 
   const [error, setError] = useState<string | null>(null);
   const [testSent, setTestSent] = useState(false);
   const [showAndroidFix, setShowAndroidFix] = useState(false);
+  const [showHeadsUpTip, setShowHeadsUpTip] = useState(false);
 
   useEffect(() => {
     if (isSubscribed && isAndroidDevice()) setShowAndroidFix(true);
@@ -78,6 +80,7 @@ export function NotificationButton({ onStatusChange }: { onStatusChange?: () => 
     const res = await sendTestNotification();
     if (res.ok) {
       setTestSent(true);
+      if (isAndroidDevice()) setShowHeadsUpTip(true);
       setTimeout(() => setTestSent(false), 3000);
     } else {
       const data = await res.json().catch(() => ({}));
@@ -288,6 +291,7 @@ export function NotificationButton({ onStatusChange }: { onStatusChange?: () => 
           >
             {testLoading ? "SENDING..." : testSent ? "✓ TEST SENT" : "SEND TEST NOTIFICATION"}
           </button>
+          <AndroidHeadsUpTip visible={showHeadsUpTip} />
           <button
             onClick={handleRecalibrate}
             disabled={isCalibrating}

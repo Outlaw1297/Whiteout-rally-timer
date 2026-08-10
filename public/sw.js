@@ -66,12 +66,8 @@ self.addEventListener("push", (event) => {
     url,
   };
 
-  // Keep critical rally alerts on-screen until tapped (helps Android Doze / OEM kill).
-  const isCritical =
-    !preferSilent &&
-    (notificationType === "LAUNCH" ||
-      notificationType === "RALLY_STARTED" ||
-      String(notificationType).startsWith("WARNING"));
+  // Keep rally alerts visible until tapped; helps Android treat them as interruptive.
+  const isCritical = !preferSilent;
 
   const notificationOptions = {
     body: preferSilent && isLivePing ? " " : body,
@@ -83,11 +79,12 @@ self.addEventListener("push", (event) => {
     renotify: !preferSilent,
     requireInteraction: isCritical,
     silent: preferSilent,
+    // Stronger vibrate pattern — some OEMs gate heads-up on vibration/sound.
     vibrate: preferSilent
       ? []
       : notificationType === "LAUNCH"
-        ? [400, 120, 400, 120, 400, 120, 400]
-        : [220, 100, 220, 100, 220],
+        ? [500, 150, 500, 150, 500, 150, 500]
+        : [300, 120, 300, 120, 300],
     actions: preferSilent
       ? []
       : [

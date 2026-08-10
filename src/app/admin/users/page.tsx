@@ -179,8 +179,11 @@ export default function AdminUsersPage() {
         <ol className="list-decimal list-inside space-y-1 text-rally-muted text-xs">
           <li>Create account below (set a password or leave blank for a random one)</li>
           <li>
-            Caller installs the app on their phone (iPhone: Safari → Add to Home Screen ·
-            Android: Chrome → Install app)
+            Send them the install guide:{" "}
+            <a href="/install" className="text-rally-accent font-bold">
+              /install
+            </a>{" "}
+            (iPhone must use Safari → Share → Add to Home Screen)
           </li>
           <li>Caller opens the installed app and logs in at /login</li>
           <li>Caller taps Enable Rally Notifications</li>

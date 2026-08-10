@@ -19,7 +19,9 @@ import { formatMarchDuration, parseMarchDuration } from "@/lib/timing";
 import {
   getMarchDuplicateGroups,
   groupAssignmentsByLaunchSlot,
+  type MarchAssignment,
 } from "@/lib/march-groups";
+import { HitOrderPreview } from "@/components/HitOrderPreview";
 import { isAdminRole } from "@/lib/roles";
 
 interface NotificationMonitor {
@@ -399,6 +401,29 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
     : [];
   const launchSlots = groupAssignmentsByLaunchSlot(event.assignments);
 
+  // Live preview uses unsaved draft march/offset/name so order updates as you type.
+  const previewAssignments: MarchAssignment[] = event.assignments.map((a) => {
+    const draft = editDrafts[a.id];
+    const marchSeconds = draft?.march
+      ? parseMarchDuration(draft.march) ?? a.marchDurationSeconds
+      : a.marchDurationSeconds;
+    const offset = draft?.offset != null ? parseInt(draft.offset, 10) : a.arrivalOffsetSeconds ?? 0;
+    return {
+      id: a.id,
+      displayName: draft?.name?.trim() || a.displayName,
+      marchDurationSeconds: marchSeconds,
+      marchFormatted:
+        draft?.march && parseMarchDuration(draft.march) != null
+          ? draft.march
+          : a.marchFormatted,
+      arrivalOffsetSeconds: Number.isFinite(offset) ? offset : a.arrivalOffsetSeconds ?? 0,
+    };
+  });
+  const previewLead = parseInt(firstCallerLead, 10);
+  const previewLeadSeconds = Number.isFinite(previewLead)
+    ? Math.max(0, previewLead)
+    : event.firstCallerLeadSeconds ?? 3;
+
   return (
     <main className="min-h-screen px-4 py-6 max-w-lg mx-auto">
       <TemplateSwitcher currentEventId={event.id} onChanged={loadEvent} />
@@ -523,6 +548,13 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
             />
           ))}
         </section>
+      )}
+
+      {isTemplate && event.assignments.length > 0 && (
+        <HitOrderPreview
+          assignments={previewAssignments}
+          firstCallerLeadSeconds={previewLeadSeconds}
+        />
       )}
 
       {isTemplate && (

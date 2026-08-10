@@ -21,6 +21,7 @@ import {
 import { getEffectivePushLeadMs, nextDeliveryLeadMs } from "../src/lib/delivery-lead";
 import { allCallersHaveCalled, callerHasCalled } from "../src/lib/caller-launch";
 import { shouldDeferRallyCompletion } from "../src/lib/complete-rally";
+import { getHitOrderPreview, getThrowOrderPreview } from "../src/lib/march-groups";
 
 function assertEqual(actual: Date, expectedHour: number, expectedMin: number, expectedSec: number, label: string) {
   const h = actual.getHours();
@@ -277,6 +278,25 @@ console.log("PASS adaptive delivery lead");
     process.exit(1);
   }
   console.log("PASS negative arrival offsets");
+}
+
+{
+  const callers = [
+    { id: "1", displayName: "Call1", marchDurationSeconds: 480, marchFormatted: "8:00", arrivalOffsetSeconds: 0 },
+    { id: "2", displayName: "Call2", marchDurationSeconds: 390, marchFormatted: "6:30", arrivalOffsetSeconds: 4 },
+    { id: "3", displayName: "Call3", marchDurationSeconds: 255, marchFormatted: "4:15", arrivalOffsetSeconds: 2 },
+  ];
+  const hits = getHitOrderPreview(callers);
+  if (hits.map((h) => h.displayNames.join("+")).join("|") !== "Call1|Call3|Call2") {
+    console.error("FAIL hit order preview", hits);
+    process.exit(1);
+  }
+  const throws = getThrowOrderPreview(callers, 3);
+  if (throws[0].displayNames[0] !== "Call1" || throws[0].throwAfterGoSeconds !== 3) {
+    console.error("FAIL throw order preview first wave", throws[0]);
+    process.exit(1);
+  }
+  console.log("PASS hit/throw order preview");
 }
 
 {

@@ -9,7 +9,7 @@ const HEADS_UP_ACK_KEY = "android-heads-up-configured";
 
 type AndroidOem = "samsung" | "xiaomi" | "huawei" | "oppo" | "pixel" | "other";
 
-function detectOem(): AndroidOem {
+export function detectOem(): AndroidOem {
   if (typeof navigator === "undefined") return "other";
   const ua = navigator.userAgent;
   if (/Samsung|SM-/i.test(ua)) return "samsung";
@@ -24,7 +24,74 @@ function openAndroidIntent(intentUrl: string) {
   window.location.href = intentUrl;
 }
 
-/** OEM-specific wording for "pop on screen" / heads-up. */
+/** Pixel-first copy — exact stock Android labels. */
+export function PixelHeadsUpGuide({ showVerify = true }: { showVerify?: boolean }) {
+  return (
+    <div className="space-y-3 text-sm">
+      <p className="text-rally-accent font-bold text-xs tracking-wide">GOOGLE PIXEL</p>
+      <h3 className="font-bold text-rally-text text-base">
+        Turn on Alerting + Pop on screen
+      </h3>
+      <p className="text-rally-muted text-xs leading-relaxed">
+        On Pixel, tray-only alerts mean the category is <span className="font-bold">Silent</span> or
+        Alerting without <span className="font-bold">Pop on screen</span>. Rally Timer cannot change
+        this for you.
+      </p>
+
+      <div className="p-3 rounded-lg bg-rally-bg border border-rally-border space-y-2">
+        <p className="font-bold text-rally-text text-xs">Fastest way (from a test alert)</p>
+        <ol className="list-decimal list-inside space-y-2 text-rally-text text-xs leading-relaxed">
+          <li>
+            In Rally Timer, tap <span className="font-bold">Send test notification</span>
+          </li>
+          <li>Swipe down from the top to open the shade</li>
+          <li>
+            On the Rally alert, swipe it slightly <span className="font-bold">left or right</span>{" "}
+            and tap the <span className="font-bold">gear</span> (or long-press → Settings)
+          </li>
+          <li>
+            Choose <span className="font-bold text-rally-accent">Alerting</span> — not Silent
+          </li>
+          <li>
+            Tap that category again and turn{" "}
+            <span className="font-bold text-rally-accent">Pop on screen</span> ON
+            (also leave Sound / Vibrate on)
+          </li>
+          <li>Send another test while Whiteout is open — you should see a banner</li>
+        </ol>
+      </div>
+
+      <div className="p-3 rounded-lg bg-rally-bg border border-rally-border space-y-2">
+        <p className="font-bold text-rally-text text-xs">From Pixel Settings</p>
+        <ol className="list-decimal list-inside space-y-2 text-rally-muted text-xs leading-relaxed">
+          <li>
+            Settings → Apps →{" "}
+            <span className="font-bold text-rally-text">
+              {isStandalonePWA() ? "Rally Timer" : "Chrome"}
+            </span>
+            {isStandalonePWA() ? " (also check Chrome if listed)" : " (or Rally Timer if installed)"}
+          </li>
+          <li>Notifications → allow notifications</li>
+          <li>Tap the category (often General / Sites / the site name)</li>
+          <li>
+            Set to <span className="font-bold text-rally-text">Alerting</span>
+          </li>
+          <li>
+            Turn on <span className="font-bold text-rally-text">Pop on screen</span>
+          </li>
+        </ol>
+      </div>
+
+      {showVerify && (
+        <p className="text-rally-muted text-[11px] leading-relaxed">
+          Still tray-only? Check Do Not Disturb is off, and that Bedtime mode / Priority only isn’t
+          silencing Chrome.
+        </p>
+      )}
+    </div>
+  );
+}
+
 const HEADS_UP_STEPS: Record<AndroidOem, { title: string; steps: string[] }> = {
   samsung: {
     title: "Samsung — turn on pop-up",
@@ -41,7 +108,6 @@ const HEADS_UP_STEPS: Record<AndroidOem, { title: string; steps: string[] }> = {
       "Long-press the notification in the shade → gear",
       "Enable Floating notification / Lock screen / Sound",
       "Settings → Notifications → Rally Timer or Chrome → allow Floating notifications",
-      "Settings → Other permissions → Display pop-up windows → Allow",
     ],
   },
   huawei: {
@@ -49,7 +115,6 @@ const HEADS_UP_STEPS: Record<AndroidOem, { title: string; steps: string[] }> = {
     steps: [
       "Long-press the notification → Notification settings",
       "Enable Banners (heads-up) and Sound",
-      "Settings → Notifications → Rally Timer / Chrome → Banners ON",
     ],
   },
   oppo: {
@@ -57,25 +122,23 @@ const HEADS_UP_STEPS: Record<AndroidOem, { title: string; steps: string[] }> = {
     steps: [
       "Long-press the notification → Manage / Settings",
       "Set importance to High / Enable Topscreen floating",
-      "Settings → Notifications → Rally Timer / Chrome → Allow floating / Lock screen",
     ],
   },
   pixel: {
     title: "Pixel — Alerting + Pop on screen",
     steps: [
-      "Pull down shade → long-press the Rally alert → Settings",
-      "Change from Silent / Default to Alerting",
-      "Open that category → turn on Pop on screen (and Sound / Vibrate)",
-      "Or: Settings → Apps → Rally Timer → Notifications → [category] → Alerting",
+      "Send a test → swipe down → swipe the alert left/right → gear",
+      "Tap Alerting (not Silent)",
+      "Open the category → turn Pop on screen ON",
+      "Settings → Apps → Rally Timer or Chrome → Notifications → same",
     ],
   },
   other: {
     title: "Android — Alerting / Pop on screen",
     steps: [
-      "Pull down the top shade and long-press the Rally notification",
-      "Tap the gear / Settings for that alert",
-      "Set importance to Alerting / High / Urgent (not Silent or Low)",
-      "Turn on Pop on screen / Banner / Heads-up if shown",
+      "Pull down the shade → long-press the Rally notification → Settings",
+      "Set importance to Alerting / High (not Silent)",
+      "Turn on Pop on screen / Banner if shown",
     ],
   },
 };
@@ -86,39 +149,33 @@ const BATTERY_STEPS: Record<AndroidOem, { title: string; steps: string[] }> = {
     steps: [
       "Settings → Apps → Chrome → Battery → Unrestricted",
       "Same for Rally Timer if listed",
-      "Remove Chrome from Battery → Background usage limits → Sleeping apps",
     ],
   },
   xiaomi: {
     title: "Xiaomi battery",
-    steps: [
-      "Settings → Apps → Chrome → Battery saver → No restrictions",
-      "Lock Chrome in Recents",
-    ],
+    steps: ["Settings → Apps → Chrome → Battery saver → No restrictions"],
   },
   huawei: {
     title: "Huawei battery",
-    steps: [
-      "Chrome → Battery → App launch → Manage manually → allow all three toggles",
-    ],
+    steps: ["Chrome → Battery → App launch → Manage manually → allow all toggles"],
   },
   oppo: {
     title: "OPPO / OnePlus battery",
-    steps: [
-      "Battery → App battery management → Chrome → Don’t optimize",
-    ],
+    steps: ["Battery → App battery management → Chrome → Don’t optimize"],
   },
   pixel: {
-    title: "Pixel battery",
+    title: "Pixel battery (for alerts with app closed)",
     steps: [
-      "Apps → Chrome → App battery usage → Unrestricted",
+      "Settings → Apps → Chrome → App battery usage → Unrestricted",
+      "If Rally Timer is installed: Apps → Rally Timer → App battery usage → Unrestricted",
+      "Turn off Battery Saver while coordinating rallies",
     ],
   },
   other: {
     title: "Battery",
     steps: [
-      "Apps → Chrome → Battery → Unrestricted / Allow background",
-      "Same for the Rally Timer app if it appears separately",
+      "Apps → Chrome → Battery → Unrestricted",
+      "Same for Rally Timer if it appears separately",
     ],
   },
 };
@@ -182,22 +239,47 @@ export function clearAndroidPushFixAck() {
   }
 }
 
-/** Tip shown right after a test push on Android. */
+/** Tip shown right after a test push on Android (Pixel-specific when detected). */
 export function AndroidHeadsUpTip({ visible }: { visible: boolean }) {
+  const [oem, setOem] = useState<AndroidOem>("other");
+  useEffect(() => {
+    setOem(detectOem());
+  }, []);
+
   if (!visible) return null;
+
+  if (oem === "pixel") {
+    return (
+      <div className="w-full p-3 rounded-lg border border-rally-accent/50 bg-rally-accent/10 text-sm space-y-2">
+        <p className="font-bold text-rally-accent">Pixel: only in the top bar?</p>
+        <ol className="list-decimal list-inside text-rally-text text-xs space-y-1.5 leading-relaxed">
+          <li>Swipe down → on this test alert, swipe left/right → tap the gear</li>
+          <li>
+            Tap <span className="font-bold">Alerting</span> (not Silent)
+          </li>
+          <li>
+            Open the category → turn <span className="font-bold">Pop on screen</span> ON
+          </li>
+          <li>Send another test — banner should appear over the game</li>
+        </ol>
+        <Link href="/fix-notifications#heads-up" className="block text-rally-accent text-xs font-bold">
+          Full Pixel steps →
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full p-3 rounded-lg border border-rally-accent/50 bg-rally-accent/10 text-sm space-y-2">
       <p className="font-bold text-rally-accent">Only in the top bar — not on screen?</p>
       <p className="text-rally-muted text-xs leading-relaxed">
-        Delivery works. Android still needs the channel set to{" "}
-        <span className="font-bold text-rally-text">Alerting / Pop on screen</span> (Samsung:
-        Sound and pop-up). Apps cannot flip this for you.
+        Set the notification category to{" "}
+        <span className="font-bold text-rally-text">Alerting / Pop on screen</span>.
       </p>
       <ol className="list-decimal list-inside text-rally-text text-xs space-y-1">
         <li>Pull down the notification shade</li>
-        <li>Long-press the Rally test alert</li>
-        <li>Tap Settings → set to Alerting / Pop on screen</li>
-        <li>Send another test — it should banner on the screen</li>
+        <li>Long-press the Rally test alert → Settings</li>
+        <li>Alerting + Pop on screen ON</li>
       </ol>
       <Link href="/fix-notifications#heads-up" className="block text-rally-accent text-xs font-bold">
         Full pop-on-screen guide →
@@ -206,9 +288,6 @@ export function AndroidHeadsUpTip({ visible }: { visible: boolean }) {
   );
 }
 
-/**
- * Checklist: heads-up first (current pain), then battery for background delivery.
- */
 export function AndroidNotificationFix({
   forceShow = false,
   compact = false,
@@ -222,6 +301,7 @@ export function AndroidNotificationFix({
   const oem = useMemo(() => detectOem(), []);
   const headsUp = HEADS_UP_STEPS[oem];
   const battery = BATTERY_STEPS[oem];
+  const isPixel = oem === "pixel";
 
   useEffect(() => {
     setIsAndroid(isAndroidDevice());
@@ -246,7 +326,9 @@ export function AndroidNotificationFix({
     return (
       <p className="text-center text-xs mt-2">
         <Link href="/fix-notifications" className="text-rally-muted hover:text-rally-accent">
-          Android: fix pop-on-screen / background alerts →
+          {isPixel
+            ? "Pixel: fix Alerting / Pop on screen →"
+            : "Android: fix pop-on-screen / background alerts →"}
         </Link>
       </p>
     );
@@ -263,30 +345,30 @@ export function AndroidNotificationFix({
     >
       {(!ackedHeadsUp || forceShow) && (
         <div>
-          <p className="text-rally-warning font-bold text-xs tracking-wide mb-1">
-            STEP 1 · POP ON SCREEN (HEADS-UP)
-          </p>
-          <h3 className="font-bold text-rally-text mb-1">
-            Alert in the top bar but not on the screen?
-          </h3>
-          <p className="text-rally-muted text-xs mb-3 leading-relaxed">
-            Android defaults many web alerts to “sound only.” You must set the Rally / Chrome
-            category to <span className="font-bold text-rally-text">Alerting</span> with{" "}
-            <span className="font-bold text-rally-text">Pop on screen</span>.
-            {isStandalonePWA() ? " Check the Rally Timer app notification settings." : ""}
-          </p>
-          <p className="text-rally-accent font-bold text-xs mb-1">{headsUp.title}</p>
-          <ol className="list-decimal list-inside space-y-1.5 text-rally-muted text-xs mb-3">
-            {headsUp.steps.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
+          {isPixel ? (
+            <PixelHeadsUpGuide />
+          ) : (
+            <>
+              <p className="text-rally-warning font-bold text-xs tracking-wide mb-1">
+                STEP 1 · POP ON SCREEN (HEADS-UP)
+              </p>
+              <h3 className="font-bold text-rally-text mb-1">
+                Alert in the top bar but not on the screen?
+              </h3>
+              <p className="text-rally-accent font-bold text-xs mb-1">{headsUp.title}</p>
+              <ol className="list-decimal list-inside space-y-1.5 text-rally-muted text-xs mb-3">
+                {headsUp.steps.map((step) => (
+                  <li key={step}>{step}</li>
+                ))}
+              </ol>
+            </>
+          )}
           <button
             type="button"
             onClick={openAppNotificationSettings}
-            className="w-full py-2.5 mb-2 bg-rally-accent text-white font-bold rounded-lg text-sm"
+            className="w-full py-2.5 mt-3 mb-2 bg-rally-accent text-white font-bold rounded-lg text-sm"
           >
-            Open notification settings
+            Open Chrome notification settings
           </button>
           {!ackedHeadsUp && (
             <button
@@ -306,10 +388,6 @@ export function AndroidNotificationFix({
             STEP 2 · BACKGROUND DELIVERY
           </p>
           <h3 className="font-bold text-rally-text mb-1">Alerts only after reopening the app?</h3>
-          <p className="text-rally-muted text-xs mb-3 leading-relaxed">
-            Set Chrome / Rally Timer battery to{" "}
-            <span className="font-bold text-rally-text">Unrestricted</span>.
-          </p>
           <p className="text-rally-accent font-bold text-xs mb-1">{battery.title}</p>
           <ol className="list-decimal list-inside space-y-1.5 text-rally-muted text-xs mb-3">
             {battery.steps.map((step) => (

@@ -9,6 +9,9 @@ export function ServiceWorkerRegistrar() {
     navigator.serviceWorker
       .register("/sw.js", { scope: "/" })
       .then((registration) => {
+        // Pick up SW fixes (Samsung heads-up tags, etc.) without waiting for navigate.
+        void registration.update();
+
         if (registration.waiting) {
           registration.waiting.postMessage({ type: "SKIP_WAITING" });
         }

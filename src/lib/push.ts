@@ -286,22 +286,29 @@ export async function sendPushNotification(
   // Rally alerts need minutes of headroom; silent pings can stay brief.
   const isEphemeral = !!payload.silent || !!payload.livePing || payload.notificationType === "CALIBRATION";
   const ttlSeconds = isEphemeral ? 90 : 900;
+  // Don't let a hung FCM/web-push call block the scheduler tick forever.
+  const SEND_TIMEOUT_MS = isEphemeral ? 5_000 : 8_000;
 
   try {
-    await webpush.sendNotification(
-      {
-        endpoint: subscription.endpoint,
-        keys: {
-          p256dh: subscription.p256dh,
-          auth: subscription.auth,
+    await Promise.race([
+      webpush.sendNotification(
+        {
+          endpoint: subscription.endpoint,
+          keys: {
+            p256dh: subscription.p256dh,
+            auth: subscription.auth,
+          },
         },
-      },
-      JSON.stringify(payload),
-      {
-        TTL: ttlSeconds,
-        urgency: "high",
-      }
-    );
+        JSON.stringify(payload),
+        {
+          TTL: ttlSeconds,
+          urgency: "high",
+        }
+      ),
+      new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("webpush_send_timeout")), SEND_TIMEOUT_MS);
+      }),
+    ]);
     return { success: true };
   } catch (err: unknown) {
     const error = err as { statusCode?: number; message?: string; body?: string };
@@ -310,6 +317,10 @@ export async function sendPushNotification(
       error: error.message,
       body: error.body,
     });
+
+    if (error.message === "webpush_send_timeout") {
+      return { success: false, error: "push send timed out" };
+    }
 
     if (error.statusCode === 401) {
       return {

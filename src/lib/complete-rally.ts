@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/prisma";
-import { skipRemainingEventNotifications } from "@/lib/notifications";
 import { serializeEvent } from "@/lib/rally-event";
 import { allCallersHaveCalled } from "@/lib/caller-launch";
 import { broadcastRallyUpdate } from "@/server/rally-hub";
@@ -7,7 +6,7 @@ import { logger } from "@/lib/logger";
 
 export { allCallersHaveCalled, callerHasCalled } from "@/lib/caller-launch";
 
-/** Do not complete while THROW is still waiting to send. */
+/** Prefer deferring complete while THROW is still PENDING (send while ACTIVE). */
 export function shouldDeferRallyCompletion(pendingLaunchCount: number): boolean {
   return pendingLaunchCount > 0;
 }
@@ -16,8 +15,9 @@ export function shouldDeferRallyCompletion(pendingLaunchCount: number): boolean 
  * Mark an ACTIVE rally COMPLETED once every caller has thrown.
  * Returns true if the rally was completed in this call.
  *
- * Defers while any LAUNCH notification is still PENDING so THROW is never
- * stranded as "overdue" after the rally flips to COMPLETED.
+ * Prefers deferring while LAUNCH is PENDING so THROW sends on an ACTIVE rally.
+ * Even if completion wins a race, PENDING LAUNCH rows are never skipped —
+ * the scheduler still flushes THROW after COMPLETED.
  */
 export async function completeRallyAfterLastCaller(
   eventId: string,
@@ -47,7 +47,7 @@ export async function completeRallyAfterLastCaller(
     return false;
   }
 
-  // Complete + skip remaining non-launch alerts atomically with the status flip.
+  // Complete + skip remaining non-THROW alerts. Never skip LAUNCH.
   const completed = await prisma.$transaction(async (tx) => {
     const claimed = await tx.rallyEvent.updateMany({
       where: { id: eventId, status: "ACTIVE" },
@@ -59,6 +59,7 @@ export async function completeRallyAfterLastCaller(
       where: {
         assignment: { rallyEventId: eventId },
         status: "PENDING",
+        type: { not: "LAUNCH" },
       },
       data: { status: "SKIPPED", error: reason },
     });

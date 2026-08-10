@@ -127,12 +127,16 @@ export async function cancelAllEventNotifications(eventId: string) {
   });
 }
 
-/** Mark any still-pending notifications as skipped when a rally ends. */
+/**
+ * Mark still-pending notifications as skipped when a rally ends.
+ * Never skips LAUNCH (THROW) — that alert must still be delivered.
+ */
 export async function skipRemainingEventNotifications(eventId: string, reason: string) {
   await prisma.notificationEvent.updateMany({
     where: {
       assignment: { rallyEventId: eventId },
       status: "PENDING",
+      type: { not: "LAUNCH" },
     },
     data: { status: "SKIPPED", error: reason },
   });

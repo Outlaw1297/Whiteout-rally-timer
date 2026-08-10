@@ -80,7 +80,14 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
 
   useEventSocket({
     eventId: params.id,
-    onEventUpdate: (e) => setEvent((prev) => ({ ...prev, ...e })),
+    onEventUpdate: (e) => {
+      setEvent((prev) => ({ ...prev, ...e }));
+      // Websocket payloads omit notificationMonitor — refresh so Throw doesn't
+      // freeze as "overdue" after the rally completes.
+      if (e.status === "COMPLETED" || e.status === "CANCELLED") {
+        loadEvent();
+      }
+    },
     onEventCancelled: () => loadEvent(),
   });
 
@@ -110,6 +117,19 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
     const interval = setInterval(loadEvent, 2000);
     return () => clearInterval(interval);
   }, [event?.status, loadEvent]);
+
+  // Keep refreshing the monitor briefly after GO ends so final SENT/FAILED
+  // THROW rows replace a stale "overdue" PENDING snapshot.
+  useEffect(() => {
+    if (event?.status !== "COMPLETED") return;
+    loadEvent();
+    const interval = setInterval(loadEvent, 1500);
+    const stop = setTimeout(() => clearInterval(interval), 12_000);
+    return () => {
+      clearInterval(interval);
+      clearTimeout(stop);
+    };
+  }, [event?.status, event?.id, loadEvent]);
 
   const addCaller = async () => {
     if (!callerName.trim() || !addMarch) return;

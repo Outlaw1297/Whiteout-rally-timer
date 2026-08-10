@@ -43,13 +43,31 @@ async function processNotificationEvent(eventId: string) {
 
     if (!event || event.status !== "PENDING") return null;
     if (event.scheduledAt.getTime() > now + DUE_GRACE_MS) return null;
-    if (event.assignment.rallyEvent.status !== "ACTIVE") {
+
+    const rallyStatus = event.assignment.rallyEvent.status;
+    const isLaunch = event.type === "LAUNCH";
+    // THROW must still deliver after a wall-clock complete race. Other alerts
+    // only fire while the rally is ACTIVE.
+    if (rallyStatus !== "ACTIVE" && !(isLaunch && rallyStatus === "COMPLETED")) {
       logger.warn("notification_blocked_inactive_rally", {
         eventId,
         type: event.type,
-        rallyStatus: event.assignment.rallyEvent.status,
+        rallyStatus,
+      });
+      await tx.notificationEvent.updateMany({
+        where: { id: eventId, status: "PENDING" },
+        data: {
+          status: "SKIPPED",
+          error: `rally ${String(rallyStatus).toLowerCase()}`,
+        },
       });
       return null;
+    }
+    if (isLaunch && rallyStatus === "COMPLETED") {
+      logger.info("launch_flush_after_rally_completed", {
+        eventId,
+        scheduledAt: event.scheduledAt.toISOString(),
+      });
     }
 
     if (
@@ -214,12 +232,15 @@ async function processNotificationEvent(eventId: string) {
 }
 
 async function flushDueLaunchNotifications(now: number) {
+  // Include COMPLETED rallies so THROW still fires after a complete/skip race.
   const dueLaunches = await prisma.notificationEvent.findMany({
     where: {
       type: "LAUNCH",
       status: "PENDING",
       scheduledAt: { lte: new Date(now + DUE_GRACE_MS) },
-      assignment: { rallyEvent: { status: "ACTIVE" } },
+      assignment: {
+        rallyEvent: { status: { in: ["ACTIVE", "COMPLETED"] } },
+      },
     },
     orderBy: { scheduledAt: "asc" },
     take: 50,

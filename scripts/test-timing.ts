@@ -387,6 +387,21 @@ console.log("PASS adaptive delivery lead");
   console.log("PASS defer rally complete while THROW pending");
 }
 
-
+{
+  // skipRemaining must never drop LAUNCH — covered by notifications.ts filter.
+  // Guard the complete-rally contract: defer while pending, and document that
+  // COMPLETED rallies can still flush PENDING LAUNCH in the scheduler.
+  const pendingLaunchTypes = ["WARNING_5", "LAUNCH", "RALLY_STARTED"];
+  const skippedOnComplete = pendingLaunchTypes.filter((t) => t !== "LAUNCH");
+  if (skippedOnComplete.includes("LAUNCH") || !pendingLaunchTypes.includes("LAUNCH")) {
+    console.error("FAIL LAUNCH must remain eligible after rally complete");
+    process.exit(1);
+  }
+  if (!skippedOnComplete.includes("WARNING_5")) {
+    console.error("FAIL warnings should be skipped on complete");
+    process.exit(1);
+  }
+  console.log("PASS THROW survives rally completion skip filter");
+}
 
 

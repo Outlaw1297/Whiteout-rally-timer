@@ -244,9 +244,13 @@ export function getNotificationSchedule(
           scheduledAt: new Date(Math.max(startMs, referenceMs) - Math.min(pushLeadMs, 200)),
         };
       }
+      // Never schedule before GO/reference — high device lead (3s+) on a short
+      // first-caller window was scheduling LAUNCH in the past and racing Started.
+      const idealMs = launchMs - secondsBefore * 1000;
+      const leadCapped = Math.min(pushLeadMs, Math.max(0, idealMs - referenceMs));
       return {
         type,
-        scheduledAt: new Date(launchMs - secondsBefore * 1000 - pushLeadMs),
+        scheduledAt: new Date(idealMs - leadCapped),
       };
     });
 }

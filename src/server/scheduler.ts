@@ -17,9 +17,10 @@ let schedulerRunning = false;
 let schedulerInterval: ReturnType<typeof setInterval> | null = null;
 
 function notificationPriority(type: string): number {
-  if (type === "LAUNCH") return 0;
-  if (String(type).startsWith("WARNING_")) return 1;
-  if (type === "RALLY_STARTED") return 2;
+  // Started first so Pixel always gets an immediate confirmation banner.
+  if (type === "RALLY_STARTED") return 0;
+  if (type === "LAUNCH") return 1;
+  if (String(type).startsWith("WARNING_")) return 2;
   return 3;
 }
 
@@ -67,7 +68,7 @@ async function processNotificationEvent(eventId: string) {
     ) {
       const secondsLeft =
         (event.assignment.launchTime.getTime() - now) / 1000;
-      if (secondsLeft <= 5) {
+      if (secondsLeft <= 2) {
         const launchDue = await tx.notificationEvent.findFirst({
           where: {
             rallyAssignmentId: event.assignment.id,
@@ -208,7 +209,9 @@ async function processNotificationEvent(eventId: string) {
     success,
   });
 
-  if (presented.type === "LAUNCH" || notification.type === "LAUNCH") {
+  if (notification.type === "LAUNCH") {
+    // Only the real LAUNCH row completes the rally — not a late warning
+    // rewritten to LOOK like THROW.
     await completeRallyAfterLastCaller(rallyEvent.id, "last launch notification sent");
   }
 }

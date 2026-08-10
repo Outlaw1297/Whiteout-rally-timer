@@ -15,6 +15,7 @@ import {
   getMarchDuplicateGroups,
   groupAssignmentsByLaunchSlot,
 } from "@/lib/march-groups";
+import { HitOrderPreview } from "@/components/HitOrderPreview";
 import type { SerializedEvent } from "@/hooks/useEventSocket";
 
 export default function PublicEventPage({ params }: { params: { id: string } }) {
@@ -100,6 +101,13 @@ export default function PublicEventPage({ params }: { params: { id: string } }) 
           <p className="text-2xl font-bold">{nextCaller.displayName.toUpperCase()}</p>
           <p className="text-3xl font-mono font-bold text-rally-accent">{nextCountdown}</p>
         </section>
+      )}
+
+      {isTemplate && event.assignments.length > 0 && (
+        <HitOrderPreview
+          assignments={event.assignments}
+          firstCallerLeadSeconds={event.firstCallerLeadSeconds ?? 3}
+        />
       )}
 
       <section className="flex flex-col gap-3 mb-6">

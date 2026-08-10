@@ -59,6 +59,93 @@ export function formatJointLaunchNames(names: string[], exclude?: string): strin
   return filtered.join(", ");
 }
 
+export interface HitOrderWave {
+  /** Seconds relative to the shared target (negative = earlier). */
+  arrivalOffsetSeconds: number;
+  assignmentIds: string[];
+  displayNames: string[];
+  marchLabels: string[];
+}
+
+export interface ThrowOrderWave {
+  /** Seconds after GO until this wave throws (relative preview). */
+  throwAfterGoSeconds: number;
+  assignmentIds: string[];
+  displayNames: string[];
+  marchLabels: string[];
+  arrivalOffsetSeconds: number;
+}
+
+/**
+ * Preview hit (arrival) order before GO.
+ * Shared target is T; each caller hits at T + offset. Lower offset hits first.
+ */
+export function getHitOrderPreview(assignments: MarchAssignment[]): HitOrderWave[] {
+  const byOffset = new Map<number, MarchAssignment[]>();
+
+  for (const assignment of assignments) {
+    const offset = assignment.arrivalOffsetSeconds ?? 0;
+    const list = byOffset.get(offset) ?? [];
+    list.push(assignment);
+    byOffset.set(offset, list);
+  }
+
+  return Array.from(byOffset.entries())
+    .sort(([a], [b]) => a - b)
+    .map(([offset, group]) => ({
+      arrivalOffsetSeconds: offset,
+      assignmentIds: group.map((a) => a.id),
+      displayNames: group.map((a) => a.displayName),
+      marchLabels: group.map((a) => a.marchFormatted),
+    }));
+}
+
+/**
+ * Preview throw (launch) order before GO.
+ * First throw is at firstCallerLead after GO; later throws follow by (maxAdj - adj).
+ */
+export function getThrowOrderPreview(
+  assignments: MarchAssignment[],
+  firstCallerLeadSeconds = 3
+): ThrowOrderWave[] {
+  if (assignments.length === 0) return [];
+
+  const adjusted = assignments.map((a) => {
+    const offset = a.arrivalOffsetSeconds ?? 0;
+    return {
+      assignment: a,
+      offset,
+      adjustedMarch: a.marchDurationSeconds - offset,
+    };
+  });
+
+  const maxAdjusted = Math.max(...adjusted.map((a) => a.adjustedMarch));
+
+  const byThrow = new Map<number, typeof adjusted>();
+  for (const row of adjusted) {
+    const throwAfterGoSeconds = firstCallerLeadSeconds + (maxAdjusted - row.adjustedMarch);
+    const list = byThrow.get(throwAfterGoSeconds) ?? [];
+    list.push(row);
+    byThrow.set(throwAfterGoSeconds, list);
+  }
+
+  return Array.from(byThrow.entries())
+    .sort(([a], [b]) => a - b)
+    .map(([throwAfterGoSeconds, group]) => ({
+      throwAfterGoSeconds,
+      assignmentIds: group.map((g) => g.assignment.id),
+      displayNames: group.map((g) => g.assignment.displayName),
+      marchLabels: group.map((g) => g.assignment.marchFormatted),
+      arrivalOffsetSeconds: group[0].offset,
+    }));
+}
+
+export function formatHitOffsetLabel(offsetSeconds: number): string {
+  if (offsetSeconds === 0) return "at target (T)";
+  if (offsetSeconds > 0) return `T+${offsetSeconds}s`;
+  return `T${offsetSeconds}s`;
+}
+
 /** One UI row per launch slot; callers with the same launch time are merged. */
 export function groupAssignmentsByLaunchSlot(assignments: MarchAssignment[]): LaunchSlotGroup[] {
   const bySlot = new Map<string, MarchAssignment[]>();

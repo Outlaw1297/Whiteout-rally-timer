@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
+import { Check, Share2, Smartphone } from "lucide-react";
 import {
   getMobileInstallKind,
   isStandalonePWA,
@@ -85,13 +86,13 @@ function StepCard({
 }) {
   return (
     <div className="flex gap-3 p-3 rounded-lg bg-rally-bg border border-rally-border">
-      <div className="shrink-0 w-8 h-8 rounded-full bg-rally-accent text-white font-bold flex items-center justify-center text-sm">
+      <div className="shrink-0 w-8 h-8 rounded-full bg-rally-ice text-rally-bg font-semibold flex items-center justify-center text-sm">
         {n}
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          {icon && <span className="text-rally-accent shrink-0">{icon}</span>}
-          <p className="font-bold text-rally-text text-sm">{title}</p>
+          {icon && <span className="text-rally-ice shrink-0">{icon}</span>}
+          <p className="font-semibold text-rally-snow text-sm">{title}</p>
         </div>
         <p className="text-rally-muted text-xs mt-1 leading-relaxed">{body}</p>
       </div>
@@ -125,8 +126,8 @@ function IosSafariInstallSteps({ compact = false }: { compact?: boolean }) {
         title='Tap Add, then open Rally Timer'
         body="Confirm the name, tap Add in the top-right, leave Safari, and open the new Rally Timer icon on your home screen."
       />
-      <div className="p-3 rounded-lg border border-rally-accent/40 bg-rally-accent/10 text-xs text-rally-text space-y-1">
-        <p className="font-bold text-rally-accent">Common snags</p>
+      <div className="p-3 rounded-xl border border-rally-ice/40 bg-rally-ice/10 text-xs text-rally-text space-y-1">
+        <p className="font-semibold text-rally-ice">Common snags</p>
         <ul className="list-disc list-inside text-rally-muted space-y-1">
           <li>Must be <span className="font-bold text-rally-text">Safari</span> — Chrome/Instagram/Facebook will not work</li>
           <li>iOS 16.4 or newer needed for rally push alerts</li>
@@ -171,9 +172,14 @@ function IosOpenSafariSteps({
       <button
         type="button"
         onClick={onCopy}
-        className="w-full py-3.5 bg-rally-accent text-white font-bold rounded-lg text-base"
+        className="btn-primary w-full"
       >
-        {copied ? "✓ Link copied — now open Safari" : "Copy link for Safari"}
+        {copied ? (
+          <span className="inline-flex items-center gap-1.5">
+            <Check className="h-4 w-4" aria-hidden />
+            Link copied — now open Safari
+          </span>
+        ) : "Copy link for Safari"}
       </button>
       {copied && (
         <p className="text-rally-success text-xs text-center font-bold animate-pulse">
@@ -266,7 +272,7 @@ export function PwaInstallRequired() {
       <button
         type="button"
         onClick={() => setRemindLater(false)}
-        className="fixed bottom-4 right-4 z-50 max-w-[14rem] px-3 py-2 rounded-lg bg-rally-warning text-rally-bg text-xs font-bold shadow-lg"
+        className="fixed bottom-4 right-4 z-50 max-w-[14rem] px-3 py-2 rounded-xl bg-rally-warning text-rally-bg text-xs font-semibold shadow-lg"
       >
         Install app required — tap for steps
       </button>
@@ -282,7 +288,7 @@ export function PwaInstallRequired() {
       aria-modal="true"
       aria-labelledby="pwa-install-title"
     >
-      <div className="w-full max-w-md max-h-[92vh] overflow-y-auto bg-rally-surface border border-rally-accent rounded-xl p-5 shadow-2xl">
+      <div className="w-full max-w-md max-h-[92vh] overflow-y-auto bg-rally-surface border border-rally-ice/40 rounded-xl p-5 shadow-2xl">
         <p className="text-rally-warning text-[10px] font-bold tracking-widest mb-1">
           REQUIRED · ~15 SECONDS
         </p>
@@ -301,8 +307,8 @@ export function PwaInstallRequired() {
 
         {kind === "ios-install" && (
           <div className="space-y-3">
-            <p className="text-rally-accent font-bold text-sm flex items-center gap-2">
-              <ShareIcon className="w-5 h-5" />
+            <p className="text-rally-ice font-semibold text-sm flex items-center gap-2">
+              <Share2 className="w-5 h-5" aria-hidden />
               You are in Safari — finish with Share
             </p>
             <IosSafariInstallSteps />
@@ -344,9 +350,14 @@ export function PwaInstallRequired() {
             <button
               type="button"
               onClick={copyLink}
-              className="w-full py-3 bg-rally-accent text-white font-bold rounded-lg"
+              className="btn-primary w-full"
             >
-              {copied ? "✓ Link copied" : "Copy link for Chrome"}
+              {copied ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <Check className="h-4 w-4" aria-hidden />
+                  Link copied
+                </span>
+              ) : "Copy link for Chrome"}
             </button>
           </div>
         )}
@@ -363,9 +374,14 @@ export function PwaInstallRequired() {
                   type="button"
                   onClick={promptAndroidInstall}
                   disabled={installing}
-                  className="w-full py-3 bg-rally-accent text-white font-bold rounded-lg disabled:opacity-50"
+                  className="btn-primary w-full disabled:opacity-50"
                 >
-                  {installing ? "Opening install…" : "Install Rally Timer"}
+                  {installing ? "Opening install…" : (
+                    <span className="inline-flex items-center gap-1.5">
+                      <Smartphone className="h-4 w-4" aria-hidden />
+                      Install Rally Timer
+                    </span>
+                  )}
                 </button>
               </>
             ) : (
@@ -388,7 +404,7 @@ export function PwaInstallRequired() {
         <button
           type="button"
           onClick={dismissForSession}
-          className="w-full mt-4 py-2 text-rally-muted text-xs hover:text-rally-text"
+          className="btn-ghost w-full mt-4 text-xs"
         >
           Remind me later this session
         </button>
@@ -416,16 +432,13 @@ export function PwaInstallGuidePage() {
 
   if (installed) {
     return (
-      <main className="min-h-screen px-4 py-10 max-w-md mx-auto text-center">
-        <p className="text-rally-success text-4xl mb-3">✓</p>
-        <h1 className="text-2xl font-bold mb-2">App installed</h1>
+      <main className="min-h-screen px-4 py-10 max-w-md mx-auto text-center page-enter">
+        <Check className="h-12 w-12 text-rally-success mx-auto mb-3" aria-hidden />
+        <h1 className="text-2xl font-bold text-rally-snow mb-2">App installed</h1>
         <p className="text-rally-muted text-sm mb-6">
           You are in the home-screen app. Log in and enable notifications next.
         </p>
-        <a
-          href="/login"
-          className="inline-block w-full py-3 bg-rally-accent text-white font-bold rounded-lg"
-        >
+        <a href="/login" className="btn-primary w-full inline-flex">
           Go to login
         </a>
       </main>
@@ -433,11 +446,11 @@ export function PwaInstallGuidePage() {
   }
 
   return (
-    <main className="min-h-screen px-4 py-8 max-w-md mx-auto">
-      <p className="text-rally-warning text-[10px] font-bold tracking-widest mb-1">
-        PHONE SETUP GUIDE
+    <main className="min-h-screen px-4 py-8 max-w-md mx-auto page-enter">
+      <p className="text-rally-warning text-[10px] font-semibold tracking-widest mb-1">
+        Phone Setup Guide
       </p>
-      <h1 className="text-2xl font-bold mb-2">Install Rally Timer</h1>
+      <h1 className="text-2xl font-bold text-rally-snow mb-2">Install Rally Timer</h1>
       <p className="text-rally-muted text-sm mb-6">
         Send this page to callers. iPhone needs Safari (no App Store install button from Apple).
       </p>
@@ -450,7 +463,10 @@ export function PwaInstallGuidePage() {
 
       {kind === "ios-install" && (
         <div className="mb-6 space-y-3">
-          <p className="text-rally-success text-sm font-bold">✓ Safari detected — do these 3 steps</p>
+          <p className="text-rally-success text-sm font-semibold inline-flex items-center gap-1.5">
+            <Check className="h-4 w-4" aria-hidden />
+            Safari detected — do these 3 steps
+          </p>
           <IosSafariInstallSteps />
         </div>
       )}
@@ -464,21 +480,26 @@ export function PwaInstallGuidePage() {
           <button
             type="button"
             onClick={copyLink}
-            className="w-full py-3 bg-rally-accent text-white font-bold rounded-lg"
+            className="btn-primary w-full"
           >
-            {copied ? "✓ Link copied" : "Copy install link"}
+            {copied ? (
+              <span className="inline-flex items-center gap-1.5">
+                <Check className="h-4 w-4" aria-hidden />
+                Link copied
+              </span>
+            ) : "Copy install link"}
           </button>
         </div>
       )}
 
       {kind === "none" && (
         <div className="space-y-4 text-sm">
-          <section className="p-4 rounded-lg border border-rally-border bg-rally-surface">
-            <h2 className="font-bold text-rally-accent mb-2">iPhone / iPad</h2>
+          <section className="p-4 rounded-xl border border-rally-border bg-rally-surface">
+            <h2 className="font-bold text-rally-ice mb-2">iPhone / iPad</h2>
             <IosSafariInstallSteps compact />
           </section>
-          <section className="p-4 rounded-lg border border-rally-border bg-rally-surface">
-            <h2 className="font-bold text-rally-accent mb-2">Android</h2>
+          <section className="p-4 rounded-xl border border-rally-border bg-rally-surface">
+            <h2 className="font-bold text-rally-ice mb-2">Android</h2>
             <p className="text-rally-muted text-xs">
               Chrome → Menu ⋮ → Install app (or Add to Home screen) → open the icon.
             </p>
@@ -486,9 +507,14 @@ export function PwaInstallGuidePage() {
           <button
             type="button"
             onClick={copyLink}
-            className="w-full py-3 bg-rally-accent text-white font-bold rounded-lg"
+            className="btn-primary w-full"
           >
-            {copied ? "✓ Link copied" : "Copy this setup link to send"}
+            {copied ? (
+              <span className="inline-flex items-center gap-1.5">
+                <Check className="h-4 w-4" aria-hidden />
+                Copy this setup link to send
+              </span>
+            ) : "Copy this setup link to send"}
           </button>
         </div>
       )}

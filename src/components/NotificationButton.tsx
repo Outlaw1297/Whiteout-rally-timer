@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { Bell, BellOff, Check, Circle } from "lucide-react";
 import { usePushNotificationsContext } from "@/components/PushNotificationsProvider";
 import { usePushCalibration } from "@/hooks/usePushCalibration";
 import {
@@ -115,7 +116,7 @@ export function NotificationButton({ onStatusChange }: { onStatusChange?: () => 
           <li>Open <span className="font-bold">Rally Timer</span> from the home screen</li>
           <li>Return here and tap Enable Rally Notifications</li>
         </ol>
-        <a href="/install" className="block text-center text-rally-accent text-xs font-bold">
+        <a href="/install" className="block text-center nav-link text-xs font-semibold justify-center">
           Open step-by-step install guide →
         </a>
       </div>
@@ -134,7 +135,7 @@ export function NotificationButton({ onStatusChange }: { onStatusChange?: () => 
           <li>Open <span className="font-bold">Safari</span> and paste it</li>
           <li>Share → <span className="font-bold">Add to Home Screen</span></li>
         </ol>
-        <a href="/install" className="block text-center text-rally-accent text-xs font-bold">
+        <a href="/install" className="block text-center nav-link text-xs font-semibold justify-center">
           Open install guide →
         </a>
       </div>
@@ -175,9 +176,9 @@ export function NotificationButton({ onStatusChange }: { onStatusChange?: () => 
         <button
           onClick={handleEnable}
           disabled={loading || isCalibrating}
-          className="w-full py-4 px-6 bg-rally-accent hover:bg-blue-600 disabled:opacity-50 text-white font-bold text-lg rounded-lg transition-colors"
+          className="btn-primary w-full !text-lg"
         >
-          {loading ? "ENABLING..." : "ENABLE RALLY NOTIFICATIONS"}
+          {loading ? "Enabling..." : "Enable Rally Notifications"}
         </button>
         {error && <p className="text-rally-danger text-xs text-center">{error}</p>}
       </div>
@@ -187,11 +188,17 @@ export function NotificationButton({ onStatusChange }: { onStatusChange?: () => 
   return (
     <div className="flex flex-col items-center gap-3 w-full">
       <div className="flex items-center gap-2 text-sm">
-        <span className="text-rally-muted">NOTIFICATIONS</span>
+        <span className="text-rally-muted text-[11px] font-semibold uppercase tracking-wide">Notifications</span>
         {isSubscribed ? (
-          <span className="text-rally-success font-bold">✓ ENABLED</span>
+          <span className="text-rally-success font-semibold inline-flex items-center gap-1">
+            <Check className="h-3.5 w-3.5" aria-hidden />
+            Enabled
+          </span>
         ) : (
-          <span className="text-rally-muted font-bold">○ DISABLED</span>
+          <span className="text-rally-muted font-semibold inline-flex items-center gap-1">
+            <Circle className="h-3 w-3" aria-hidden />
+            Disabled
+          </span>
         )}
       </div>
 
@@ -219,7 +226,10 @@ export function NotificationButton({ onStatusChange }: { onStatusChange?: () => 
           )}
           {calibration.phase === "complete" && (
             <>
-              <p className="font-bold text-rally-success">✓ Calibration complete</p>
+              <p className="font-semibold text-rally-success inline-flex items-center gap-1.5">
+                <Check className="h-4 w-4" aria-hidden />
+                Calibration complete
+              </p>
               <p className="text-rally-muted text-xs mt-1">
                 {calibration.message ||
                   `This device will receive rally alerts about ${calibration.deliveryLeadMs}ms early.`}
@@ -263,13 +273,13 @@ export function NotificationButton({ onStatusChange }: { onStatusChange?: () => 
           <button
             onClick={handleEnable}
             disabled={loading || isCalibrating}
-            className="w-full py-4 px-6 bg-rally-accent hover:bg-blue-600 disabled:opacity-50 text-white font-bold text-lg rounded-lg transition-colors"
+            className="btn-primary w-full !text-base"
           >
             {loading
-              ? "ENABLING..."
+              ? "Enabling..."
               : isCalibrating
-                ? "CALIBRATING..."
-                : "ENABLE RALLY NOTIFICATIONS"}
+                ? "Calibrating..."
+                : "Enable Rally Notifications"}
           </button>
           <p className="text-rally-muted text-xs text-center px-2">
             Includes a quick timing calibration for this device (about 5 seconds). Rally
@@ -278,7 +288,10 @@ export function NotificationButton({ onStatusChange }: { onStatusChange?: () => 
         </>
       ) : (
         <>
-          <p className="text-rally-success text-sm font-bold">✓ NOTIFICATIONS ENABLED</p>
+          <p className="text-rally-success text-sm font-semibold inline-flex items-center gap-1.5">
+            <Bell className="h-4 w-4" aria-hidden />
+            Notifications enabled
+          </p>
           {calibration.phase === "idle" && calibration.learnedLeadMs != null && (
             <p className="text-rally-muted text-xs text-center">
               Device timing: ~{calibration.learnedLeadMs}ms lead
@@ -287,24 +300,34 @@ export function NotificationButton({ onStatusChange }: { onStatusChange?: () => 
           <button
             onClick={handleTest}
             disabled={testLoading || isCalibrating}
-            className="w-full py-3 px-6 bg-rally-surface border border-rally-border hover:border-rally-accent text-rally-text font-bold text-sm rounded-lg transition-colors"
+            className="btn-secondary w-full text-sm"
           >
-            {testLoading ? "SENDING..." : testSent ? "✓ TEST SENT" : "SEND TEST NOTIFICATION"}
+            {testLoading ? "Sending..." : testSent ? (
+              <span className="inline-flex items-center gap-1.5">
+                <Check className="h-4 w-4" aria-hidden />
+                Test sent
+              </span>
+            ) : "Send Test Notification"}
           </button>
           <AndroidHeadsUpTip visible={showHeadsUpTip} />
           <button
             onClick={handleRecalibrate}
             disabled={isCalibrating}
-            className="w-full py-2 px-6 text-rally-accent text-xs font-bold"
+            className="btn-ghost w-full text-xs font-semibold text-rally-ice"
           >
-            {isCalibrating ? "CALIBRATING..." : "RECALIBRATE TIMING"}
+            {isCalibrating ? "Calibrating..." : "Recalibrate Timing"}
           </button>
           <button
             onClick={handleDisable}
             disabled={loading || isCalibrating}
-            className="w-full py-2 px-6 text-rally-muted hover:text-rally-danger text-xs transition-colors"
+            className="btn-ghost w-full text-xs text-rally-muted hover:text-rally-danger"
           >
-            {loading ? "DISABLING..." : "Disable notifications"}
+            {loading ? "Disabling..." : (
+              <span className="inline-flex items-center gap-1.5">
+                <BellOff className="h-3.5 w-3.5" aria-hidden />
+                Disable notifications
+              </span>
+            )}
           </button>
         </>
       )}
@@ -315,7 +338,7 @@ export function NotificationButton({ onStatusChange }: { onStatusChange?: () => 
       {isAndroidDevice() && isSubscribed && (
         <Link
           href="/fix-notifications"
-          className="text-rally-muted text-xs hover:text-rally-accent text-center"
+          className="nav-link text-xs justify-center"
         >
           Alerts only when app is open? Fix Android settings →
         </Link>

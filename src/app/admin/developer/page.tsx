@@ -1,10 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
+import {
+  AlertTriangle,
+  Check,
+  Clock,
+  Radio,
+  Send,
+  Smartphone,
+  X,
+} from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { HomeButton } from "@/components/HomeButton";
+import { AdminNav } from "@/components/AdminNav";
+import { AppShell, Panel, SectionLabel } from "@/components/ui/AppShell";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 import { isDeveloperRole, roleLabel } from "@/lib/roles";
 
 interface DeviceInfo {
@@ -227,46 +237,42 @@ export default function DeveloperPage() {
   const ntpOk = clock?.ntpSynchronized !== false;
 
   return (
-    <main className="min-h-screen px-4 py-6 max-w-2xl mx-auto">
-      <header className="flex items-center justify-between mb-6">
-        <Link href="/admin" className="text-rally-muted text-sm hover:text-rally-accent">
-          ← Admin
-        </Link>
-        <div className="flex items-center gap-3">
-          <HomeButton />
-          <button onClick={logout} className="text-rally-muted text-sm hover:text-rally-danger">
-            Logout
-          </button>
-        </div>
-      </header>
+    <AppShell wide className="page-enter">
+      <AdminNav displayName={user.displayName} role={user.role} onLogout={logout} />
 
-      <h1 className="text-xl font-bold mb-1">Developer</h1>
+      <h1 className="text-xl font-bold text-rally-snow mb-1">Developer</h1>
       <p className="text-rally-muted text-sm mb-4">
         Users with nested devices, delivery stats, and server clock diagnostics.
       </p>
 
-      {error && <p className="text-rally-danger text-sm mb-4">{error}</p>}
+      {error && (
+        <Panel className="mb-4 border-rally-danger/40 bg-rally-danger/10">
+          <p className="text-rally-danger text-sm">{error}</p>
+        </Panel>
+      )}
 
-      <section className="p-4 mb-4 bg-rally-surface border border-rally-border rounded-lg space-y-2">
+      <Panel accent className="mb-4 space-y-3">
         <div className="flex justify-between items-start gap-2">
-          <p className="text-rally-muted text-xs font-bold">SERVER CLOCK / NTP</p>
+          <div className="flex items-center gap-2">
+            <Clock className="h-4 w-4 text-rally-ice shrink-0" aria-hidden />
+            <SectionLabel>Server Clock / NTP</SectionLabel>
+          </div>
           <button
             type="button"
             disabled={!pushEnabled || testing === "all" || totalDevices === 0}
             onClick={() => sendTest({ all: true })}
-            className="px-3 py-1 bg-rally-accent text-white text-xs font-bold rounded disabled:opacity-50"
+            className="btn-primary !min-h-[36px] !py-1.5 text-xs gap-1"
           >
-            {testing === "all" ? "TESTING…" : "TEST ALL DEVICES"}
+            <Send className="h-3 w-3" aria-hidden />
+            {testing === "all" ? "Testing…" : "Test All Devices"}
           </button>
         </div>
         {clock ? (
           <>
-            <p className="font-mono text-sm">{clock.serverTime}</p>
+            <p className="font-mono text-sm text-rally-snow">{clock.serverTime}</p>
             <p className="text-xs text-rally-muted">
               NTP:{" "}
-              <span className={ntpOk ? "text-rally-success" : "text-rally-danger"}>
-                {ntpLabel}
-              </span>
+              <StatusBadge tone={ntpOk ? "success" : "danger"}>{ntpLabel}</StatusBadge>
               {clock.ntpSource ? ` · via ${clock.ntpSource}` : ""}
             </p>
             <p className="text-xs text-rally-muted">
@@ -275,7 +281,7 @@ export default function DeveloperPage() {
                 className={`font-mono ${
                   Math.abs(clock.clientOffsetMs || 0) > 2000
                     ? "text-rally-warning"
-                    : "text-rally-accent"
+                    : "text-rally-ice"
                 }`}
               >
                 {formatOffset(clock.clientOffsetMs)}
@@ -287,7 +293,7 @@ export default function DeveloperPage() {
               time — “host-managed” is expected, not a failure.
             </p>
             {clock.ntpDetails && (
-              <pre className="text-[10px] text-rally-muted whitespace-pre-wrap max-h-28 overflow-auto border border-rally-border rounded p-2 bg-rally-bg">
+              <pre className="text-[10px] text-rally-muted whitespace-pre-wrap max-h-28 overflow-auto border border-rally-border rounded-lg p-2 bg-rally-bg font-mono">
                 {clock.ntpDetails}
               </pre>
             )}
@@ -295,28 +301,36 @@ export default function DeveloperPage() {
         ) : (
           <p className="text-rally-muted text-sm">Loading clock…</p>
         )}
-        <p className="text-xs text-rally-muted">
+        <p className="text-xs text-rally-muted flex items-center gap-2">
+          <Radio className="h-3.5 w-3.5 shrink-0" aria-hidden />
           Push:{" "}
-          <span className={pushEnabled ? "text-rally-success" : "text-rally-danger"}>
+          <StatusBadge tone={pushEnabled ? "success" : "danger"}>
             {pushEnabled ? "ready" : "not configured"}
-          </span>
+          </StatusBadge>
           {vapidSource ? ` · source ${vapidSource}` : ""}
         </p>
-      </section>
+      </Panel>
 
       {(statusMsg || (testResults && testResults.length > 0)) && (
-        <section className="p-3 mb-4 bg-rally-surface border border-rally-border rounded-lg text-xs space-y-1">
-          {statusMsg && <p className="text-rally-success font-bold">{statusMsg}</p>}
+        <Panel className="mb-4 text-xs space-y-1">
+          {statusMsg && <p className="text-rally-success font-semibold">{statusMsg}</p>}
           {testResults?.map((r) => (
             <p
               key={r.subscriptionId}
-              className={r.success ? "text-rally-success" : "text-rally-danger"}
+              className={`flex items-center gap-1.5 ${
+                r.success ? "text-rally-success" : "text-rally-danger"
+              }`}
             >
-              {r.success ? "✓" : "✗"} {r.user} · {r.platform || "unknown"}
+              {r.success ? (
+                <Check className="h-3 w-3 shrink-0" aria-hidden />
+              ) : (
+                <X className="h-3 w-3 shrink-0" aria-hidden />
+              )}
+              {r.user} · {r.platform || "unknown"}
               {r.error ? ` — ${r.error}` : ""}
             </p>
           ))}
-        </section>
+        </Panel>
       )}
 
       <div className="mb-4">
@@ -325,7 +339,7 @@ export default function DeveloperPage() {
           placeholder="Filter users or devices…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          className="w-full px-3 py-2 bg-rally-surface border border-rally-border rounded text-sm"
+          className="input-field text-sm"
         />
         <p className="text-rally-muted text-[11px] mt-1">
           {filteredUsers.length} users · {totalDevices} active devices
@@ -333,20 +347,19 @@ export default function DeveloperPage() {
       </div>
 
       <section className="mb-8">
-        <h2 className="text-rally-muted text-xs mb-2">USERS & DEVICES</h2>
-        <div className="flex flex-col gap-3">
+        <SectionLabel>Users & Devices</SectionLabel>
+        <div className="flex flex-col gap-3 mt-2">
           {filteredUsers.map((u) => (
-            <div
-              key={u.id}
-              className="p-3 bg-rally-surface border border-rally-border rounded-lg text-sm"
-            >
+            <Panel key={u.id} className="!p-3 text-sm">
               <div className="flex justify-between gap-2 items-start">
                 <div className="min-w-0">
-                  <p className="font-bold">
+                  <p className="font-bold text-rally-snow">
                     {u.displayName}{" "}
                     <span className="text-rally-muted text-xs font-normal">@{u.username}</span>
                     {!u.active && (
-                      <span className="text-rally-danger text-xs ml-2">disabled</span>
+                      <StatusBadge tone="danger" className="ml-2">
+                        disabled
+                      </StatusBadge>
                     )}
                   </p>
                   <p className="text-rally-muted text-xs mt-0.5">
@@ -362,9 +375,10 @@ export default function DeveloperPage() {
                     type="button"
                     disabled={!pushEnabled || testing === u.id}
                     onClick={() => sendTest({ userId: u.id })}
-                    className="shrink-0 px-2 py-1 border border-rally-accent text-rally-accent text-xs font-bold rounded disabled:opacity-50"
+                    className="btn-secondary !min-h-[32px] !py-1 !px-2 text-xs shrink-0 gap-1"
                   >
-                    {testing === u.id ? "…" : "TEST USER"}
+                    <Send className="h-3 w-3" aria-hidden />
+                    {testing === u.id ? "…" : "Test User"}
                   </button>
                 )}
               </div>
@@ -372,12 +386,19 @@ export default function DeveloperPage() {
               <p className="text-rally-muted text-[11px] mt-1">
                 Login {formatWhen(u.lastLoginAt)} · Calibrated {formatWhen(u.lastCalibratedAt)}
               </p>
-              <p className="text-[11px] mt-1">
-                <span className="text-rally-success">✓ {u.successfulNotifications} sent</span>
-                {" · "}
-                <span className="text-rally-danger">✗ {u.failedNotifications} failed</span>
-                {" · "}
-                <span className="text-rally-warning">⚠ {u.missedNotifications} missed/skipped</span>
+              <p className="text-[11px] mt-1 flex flex-wrap gap-x-2">
+                <span className="text-rally-success inline-flex items-center gap-1">
+                  <Check className="h-3 w-3" aria-hidden />
+                  {u.successfulNotifications} sent
+                </span>
+                <span className="text-rally-danger inline-flex items-center gap-1">
+                  <X className="h-3 w-3" aria-hidden />
+                  {u.failedNotifications} failed
+                </span>
+                <span className="text-rally-warning inline-flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3" aria-hidden />
+                  {u.missedNotifications} missed/skipped
+                </span>
               </p>
 
               {u.devices.length === 0 ? (
@@ -386,17 +407,18 @@ export default function DeveloperPage() {
                 </p>
               ) : (
                 <div className="mt-3 pt-3 border-t border-rally-border space-y-2">
-                  <p className="text-rally-muted text-[10px] font-bold tracking-wide">
-                    DEVICES ({u.devices.length})
+                  <p className="text-rally-muted text-[10px] font-semibold tracking-wide flex items-center gap-1">
+                    <Smartphone className="h-3 w-3" aria-hidden />
+                    Devices ({u.devices.length})
                   </p>
                   {u.devices.map((d) => (
                     <div
                       key={d.id}
-                      className="p-2 bg-rally-bg border border-rally-border rounded text-xs"
+                      className="p-2 bg-rally-bg border border-rally-border rounded-lg text-xs"
                     >
                       <div className="flex justify-between gap-2 items-start">
                         <div className="min-w-0">
-                          <span className="font-mono text-rally-accent">{d.platform}</span>
+                          <span className="font-mono text-rally-ice">{d.platform}</span>
                           <span className="font-mono text-rally-muted ml-2">
                             lead {d.deliveryLeadMs}ms · {d.deliverySampleCount} samples
                           </span>
@@ -405,9 +427,9 @@ export default function DeveloperPage() {
                           type="button"
                           disabled={!pushEnabled || testing === d.id}
                           onClick={() => sendTest({ subscriptionId: d.id })}
-                          className="shrink-0 px-2 py-0.5 bg-rally-accent text-white text-[11px] font-bold rounded disabled:opacity-50"
+                          className="btn-primary !min-h-[28px] !py-0.5 !px-2 text-[11px] shrink-0"
                         >
-                          {testing === d.id ? "…" : "TEST"}
+                          {testing === d.id ? "…" : "Test"}
                         </button>
                       </div>
                       <p className="text-rally-muted text-[11px] mt-1">
@@ -426,13 +448,13 @@ export default function DeveloperPage() {
                   ))}
                 </div>
               )}
-            </div>
+            </Panel>
           ))}
           {filteredUsers.length === 0 && (
             <p className="text-rally-muted text-sm text-center py-4">No users match</p>
           )}
         </div>
       </section>
-    </main>
+    </AppShell>
   );
 }

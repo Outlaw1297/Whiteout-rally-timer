@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { Panel, SectionLabel } from "@/components/ui/AppShell";
 
-export function ChangePasswordForm({ title = "CHANGE PASSWORD" }: { title?: string }) {
+export function ChangePasswordForm({ title = "Change Password" }: { title?: string }) {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -52,9 +53,9 @@ export function ChangePasswordForm({ title = "CHANGE PASSWORD" }: { title?: stri
   };
 
   return (
-    <section className="p-4 mb-4 bg-rally-surface border border-rally-border rounded-lg">
+    <Panel className="mb-4">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-rally-muted text-xs">{title}</h2>
+        <SectionLabel>{title}</SectionLabel>
         {!expanded && (
           <button
             type="button"
@@ -62,7 +63,7 @@ export function ChangePasswordForm({ title = "CHANGE PASSWORD" }: { title?: stri
               resetForm();
               setExpanded(true);
             }}
-            className="text-rally-accent text-xs font-bold"
+            className="btn-ghost text-xs font-semibold text-rally-ice !px-2"
           >
             Change
           </button>
@@ -81,7 +82,7 @@ export function ChangePasswordForm({ title = "CHANGE PASSWORD" }: { title?: stri
             value={currentPassword}
             onChange={(e) => setCurrentPassword(e.target.value)}
             autoComplete="current-password"
-            className="px-3 py-2 bg-rally-bg border border-rally-border rounded text-sm"
+            className="input-field text-sm"
             required
           />
           <input
@@ -91,7 +92,7 @@ export function ChangePasswordForm({ title = "CHANGE PASSWORD" }: { title?: stri
             onChange={(e) => setNewPassword(e.target.value)}
             autoComplete="new-password"
             minLength={8}
-            className="px-3 py-2 bg-rally-bg border border-rally-border rounded text-sm"
+            className="input-field text-sm"
             required
           />
           <input
@@ -101,7 +102,7 @@ export function ChangePasswordForm({ title = "CHANGE PASSWORD" }: { title?: stri
             onChange={(e) => setConfirmPassword(e.target.value)}
             autoComplete="new-password"
             minLength={8}
-            className="px-3 py-2 bg-rally-bg border border-rally-border rounded text-sm"
+            className="input-field text-sm"
             required
           />
 
@@ -111,9 +112,9 @@ export function ChangePasswordForm({ title = "CHANGE PASSWORD" }: { title?: stri
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 py-2 bg-rally-accent text-white text-sm font-bold rounded disabled:opacity-50"
+              className="btn-primary flex-1 !min-h-[40px] text-sm"
             >
-              {loading ? "SAVING..." : "SAVE PASSWORD"}
+              {loading ? "Saving..." : "Save Password"}
             </button>
             <button
               type="button"
@@ -121,13 +122,13 @@ export function ChangePasswordForm({ title = "CHANGE PASSWORD" }: { title?: stri
                 resetForm();
                 setExpanded(false);
               }}
-              className="px-3 py-2 text-rally-muted text-sm"
+              className="btn-ghost text-sm"
             >
               Cancel
             </button>
           </div>
         </form>
       )}
-    </section>
+    </Panel>
   );
 }

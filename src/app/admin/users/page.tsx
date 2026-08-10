@@ -3,12 +3,22 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import {
+  ArrowDown,
+  ArrowUp,
+  KeyRound,
+  Shield,
+  ShieldCheck,
+  User,
+} from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { PushSetupCard } from "@/components/PushSetupCard";
 import { ChangePasswordForm } from "@/components/ChangePasswordForm";
 import { RolesNote } from "@/components/RolesNote";
-import { HomeButton } from "@/components/HomeButton";
+import { AdminNav } from "@/components/AdminNav";
 import { StatusBanner } from "@/components/StatusBanner";
+import { AppShell, Panel, SectionLabel } from "@/components/ui/AppShell";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 import { isAdminRole, isDeveloperRole, roleLabel, type AppRole } from "@/lib/roles";
 
 interface UserRow {
@@ -36,6 +46,12 @@ function formatWhen(iso: string | null | undefined): string {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+function roleBadgeTone(role: string): "success" | "warning" | "neutral" {
+  if (role === "DEVELOPER") return "success";
+  if (role === "ADMIN") return "warning";
+  return "neutral";
 }
 
 export default function AdminUsersPage() {
@@ -257,35 +273,29 @@ export default function AdminUsersPage() {
   const canCreateDeveloper = isDeveloperRole(user.role);
 
   return (
-    <main className="min-h-screen px-4 py-6 max-w-lg mx-auto">
-      <header className="flex items-center justify-between mb-6">
-        <Link href="/admin" className="text-rally-muted text-sm hover:text-rally-accent">
-          ← Admin
-        </Link>
-        <div className="flex items-center gap-3">
-          <HomeButton />
-          <button onClick={logout} className="text-rally-muted text-sm hover:text-rally-danger">
-            Logout
-          </button>
-        </div>
-      </header>
+    <AppShell wide className="page-enter">
+      <AdminNav displayName={user.displayName} role={user.role} onLogout={logout} />
 
-      <h1 className="text-xl font-bold mb-2">Manage Users</h1>
+      <h1 className="text-xl font-bold text-rally-snow mb-2">Manage Users</h1>
       <p className="text-rally-muted text-sm mb-4">
         Create caller and admin accounts. Device counts show how many phones have enabled
         push for each account.
       </p>
 
       {canCreateDeveloper ? (
-        <p className="text-rally-success text-xs mb-3 p-2 border border-rally-success/40 rounded">
-          You are a <strong>Developer</strong>. Use <strong>Make Dev</strong> on any caller/admin
-          below, or pick Developer when creating an account.
-        </p>
+        <Panel accent className="mb-3 text-xs">
+          <p className="text-rally-ice">
+            You are a <strong>Developer</strong>. Use <strong>Make Dev</strong> on any caller/admin
+            below, or pick Developer when creating an account.
+          </p>
+        </Panel>
       ) : (
-        <p className="text-rally-warning text-xs mb-3 p-2 border border-rally-warning/40 rounded">
-          Only Developer accounts can grant the Developer role. Ask an existing developer to
-          promote you, then log out and back in.
-        </p>
+        <Panel className="mb-3 border-rally-warning/40 bg-rally-warning/10 text-xs">
+          <p className="text-rally-warning">
+            Only Developer accounts can grant the Developer role. Ask an existing developer to
+            promote you, then log out and back in.
+          </p>
+        </Panel>
       )}
 
       <RolesNote />
@@ -307,136 +317,137 @@ export default function AdminUsersPage() {
         }}
       />
 
-      <section className="p-3 mb-4 bg-rally-surface border border-rally-border rounded-lg text-sm">
-        <p className="text-rally-muted text-xs mb-2">SETUP FOR EACH CALLER</p>
-        <ol className="list-decimal list-inside space-y-1 text-rally-muted text-xs">
+      <Panel className="mb-4 text-sm">
+        <SectionLabel>Setup for Each Caller</SectionLabel>
+        <ol className="list-decimal list-inside space-y-1 text-rally-muted text-xs mt-2">
           <li>Create account below (set a password or leave blank for a random one)</li>
           <li>
             Send them the install guide:{" "}
-            <a href="/install" className="text-rally-accent font-bold">
+            <Link href="/install" className="text-rally-ice font-semibold">
               /install
-            </a>{" "}
+            </Link>{" "}
             (iPhone must use Safari → Share → Add to Home Screen)
           </li>
           <li>Caller opens the installed app and logs in at /login</li>
           <li>Caller taps Enable Rally Notifications</li>
           <li>
             Android callers must set Chrome battery to Unrestricted — send{" "}
-            <a href="/fix-notifications" className="text-rally-accent font-bold">
+            <Link href="/fix-notifications" className="text-rally-ice font-semibold">
               /fix-notifications
-            </a>
+            </Link>
           </li>
           <li>In your rally template, link that caller slot to their account</li>
         </ol>
-      </section>
+      </Panel>
 
       {tempPassword && (
-        <div className="p-3 mb-4 bg-rally-success/20 border border-rally-success rounded-lg text-sm">
-          Temporary password: <span className="font-mono font-bold">{tempPassword}</span>
-          <button onClick={() => setTempPassword(null)} className="ml-2 text-rally-muted">
-            dismiss
+        <Panel accent className="mb-4 text-sm">
+          <p>
+            Temporary password:{" "}
+            <span className="font-mono font-bold text-rally-snow">{tempPassword}</span>
+          </p>
+          <button onClick={() => setTempPassword(null)} className="btn-ghost text-xs mt-1">
+            Dismiss
           </button>
-        </div>
+        </Panel>
       )}
 
-      <form
-        onSubmit={createUser}
-        className="p-4 mb-6 bg-rally-surface border border-rally-border rounded-lg flex flex-col gap-2"
-      >
-        <p className="text-rally-muted text-xs">CREATE ACCOUNT</p>
-        <div className="flex gap-2 flex-wrap">
-          <button
-            type="button"
-            onClick={() => setNewUserRole("CALLER")}
-            className={`flex-1 min-w-[30%] py-2 text-sm font-bold rounded border ${
-              newUserRole === "CALLER"
-                ? "bg-rally-accent text-white border-rally-accent"
-                : "bg-rally-bg text-rally-muted border-rally-border"
-            }`}
-          >
-            Caller
-          </button>
-          <button
-            type="button"
-            onClick={() => setNewUserRole("ADMIN")}
-            className={`flex-1 min-w-[30%] py-2 text-sm font-bold rounded border ${
-              newUserRole === "ADMIN"
-                ? "bg-rally-warning text-black border-rally-warning"
-                : "bg-rally-bg text-rally-muted border-rally-border"
-            }`}
-          >
-            Admin
-          </button>
-          {canCreateDeveloper && (
+      <form onSubmit={createUser} className="mb-6">
+        <Panel className="flex flex-col gap-3">
+          <SectionLabel>Create Account</SectionLabel>
+          <div className="flex gap-2 flex-wrap">
             <button
               type="button"
-              onClick={() => setNewUserRole("DEVELOPER")}
-              className={`flex-1 min-w-[30%] py-2 text-sm font-bold rounded border ${
-                newUserRole === "DEVELOPER"
-                  ? "bg-rally-success text-white border-rally-success"
-                  : "bg-rally-bg text-rally-muted border-rally-border"
+              onClick={() => setNewUserRole("CALLER")}
+              className={`flex-1 min-w-[30%] btn-secondary !min-h-[40px] !py-2 text-sm ${
+                newUserRole === "CALLER" ? "!border-rally-ice/50 !bg-rally-ice/10 !text-rally-ice" : ""
               }`}
             >
-              Developer
+              <User className="h-4 w-4" aria-hidden />
+              Caller
             </button>
-          )}
-        </div>
-        <input
-          placeholder="Display Name (Alice)"
-          value={displayName}
-          onChange={(e) => setDisplayName(e.target.value)}
-          className="px-3 py-2 bg-rally-bg border border-rally-border rounded"
-          required
-        />
-        <input
-          placeholder="Username (alice)"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          className="px-3 py-2 bg-rally-bg border border-rally-border rounded"
-          required
-        />
-        <input
-          type="password"
-          placeholder="Password (optional — random if blank)"
-          value={newUserPassword}
-          onChange={(e) => setNewUserPassword(e.target.value)}
-          autoComplete="new-password"
-          className="px-3 py-2 bg-rally-bg border border-rally-border rounded"
-        />
-        <button
-          type="submit"
-          className={`py-2 font-bold rounded ${
-            newUserRole === "DEVELOPER"
-              ? "bg-rally-success text-white"
+            <button
+              type="button"
+              onClick={() => setNewUserRole("ADMIN")}
+              className={`flex-1 min-w-[30%] btn-secondary !min-h-[40px] !py-2 text-sm ${
+                newUserRole === "ADMIN"
+                  ? "!border-rally-warning/50 !bg-rally-warning/10 !text-rally-warning"
+                  : ""
+              }`}
+            >
+              <Shield className="h-4 w-4" aria-hidden />
+              Admin
+            </button>
+            {canCreateDeveloper && (
+              <button
+                type="button"
+                onClick={() => setNewUserRole("DEVELOPER")}
+                className={`flex-1 min-w-[30%] btn-secondary !min-h-[40px] !py-2 text-sm ${
+                  newUserRole === "DEVELOPER"
+                    ? "!border-rally-success/50 !bg-rally-success/10 !text-rally-success"
+                    : ""
+                }`}
+              >
+                <ShieldCheck className="h-4 w-4" aria-hidden />
+                Developer
+              </button>
+            )}
+          </div>
+          <input
+            placeholder="Display Name (Alice)"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            className="input-field"
+            required
+          />
+          <input
+            placeholder="Username (alice)"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            className="input-field"
+            required
+          />
+          <input
+            type="password"
+            placeholder="Password (optional — random if blank)"
+            value={newUserPassword}
+            onChange={(e) => setNewUserPassword(e.target.value)}
+            autoComplete="new-password"
+            className="input-field"
+          />
+          <button
+            type="submit"
+            className={
+              newUserRole === "DEVELOPER"
+                ? "btn-success"
+                : newUserRole === "ADMIN"
+                  ? "btn-secondary !border-rally-warning/50 !text-rally-warning"
+                  : "btn-primary"
+            }
+          >
+            {newUserRole === "DEVELOPER"
+              ? "Create Developer"
               : newUserRole === "ADMIN"
-                ? "bg-rally-warning text-black"
-                : "bg-rally-accent text-white"
-          }`}
-        >
-          {newUserRole === "DEVELOPER"
-            ? "CREATE DEVELOPER"
-            : newUserRole === "ADMIN"
-              ? "CREATE ADMIN"
-              : "CREATE CALLER"}
-        </button>
+                ? "Create Admin"
+                : "Create Caller"}
+          </button>
+        </Panel>
       </form>
 
       <section className="mb-4 space-y-2">
-        <div className="flex gap-2">
-          <input
-            type="search"
-            placeholder="Find user by name, username, role…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="flex-1 px-3 py-2 bg-rally-surface border border-rally-border rounded text-sm"
-          />
-        </div>
+        <input
+          type="search"
+          placeholder="Find user by name, username, role…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          className="input-field text-sm"
+        />
         <div className="flex flex-wrap gap-2 items-center">
-          <label className="text-rally-muted text-xs">Sort</label>
+          <label className="label-field">Sort</label>
           <select
             value={sortKey}
             onChange={(e) => setSortKey(e.target.value as SortKey)}
-            className="px-2 py-1 bg-rally-surface border border-rally-border rounded text-xs"
+            className="input-field !w-auto !min-h-[36px] !py-1.5 text-xs"
           >
             <option value="displayName">Name</option>
             <option value="username">Username</option>
@@ -448,9 +459,19 @@ export default function AdminUsersPage() {
           <button
             type="button"
             onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
-            className="px-2 py-1 border border-rally-border rounded text-xs text-rally-muted"
+            className="btn-secondary !min-h-[36px] !py-1.5 text-xs gap-1"
           >
-            {sortDir === "asc" ? "↑ Asc" : "↓ Desc"}
+            {sortDir === "asc" ? (
+              <>
+                <ArrowUp className="h-3 w-3" aria-hidden />
+                Asc
+              </>
+            ) : (
+              <>
+                <ArrowDown className="h-3 w-3" aria-hidden />
+                Desc
+              </>
+            )}
           </button>
           <span className="text-rally-muted text-xs ml-auto">
             {filteredUsers.length} / {users.length}
@@ -460,31 +481,18 @@ export default function AdminUsersPage() {
 
       <div className="flex flex-col gap-2">
         {filteredUsers.map((u) => (
-          <div
-            key={u.id}
-            className="p-3 bg-rally-surface border border-rally-border rounded-lg"
-          >
+          <Panel key={u.id} className="!p-3">
             <div className="flex justify-between items-start gap-2">
               <div className="min-w-0">
-                <p className="font-bold">
-                  {u.displayName}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="font-bold text-rally-snow">{u.displayName}</p>
                   {u.id === user.id && (
-                    <span className="text-rally-accent text-xs ml-2">(you)</span>
+                    <StatusBadge tone="info">you</StatusBadge>
                   )}
-                </p>
-                <p className="text-rally-muted text-xs">
-                  @{u.username} ·{" "}
-                  <span
-                    className={
-                      u.role === "DEVELOPER"
-                        ? "text-rally-success font-bold"
-                        : u.role === "ADMIN"
-                          ? "text-rally-warning font-bold"
-                          : "text-rally-muted"
-                    }
-                  >
-                    {roleLabel(u.role)}
-                  </span>
+                  <StatusBadge tone={roleBadgeTone(u.role)}>{roleLabel(u.role)}</StatusBadge>
+                </div>
+                <p className="text-rally-muted text-xs mt-1">
+                  @{u.username}
                   {" · "}
                   <span
                     className={u.activeDevices > 0 ? "text-rally-success" : "text-rally-warning"}
@@ -494,7 +502,7 @@ export default function AdminUsersPage() {
                   {u.deliveryLeadMs != null ? (
                     <>
                       {" · "}
-                      <span className="text-rally-accent font-mono">
+                      <span className="text-rally-ice font-mono">
                         {u.deliveryLeadMs}ms lead
                       </span>
                       <span className="text-rally-muted">
@@ -519,11 +527,11 @@ export default function AdminUsersPage() {
                   </p>
                 )}
               </div>
-              <div className="flex flex-wrap gap-2 justify-end">
+              <div className="flex flex-wrap gap-1 justify-end">
                 {u.role !== "ADMIN" && u.role !== "DEVELOPER" && (
                   <button
                     onClick={() => changeRole(u.id, "ADMIN", u.displayName)}
-                    className="text-xs px-2 py-1 border border-rally-warning text-rally-warning rounded hover:bg-rally-warning/10"
+                    className="btn-ghost !min-h-[32px] !py-1 !px-2 text-xs text-rally-warning"
                   >
                     Make Admin
                   </button>
@@ -531,7 +539,7 @@ export default function AdminUsersPage() {
                 {canCreateDeveloper && u.role !== "DEVELOPER" && (
                   <button
                     onClick={() => changeRole(u.id, "DEVELOPER", u.displayName)}
-                    className="text-xs px-2 py-1 border border-rally-success text-rally-success rounded hover:bg-rally-success/10 font-bold"
+                    className="btn-ghost !min-h-[32px] !py-1 !px-2 text-xs text-rally-success font-semibold"
                   >
                     Make Dev
                   </button>
@@ -539,7 +547,7 @@ export default function AdminUsersPage() {
                 {u.role !== "CALLER" && u.id !== user.id && (
                   <button
                     onClick={() => changeRole(u.id, "CALLER", u.displayName)}
-                    className="text-xs px-2 py-1 border border-rally-border text-rally-muted rounded hover:text-rally-accent"
+                    className="btn-ghost !min-h-[32px] !py-1 !px-2 text-xs"
                   >
                     Make Caller
                   </button>
@@ -547,7 +555,7 @@ export default function AdminUsersPage() {
                 {u.role === "DEVELOPER" && u.id !== user.id && canCreateDeveloper && (
                   <button
                     onClick={() => changeRole(u.id, "ADMIN", u.displayName)}
-                    className="text-xs px-2 py-1 border border-rally-warning text-rally-warning rounded hover:bg-rally-warning/10"
+                    className="btn-ghost !min-h-[32px] !py-1 !px-2 text-xs text-rally-warning"
                   >
                     Demote to Admin
                   </button>
@@ -559,20 +567,23 @@ export default function AdminUsersPage() {
                     setSetPasswordValue("");
                     setSettingPasswordFor(settingPasswordFor === u.id ? null : u.id);
                   }}
-                  className="text-xs text-rally-muted hover:text-rally-accent"
+                  className="btn-ghost !min-h-[32px] !py-1 !px-2 text-xs gap-1"
                 >
+                  <KeyRound className="h-3 w-3" aria-hidden />
                   Set PW
                 </button>
                 <button
                   onClick={() => resetPassword(u.id, u.displayName)}
-                  className="text-xs text-rally-muted hover:text-rally-accent"
+                  className="btn-ghost !min-h-[32px] !py-1 !px-2 text-xs"
                 >
                   Random
                 </button>
                 {u.role === "CALLER" && (
                   <button
                     onClick={() => toggleActive(u.id, u.active)}
-                    className={`text-xs ${u.active ? "text-rally-danger" : "text-rally-success"}`}
+                    className={`btn-ghost !min-h-[32px] !py-1 !px-2 text-xs ${
+                      u.active ? "text-rally-danger" : "text-rally-success"
+                    }`}
                   >
                     {u.active ? "Disable" : "Enable"}
                   </button>
@@ -589,12 +600,12 @@ export default function AdminUsersPage() {
                   onChange={(e) => setSetPasswordValue(e.target.value)}
                   autoComplete="new-password"
                   minLength={8}
-                  className="px-3 py-2 bg-rally-bg border border-rally-border rounded text-sm"
+                  className="input-field text-sm"
                 />
                 <div className="flex gap-2">
                   <button
                     onClick={() => setUserPassword(u.id, u.displayName)}
-                    className="px-3 py-1 bg-rally-accent text-white text-xs font-bold rounded"
+                    className="btn-primary !min-h-[36px] !py-1.5 text-xs flex-1"
                   >
                     Save Password
                   </button>
@@ -604,19 +615,19 @@ export default function AdminUsersPage() {
                       setSetPasswordValue("");
                       setPasswordError("");
                     }}
-                    className="px-3 py-1 text-rally-muted text-xs"
+                    className="btn-ghost !min-h-[36px] !py-1.5 text-xs"
                   >
                     Cancel
                   </button>
                 </div>
               </div>
             )}
-          </div>
+          </Panel>
         ))}
         {filteredUsers.length === 0 && (
           <p className="text-rally-muted text-center text-sm py-6">No users match your search</p>
         )}
       </div>
-    </main>
+    </AppShell>
   );
 }

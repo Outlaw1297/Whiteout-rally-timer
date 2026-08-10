@@ -3,6 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import {
+  Copy,
+  ExternalLink,
+  Info,
+  Plus,
+  Rocket,
+  Trash2,
+} from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useServerClock } from "@/hooks/useServerClock";
 import { useCountdown } from "@/hooks/useCountdown";
@@ -12,8 +20,14 @@ import { CallerCountdownRow } from "@/components/CallerCountdownRow";
 import { MarchDuplicateNotice } from "@/components/MarchDuplicateNotice";
 import { PushSetupCard } from "@/components/PushSetupCard";
 import { TemplateSwitcher } from "@/components/TemplateSwitcher";
-import { HomeButton } from "@/components/HomeButton";
+import { AdminNav } from "@/components/AdminNav";
 import { StatusBanner } from "@/components/StatusBanner";
+import { AppShell, Panel, SectionLabel } from "@/components/ui/AppShell";
+import {
+  StatusBadge,
+  statusToneForAssignment,
+  statusToneForEvent,
+} from "@/components/ui/StatusBadge";
 import { formatArrivalTime, formatGather, statusLabel } from "@/lib/display";
 import { formatMarchDuration, parseMarchDuration } from "@/lib/timing";
 import {
@@ -55,8 +69,19 @@ function formatOffsetLabel(offset: number): string {
   return "· hit at target";
 }
 
+function notificationStatusTone(
+  status: string,
+  isOverdue: boolean
+): "success" | "warning" | "danger" | "neutral" {
+  if (status === "SENT") return "success";
+  if (status === "SKIPPED") return "neutral";
+  if (status === "PENDING" && isOverdue) return "danger";
+  if (status === "PENDING") return "warning";
+  return "danger";
+}
+
 export default function AdminEventPage({ params }: { params: { id: string } }) {
-  const { user, loading } = useAuth();
+  const { user, loading, logout } = useAuth();
   const router = useRouter();
   const [event, setEvent] = useState<EventDetail | null>(null);
   const [callers, setCallers] = useState<
@@ -386,7 +411,7 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
     router.push("/admin");
   };
 
-  if (loading || !event) {
+  if (loading || !event || !user) {
     return <div className="p-8 text-center text-rally-muted">Loading...</div>;
   }
 
@@ -401,7 +426,6 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
     : [];
   const launchSlots = groupAssignmentsByLaunchSlot(event.assignments);
 
-  // Live preview uses unsaved draft march/offset/name so order updates as you type.
   const previewAssignments: MarchAssignment[] = event.assignments.map((a) => {
     const draft = editDrafts[a.id];
     const marchSeconds = draft?.march
@@ -425,33 +449,44 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
     : event.firstCallerLeadSeconds ?? 3;
 
   return (
-    <main className="min-h-screen px-4 py-6 max-w-lg mx-auto">
+    <AppShell wide className="page-enter">
       <TemplateSwitcher currentEventId={event.id} onChanged={loadEvent} />
 
-      <div className="flex items-center justify-between gap-3">
-        <Link href="/admin" className="text-rally-muted text-sm hover:text-rally-accent">
-          ← Templates
-        </Link>
-        <HomeButton />
-      </div>
+      <AdminNav displayName={user.displayName} role={user.role} onLogout={logout} />
 
-      <header className="mt-4 mb-6">
-        <h1 className="text-2xl font-bold">{event.name}</h1>
-        <p className="text-rally-muted text-sm">
-          {isTemplate ? "TEMPLATE" : event.status}
-          {event.isTestMode ? " · TEST" : ""}
-          {event.pinned ? " · PINNED" : ""}
-        </p>
-        <div className="flex flex-wrap gap-3 mt-1">
-          <Link href={`/events/${event.id}`} className="text-rally-accent text-xs">
-            Public live view →
+      <header className="mb-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold text-rally-snow">{event.name}</h1>
+            <div className="flex items-center gap-2 flex-wrap mt-1">
+              <StatusBadge tone={isTemplate ? "warning" : statusToneForEvent(event.status)}>
+                {isTemplate ? "Template" : event.status}
+              </StatusBadge>
+              {event.isTestMode && <StatusBadge tone="info">Test</StatusBadge>}
+              {event.pinned && <StatusBadge tone="warning">Pinned</StatusBadge>}
+              {isActive && (
+                <StatusBadge tone="live" pulse>
+                  Live
+                </StatusBadge>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-3 mt-2">
+          <Link
+            href={`/events/${event.id}`}
+            className="nav-link text-xs gap-1"
+          >
+            <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+            Public live view
           </Link>
           <button
             type="button"
             onClick={cloneTemplate}
             disabled={cloning}
-            className="text-rally-muted text-xs hover:text-rally-accent"
+            className="nav-link text-xs gap-1"
           >
+            <Copy className="h-3.5 w-3.5" aria-hidden />
             {cloning ? "Cloning…" : "Clone template"}
           </button>
         </div>
@@ -472,16 +507,18 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
         <MarchDuplicateNotice groups={marchDuplicateGroups} />
       )}
 
-      <section className="p-4 mb-4 bg-rally-surface border border-rally-border rounded-lg">
-        <p className="text-rally-muted text-xs">RALLY TIME</p>
-        <p className="text-xl font-mono font-bold">{formatGather(event.gatherDurationSeconds)}</p>
+      <Panel className="mb-4">
+        <SectionLabel>Rally Time</SectionLabel>
+        <p className="timer-display text-xl text-rally-ice mt-1">
+          {formatGather(event.gatherDurationSeconds)}
+        </p>
 
         {isTemplate ? (
           <div className="mt-4 pt-4 border-t border-rally-border space-y-3">
-            <p className="text-rally-muted text-xs">TIMING SETTINGS</p>
+            <SectionLabel>Timing Settings</SectionLabel>
             <div>
-              <label className="text-rally-muted text-xs block mb-1">
-                FIRST CALLER LEAD (seconds after GO)
+              <label className="label-field">
+                First Caller Lead (seconds after GO)
               </label>
               <input
                 type="number"
@@ -489,7 +526,7 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                 max={300}
                 value={firstCallerLead}
                 onChange={(e) => setFirstCallerLead(e.target.value)}
-                className="w-full px-3 py-2 bg-rally-bg border border-rally-border rounded font-mono text-sm"
+                className="input-field font-mono text-sm"
               />
               <p className="text-rally-muted text-xs mt-1">
                 How long after GO before the first caller throws. Each caller only gets
@@ -500,9 +537,9 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
             <button
               onClick={saveTimingSettings}
               disabled={timingSaving}
-              className="w-full py-2 bg-rally-accent text-white text-sm font-bold rounded disabled:opacity-50"
+              className="btn-primary w-full !min-h-[40px] text-sm"
             >
-              {timingSaving ? "SAVING..." : "SAVE TIMING"}
+              {timingSaving ? "Saving..." : "Save Timing"}
             </button>
           </div>
         ) : (
@@ -513,10 +550,12 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
         )}
 
         {!isTemplate && event.targetArrivalTime && (
-          <>
-            <p className="text-rally-muted text-xs mt-3">TARGET ARRIVAL</p>
-            <p className="text-xl font-mono font-bold">{formatArrivalTime(event.targetArrivalTime)}</p>
-          </>
+          <div className="mt-3">
+            <SectionLabel>Target Arrival</SectionLabel>
+            <p className="timer-display text-xl text-rally-ice mt-1">
+              {formatArrivalTime(event.targetArrivalTime)}
+            </p>
+          </div>
         )}
         {isTemplate && (
           <p className="text-rally-muted text-sm mt-2">
@@ -524,14 +563,16 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
             order (0 = at target, positive = later, negative = earlier).
           </p>
         )}
-      </section>
+      </Panel>
 
       {nextCaller && isActive && (
-        <section className="p-4 mb-4 bg-rally-accent/20 border border-rally-accent rounded-lg text-center">
-          <p className="text-rally-muted text-xs">NEXT CALLER</p>
-          <p className="text-2xl font-bold">{nextCaller.displayName.toUpperCase()}</p>
-          <p className="text-3xl font-mono font-bold text-rally-accent">{nextCountdown}</p>
-        </section>
+        <Panel launch className="mb-4 text-center">
+          <SectionLabel>Next Caller</SectionLabel>
+          <p className="text-2xl font-bold text-rally-snow mt-1">
+            {nextCaller.displayName.toUpperCase()}
+          </p>
+          <p className="timer-display text-4xl text-rally-launch mt-2">{nextCountdown}</p>
+        </Panel>
       )}
 
       {isActive && (
@@ -559,8 +600,8 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
 
       {isTemplate && (
         <section className="mb-4">
-          <h2 className="text-rally-muted text-xs mb-2">TEMPLATE CALLERS</h2>
-          <div className="flex flex-col gap-2 mb-4">
+          <SectionLabel>Template Callers</SectionLabel>
+          <div className="flex flex-col gap-2 mb-4 mt-2">
             {event.assignments.map((caller) => {
               const sameMarch = event.assignments.filter(
                 (a) =>
@@ -576,10 +617,7 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                 name: caller.displayName,
               };
               return (
-                <div
-                  key={caller.id}
-                  className="p-3 bg-rally-surface border border-rally-border rounded-lg space-y-2"
-                >
+                <Panel key={caller.id} className="space-y-2">
                   <div className="flex justify-between items-start gap-3">
                     <div className="min-w-0 flex-1">
                       <input
@@ -590,10 +628,10 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                             [caller.id]: { ...draft, name: e.target.value },
                           }))
                         }
-                        className="w-full px-2 py-1 bg-rally-bg border border-rally-border rounded font-bold text-sm"
+                        className="input-field !min-h-[40px] !py-2 font-semibold text-sm"
                         aria-label={`Caller name for ${caller.displayName}`}
                       />
-                      <p className="text-rally-muted text-xs font-mono mt-0.5">
+                      <p className="text-rally-muted text-xs font-mono mt-1">
                         March {caller.marchFormatted} {formatOffsetLabel(offset)}
                       </p>
                       {sameMarch.length > 0 && (
@@ -605,14 +643,15 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                     </div>
                     <button
                       onClick={() => removeCaller(caller.id)}
-                      className="text-rally-danger text-xs shrink-0"
+                      className="btn-ghost !min-h-[32px] text-rally-danger text-xs gap-1 shrink-0"
                     >
+                      <Trash2 className="h-3 w-3" aria-hidden />
                       Remove
                     </button>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">
-                    <label className="text-rally-muted text-xs block">
+                    <label className="label-field block">
                       March (M:SS)
                       <input
                         value={draft.march}
@@ -622,13 +661,13 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                             [caller.id]: { ...draft, march: e.target.value },
                           }))
                         }
-                        className="w-full mt-1 px-2 py-1 bg-rally-bg border border-rally-border rounded font-mono text-sm"
+                        className="input-field !min-h-[40px] !py-2 font-mono text-sm mt-1"
                       />
                     </label>
-                    <label className="text-rally-muted text-xs block" title={OFFSET_TOOLTIP}>
-                      Offset (s)
-                      <span className="ml-1 text-rally-accent cursor-help" title={OFFSET_TOOLTIP}>
-                        ⓘ
+                    <label className="label-field block" title={OFFSET_TOOLTIP}>
+                      <span className="inline-flex items-center gap-1">
+                        Offset (s)
+                        <Info className="h-3 w-3 text-rally-ice cursor-help" aria-hidden />
                       </span>
                       <input
                         type="number"
@@ -641,14 +680,14 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                             [caller.id]: { ...draft, offset: e.target.value },
                           }))
                         }
-                        className="w-full mt-1 px-2 py-1 bg-rally-bg border border-rally-border rounded font-mono text-sm"
+                        className="input-field !min-h-[40px] !py-2 font-mono text-sm mt-1"
                         aria-label={`Arrival offset for ${caller.displayName}`}
                       />
                     </label>
                   </div>
                   <p className="text-rally-muted text-[11px] leading-snug">{OFFSET_TOOLTIP}</p>
 
-                  <label className="text-rally-muted text-xs block">
+                  <label className="label-field block">
                     Linked account
                     <select
                       value={draft.userId}
@@ -658,7 +697,7 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                           [caller.id]: { ...draft, userId: e.target.value },
                         }))
                       }
-                      className="w-full mt-1 px-2 py-1 bg-rally-bg border border-rally-border rounded text-sm text-rally-text"
+                      className="input-field !min-h-[40px] !py-2 text-sm mt-1"
                     >
                       <option value="">None (name only)</option>
                       {user && (
@@ -681,19 +720,19 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                     type="button"
                     onClick={() => saveCallerEdits(caller.id)}
                     disabled={savingCallerId === caller.id}
-                    className="w-full py-2 bg-rally-accent text-white text-xs font-bold rounded disabled:opacity-50"
+                    className="btn-primary w-full !min-h-[40px] text-xs"
                   >
-                    {savingCallerId === caller.id ? "SAVING..." : "SAVE CALLER"}
+                    {savingCallerId === caller.id ? "Saving..." : "Save Caller"}
                   </button>
-                </div>
+                </Panel>
               );
             })}
           </div>
 
           {quickAddCandidates.length > 0 && (
-            <div className="p-4 mb-4 bg-rally-surface border border-rally-border rounded-lg">
-              <h3 className="text-rally-muted text-xs mb-2">QUICK ADD REGISTERED</h3>
-              <p className="text-rally-muted text-xs mb-3">
+            <Panel className="mb-4">
+              <SectionLabel>Quick Add Registered</SectionLabel>
+              <p className="text-rally-muted text-xs mb-3 mt-1">
                 One-tap add for accounts already registered. Use Add Caller below for new
                 unregistered names.
               </p>
@@ -704,24 +743,25 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                     type="button"
                     disabled={quickAddingId === c.id}
                     onClick={() => quickAddCaller(c)}
-                    className="flex items-center justify-between px-3 py-2 border border-rally-border rounded text-sm hover:border-rally-accent disabled:opacity-50"
+                    className="btn-secondary !justify-between !min-h-[40px] text-sm disabled:opacity-50"
                   >
                     <span>
                       {c.displayName}{" "}
                       <span className="text-rally-muted text-xs">@{c.username}</span>
                     </span>
-                    <span className="text-rally-accent text-xs font-bold">
-                      {quickAddingId === c.id ? "…" : "+ ADD"}
+                    <span className="text-rally-ice text-xs font-semibold inline-flex items-center gap-1">
+                      <Plus className="h-3 w-3" aria-hidden />
+                      {quickAddingId === c.id ? "…" : "Add"}
                     </span>
                   </button>
                 ))}
               </div>
-            </div>
+            </Panel>
           )}
 
-          <div className="p-4 bg-rally-surface border border-rally-border rounded-lg flex flex-col gap-2">
-            <h3 className="text-rally-muted text-xs">ADD CALLER</h3>
-            <p className="text-rally-muted text-xs">
+          <Panel className="flex flex-col gap-2">
+            <SectionLabel>Add Caller</SectionLabel>
+            <p className="text-rally-muted text-xs mt-1">
               For new callers who have not registered yet. Registered accounts: use Quick Add
               above.
             </p>
@@ -729,20 +769,18 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
               placeholder="Caller name (e.g. Alice)"
               value={callerName}
               onChange={(e) => setCallerName(e.target.value)}
-              className="px-3 py-2 bg-rally-bg border border-rally-border rounded"
+              className="input-field"
             />
             <input
               value={addMarch}
               onChange={(e) => setAddMarch(e.target.value)}
               placeholder="March (M:SS)"
-              className="px-3 py-2 bg-rally-bg border border-rally-border rounded"
+              className="input-field font-mono"
             />
             <div>
-              <label className="text-rally-muted text-xs" title={OFFSET_TOOLTIP}>
-                ARRIVAL OFFSET (seconds){" "}
-                <span className="text-rally-accent cursor-help" title={OFFSET_TOOLTIP}>
-                  ⓘ
-                </span>
+              <label className="label-field inline-flex items-center gap-1" title={OFFSET_TOOLTIP}>
+                Arrival Offset (seconds)
+                <Info className="h-3 w-3 text-rally-ice cursor-help" aria-hidden />
               </label>
               <input
                 type="number"
@@ -750,7 +788,7 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                 max={3600}
                 value={addOffset}
                 onChange={(e) => setAddOffset(e.target.value)}
-                className="w-full px-3 py-2 bg-rally-bg border border-rally-border rounded font-mono"
+                className="input-field font-mono"
               />
               <p className="text-rally-muted text-xs mt-1">{OFFSET_TOOLTIP}</p>
             </div>
@@ -763,7 +801,7 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
             <select
               value={linkUserId}
               onChange={(e) => setLinkUserId(e.target.value)}
-              className="px-3 py-2 bg-rally-bg border border-rally-border rounded text-rally-text"
+              className="input-field"
             >
               <option value="">Link push account (optional)</option>
               {user && (
@@ -784,39 +822,40 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
               Link a caller, admin, or developer account to send push notifications for that
               slot.
             </p>
-            <button
-              onClick={addCaller}
-              className="py-2 border border-rally-border rounded font-bold text-sm"
-            >
-              ADD TO TEMPLATE
+            <button onClick={addCaller} className="btn-secondary font-semibold text-sm">
+              Add to Template
             </button>
-          </div>
+          </Panel>
         </section>
       )}
 
       {!isTemplate && !isActive && (
-        <section className="mb-4 overflow-x-auto">
+        <Panel className="mb-4 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-rally-muted text-left text-xs">
-                <th className="pb-2">Caller</th>
-                <th className="pb-2">March</th>
-                <th className="pb-2">Launch</th>
-                <th className="pb-2">Status</th>
+              <tr className="text-rally-muted text-left text-xs border-b border-rally-border">
+                <th className="pb-2 font-semibold">Caller</th>
+                <th className="pb-2 font-semibold">March</th>
+                <th className="pb-2 font-semibold">Launch</th>
+                <th className="pb-2 font-semibold">Status</th>
               </tr>
             </thead>
             <tbody>
               {event.assignments.map((a) => (
                 <tr key={a.id} className="border-t border-rally-border">
-                  <td className="py-2">{a.displayName}</td>
-                  <td className="py-2 font-mono">{a.marchFormatted}</td>
+                  <td className="py-2 text-rally-snow">{a.displayName}</td>
+                  <td className="py-2 font-mono text-rally-ice">{a.marchFormatted}</td>
                   <td className="py-2 font-mono">{formatArrivalTime(a.launchTime)}</td>
-                  <td className="py-2 text-xs">{statusLabel(a.status)}</td>
+                  <td className="py-2">
+                    <StatusBadge tone={statusToneForAssignment(a.status)}>
+                      {statusLabel(a.status)}
+                    </StatusBadge>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </section>
+        </Panel>
       )}
 
       {(isActive || isFinished) && event.assignments.length > 0 && (
@@ -824,9 +863,10 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
           <button
             onClick={restartRally}
             disabled={starting}
-            className="w-full py-6 bg-rally-success text-white font-bold text-2xl rounded-xl disabled:opacity-50"
+            className="btn-success w-full !py-6 !text-2xl !font-bold rounded-xl disabled:opacity-50"
           >
-            {starting ? "STARTING..." : isFinished ? "GO AGAIN" : "RESTART RALLY"}
+            <Rocket className="h-6 w-6" aria-hidden />
+            {starting ? "Starting..." : isFinished ? "Go Again" : "Restart Rally"}
           </button>
           <p className="text-rally-muted text-xs text-center -mt-1">
             Reruns this template immediately from the current server time.
@@ -838,9 +878,9 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
         <section className="flex flex-col gap-3 mb-4">
           <button
             onClick={resetTemplate}
-            className="w-full py-4 bg-rally-accent/20 border border-rally-accent text-rally-accent font-bold rounded-lg"
+            className="btn-secondary w-full !py-4 !border-rally-ice/50 !text-rally-ice font-bold"
           >
-            START TEMPLATE AGAIN
+            Start Template Again
           </button>
           <p className="text-rally-muted text-xs text-center -mt-1">
             Clears launch times so you can edit callers before pressing GO.
@@ -852,18 +892,20 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
         <button
           onClick={goRally}
           disabled={starting}
-          className="w-full py-6 mb-4 bg-rally-success text-white font-bold text-2xl rounded-xl disabled:opacity-50"
+          className="btn-success w-full !py-6 mb-4 !text-3xl !font-bold rounded-xl disabled:opacity-50 motion-safe:animate-launch-pulse"
         >
-          {starting ? "STARTING..." : "GO"}
+          <Rocket className="h-7 w-7" aria-hidden />
+          {starting ? "Starting..." : "GO"}
         </button>
       )}
 
       {canEdit && (
         <button
           onClick={() => deleteRally(false)}
-          className="w-full py-3 mb-3 bg-rally-danger/20 border border-rally-danger text-rally-danger font-bold rounded-lg text-sm"
+          className="btn-danger w-full !py-3 mb-3 !bg-rally-danger/15 !border !border-rally-danger/50 !text-rally-danger text-sm"
         >
-          DELETE TEMPLATE
+          <Trash2 className="h-4 w-4" aria-hidden />
+          Delete Template
         </button>
       )}
 
@@ -873,9 +915,9 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
             <>
               <button
                 onClick={resetTemplate}
-                className="w-full py-4 bg-rally-warning/20 border border-rally-warning text-rally-warning font-bold rounded-lg"
+                className="btn-secondary w-full !py-4 !border-rally-warning/50 !text-rally-warning font-bold"
               >
-                RESET TO TEMPLATE
+                Reset to Template
               </button>
               <p className="text-rally-muted text-xs text-center -mt-1">
                 Clears launch times so you can edit callers and press GO again.
@@ -884,39 +926,45 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
           )}
           <button
             onClick={() => deleteRally(false)}
-            className="w-full py-3 bg-rally-danger/20 border border-rally-danger text-rally-danger font-bold rounded-lg text-sm"
+            className="btn-danger w-full !py-3 !bg-rally-danger/15 !border !border-rally-danger/50 !text-rally-danger text-sm"
           >
-            {isActive ? "STOP & DELETE RALLY" : "DELETE RALLY"}
+            <Trash2 className="h-4 w-4" aria-hidden />
+            {isActive ? "Stop & Delete Rally" : "Delete Rally"}
           </button>
         </section>
       )}
 
       {event.notificationMonitor && (
         <section className="mb-8">
-          <h2 className="text-rally-muted text-xs mb-2">CALLER PUSH STATUS</h2>
-          <p className="text-rally-muted text-xs mb-3">
+          <SectionLabel>Caller Push Status</SectionLabel>
+          <p className="text-rally-muted text-xs mb-3 mt-1">
             Each caller must be linked to an account, and that account must enable notifications
             on their device. Use the section above to register this phone first.
           </p>
           {event.notificationMonitor.map((m) => (
-            <div
-              key={m.assignmentId}
-              className="p-3 mb-2 bg-rally-surface border border-rally-border rounded-lg text-sm"
-            >
+            <Panel key={m.assignmentId} className="mb-2 !p-3 text-sm">
               <div className="flex justify-between items-start gap-2">
-                <span className="font-bold">{m.callerName}</span>
-                <span className={m.hasActiveDevice ? "text-rally-success" : "text-rally-muted"}>
+                <span className="font-bold text-rally-snow">{m.callerName}</span>
+                <StatusBadge
+                  tone={
+                    !m.hasPushAccount
+                      ? "neutral"
+                      : m.hasActiveDevice
+                        ? "success"
+                        : "warning"
+                  }
+                >
                   {!m.hasPushAccount
                     ? "No account linked"
                     : m.hasActiveDevice
-                      ? `✓ ${m.devices.map((d) => d.platform).join(", ")}`
+                      ? m.devices.map((d) => d.platform).join(", ")
                       : "Account linked, no device"}
-                </span>
+                </StatusBadge>
               </div>
               {!m.hasPushAccount && user && (
                 <button
                   onClick={() => linkMyAccount(m.assignmentId)}
-                  className="mt-2 text-rally-accent text-xs font-bold"
+                  className="btn-ghost text-xs font-semibold text-rally-ice mt-2 !px-0"
                 >
                   Link my account ({user.displayName})
                 </button>
@@ -929,12 +977,13 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
               {m.notifications.length > 0 && (
                 <div className="mt-2 pt-2 border-t border-rally-border space-y-1">
                   {m.notifications.map((n) => {
-                    const isOverdue =
+                    const isOverdue = Boolean(
                       n.status === "PENDING" &&
                       n.scheduledAt &&
-                      new Date(n.scheduledAt).getTime() < correctedNow() - 2000;
+                      new Date(n.scheduledAt).getTime() < correctedNow() - 2000
+                    );
                     return (
-                      <div key={n.type} className="flex justify-between text-xs gap-2">
+                      <div key={n.type} className="flex justify-between text-xs gap-2 items-center">
                         <span className="text-rally-muted">
                           {n.type === "RALLY_STARTED"
                             ? "Started"
@@ -942,19 +991,7 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                               ? "Throw"
                               : n.type.replace("WARNING_", "") + "s"}
                         </span>
-                        <span
-                          className={
-                            n.status === "SENT"
-                              ? "text-rally-success"
-                              : n.status === "SKIPPED"
-                                ? "text-rally-muted"
-                                : n.status === "PENDING" && isOverdue
-                                  ? "text-rally-danger"
-                                  : n.status === "PENDING"
-                                    ? "text-rally-warning"
-                                    : "text-rally-danger"
-                          }
-                        >
+                        <StatusBadge tone={notificationStatusTone(n.status, isOverdue)}>
                           {n.status === "SENT" && n.latencyMs != null
                             ? `sent (${n.latencyMs >= 0 ? "+" : ""}${n.latencyMs}ms)`
                             : n.status === "SKIPPED"
@@ -964,16 +1001,16 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                               : n.status === "PENDING" && isOverdue
                                 ? "overdue"
                                 : n.status.toLowerCase()}
-                        </span>
+                        </StatusBadge>
                       </div>
                     );
                   })}
                 </div>
               )}
-            </div>
+            </Panel>
           ))}
         </section>
       )}
-    </main>
+    </AppShell>
   );
 }

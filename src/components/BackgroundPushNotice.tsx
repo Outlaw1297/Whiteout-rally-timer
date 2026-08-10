@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { AlertTriangle, Battery, Bell } from "lucide-react";
 import {
   hasAckedAndroidPushFix,
   openChromeAppSettings,
@@ -24,7 +25,6 @@ export function BackgroundPushNotice() {
         setShow(false);
         return;
       }
-      // Show whenever they're on Android and haven't confirmed battery fix.
       setShow(true);
     };
 
@@ -37,36 +37,39 @@ export function BackgroundPushNotice() {
 
   return (
     <div className="mx-auto max-w-lg px-4 pt-2">
-      <div className="rounded-lg border border-rally-warning/60 bg-rally-warning/10 p-3 text-sm">
-        <p className="font-bold text-rally-warning text-xs tracking-wide mb-1">
-          ANDROID · BACKGROUND ALERTS
+      <div className="rounded-xl border border-rally-warning/60 bg-rally-warning/10 p-3 text-sm">
+        <p className="font-semibold text-rally-warning text-xs tracking-wide mb-1 inline-flex items-center gap-1.5">
+          <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
+          Android · Background Alerts
         </p>
         <p className="text-rally-text text-xs leading-relaxed mb-2">
           If alerts only work while Rally Timer is open, Chrome is being paused. Set{" "}
-          <span className="font-bold">
+          <span className="font-semibold">
             {isStandalonePWA() ? "Rally Timer and Chrome" : "Chrome"}
           </span>{" "}
-          → Battery → <span className="font-bold">Unrestricted</span>, then leave the app and
+          → Battery → <span className="font-semibold">Unrestricted</span>, then leave the app and
           send a test.
         </p>
         <div className="flex flex-col gap-2">
           <button
             type="button"
             onClick={openChromeAppSettings}
-            className="w-full py-2 bg-rally-accent text-white font-bold rounded-lg text-xs"
+            className="btn-primary w-full !min-h-[36px] text-xs gap-1"
           >
+            <Battery className="h-3.5 w-3.5" aria-hidden />
             Open Chrome app info
           </button>
           <button
             type="button"
             onClick={openAppNotificationSettings}
-            className="w-full py-2 bg-rally-surface border border-rally-border font-bold rounded-lg text-xs"
+            className="btn-secondary w-full !min-h-[36px] text-xs gap-1"
           >
+            <Bell className="h-3.5 w-3.5" aria-hidden />
             Open notification settings
           </button>
           <Link
             href="/fix-notifications"
-            className="text-center text-rally-accent text-xs font-bold"
+            className="nav-link text-xs font-semibold justify-center"
           >
             Full background-fix steps →
           </Link>

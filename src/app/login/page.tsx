@@ -3,6 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
+import { BrandLogo } from "@/components/brand/BrandLogo";
+import { AppShell } from "@/components/ui/AppShell";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -33,55 +36,65 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center px-4 py-8">
-      <header className="mb-8 text-center">
-        <h1 className="text-2xl font-bold text-rally-accent mb-1">
-          ⚔️ WHITEOUT RALLY TIMER
-        </h1>
+    <AppShell className="flex flex-col items-center justify-center page-enter !max-w-md">
+      <header className="mb-8 text-center w-full">
+        <div className="flex justify-center mb-4">
+          <BrandLogo size="lg" />
+        </div>
         <p className="text-rally-muted text-sm">Coordinate multi-caller rallies</p>
-        <p className="text-rally-muted text-xs mt-2 max-w-xs mx-auto">
+        <p className="text-rally-muted text-xs mt-2 max-w-xs mx-auto leading-relaxed">
           Admins run rallies; callers receive their launch times. On phones, install the app
           (iPhone: Safari · Android: Chrome) so throw alerts work.
         </p>
       </header>
 
-      <form onSubmit={handleSubmit} className="w-full max-w-sm flex flex-col gap-4">
-        <Link href="/" className="text-rally-muted text-sm hover:text-rally-accent -mb-2">
-          ← Back to schedule
+      <form
+        onSubmit={handleSubmit}
+        className="w-full flex flex-col gap-4 rounded-xl border border-rally-border bg-rally-surface p-5"
+      >
+        <Link href="/" className="nav-link gap-1.5 text-xs -mt-1">
+          <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+          Back to schedule
         </Link>
         <div>
-          <label className="block text-rally-muted text-xs mb-1">USERNAME</label>
+          <label className="label-field" htmlFor="username">
+            Username
+          </label>
           <input
+            id="username"
             type="text"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             autoComplete="username"
-            className="w-full px-4 py-3 bg-rally-surface border border-rally-border rounded-lg text-rally-text"
+            className="input-field"
             required
           />
         </div>
         <div>
-          <label className="block text-rally-muted text-xs mb-1">PASSWORD</label>
+          <label className="label-field" htmlFor="password">
+            Password
+          </label>
           <input
+            id="password"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             autoComplete="current-password"
-            className="w-full px-4 py-3 bg-rally-surface border border-rally-border rounded-lg text-rally-text"
+            className="input-field"
             required
           />
         </div>
 
-        {error && <p className="text-rally-danger text-sm text-center">{error}</p>}
+        {error && (
+          <p className="text-rally-danger text-sm text-center" role="alert">
+            {error}
+          </p>
+        )}
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full py-4 bg-rally-accent hover:bg-blue-600 disabled:opacity-50 text-white font-bold text-lg rounded-lg"
-        >
-          {loading ? "LOGGING IN..." : "LOG IN"}
+        <button type="submit" disabled={loading} className="btn-primary w-full !text-base">
+          {loading ? "Logging in…" : "Log in"}
         </button>
       </form>
-    </main>
+    </AppShell>
   );
 }

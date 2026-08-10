@@ -24,15 +24,15 @@ export function GlobalSyncedClock() {
   }, [correctedNow]);
 
   return (
-    <div className="sticky top-0 z-40 border-b border-rally-border bg-rally-bg/95 backdrop-blur-sm">
-      <div className="max-w-lg mx-auto px-4 py-2 flex items-center justify-between gap-3">
+    <div className="sticky top-0 z-40 border-b border-rally-border/80 bg-rally-bg/90 backdrop-blur-md pt-[env(safe-area-inset-top,0px)]">
+      <div className="max-w-5xl mx-auto px-4 py-2 flex items-center justify-between gap-3">
         <div className="flex items-baseline gap-2 min-w-0">
-          <span className="text-rally-muted text-[10px] font-bold tracking-wide shrink-0">
-            SERVER TIME
+          <span className="text-rally-muted text-[10px] font-semibold tracking-[0.16em] uppercase shrink-0">
+            Server
           </span>
-          <span className="font-mono font-bold text-sm tabular-nums">{display}</span>
+          <span className="timer-display text-sm text-rally-snow">{display}</span>
         </div>
-        <ConnectionIndicator isLive={isLive} label={isLive ? "SYNCED" : "SYNCING"} />
+        <ConnectionIndicator isLive={isLive} label={isLive ? "Synced" : "Syncing"} />
       </div>
     </div>
   );

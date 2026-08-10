@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Whiteout Rally Timer">
+  <rect width="512" height="512" rx="96" fill="#061018"/>
+  <circle cx="256" cy="220" r="118" fill="none" stroke="#5EC8F0" stroke-width="22"/>
+  <path d="M256 102 v36" stroke="#5EC8F0" stroke-width="22" stroke-linecap="round"/>
+  <circle cx="256" cy="220" r="86" fill="none" stroke="#F0F7FC" stroke-width="14" stroke-dasharray="240 40" stroke-dashoffset="-20"/>
+  <g transform="translate(256 220)" stroke="#5EC8F0" stroke-width="10" stroke-linecap="round">
+    <path d="M0-34 V34 M-34 0 H34"/>
+    <path d="M-24-24 L24 24 M24-24 L-24 24"/>
+    <circle r="8" fill="#5EC8F0" stroke="none"/>
+  </g>
+  <path d="M96 400 L176 300 L236 360 L300 250 L416 400 Z" fill="none" stroke="#F0F7FC" stroke-width="18" stroke-linejoin="round"/>
+  <path d="M176 300 L210 340 L236 360" fill="none" stroke="#8AD9F5" stroke-width="10" stroke-linejoin="round" opacity="0.7"/>
+</svg>

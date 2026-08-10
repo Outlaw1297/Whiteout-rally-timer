@@ -34,7 +34,7 @@ export function estimateRoundTripLatency(
 }
 
 export function formatCountdown(remainingMs: number): string {
-  if (remainingMs <= 0) return "🚨 RALLY NOW";
+  if (remainingMs <= 0) return "LAUNCH NOW";
 
   const totalSeconds = remainingMs / 1000;
   const minutes = Math.floor(totalSeconds / 60);

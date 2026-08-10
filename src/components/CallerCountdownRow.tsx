@@ -2,6 +2,8 @@
 
 import { useCountdown } from "@/hooks/useCountdown";
 import { formatArrivalTime, statusLabel } from "@/lib/display";
+import { StatusBadge, statusToneForAssignment } from "@/components/ui/StatusBadge";
+import { SectionLabel } from "@/components/ui/AppShell";
 
 export function CallerCountdownRow({
   displayNames,
@@ -24,29 +26,41 @@ export function CallerCountdownRow({
 
   return (
     <div
-      className={`p-3 rounded-lg border ${
-        highlight || isNow
-          ? "bg-rally-accent/20 border-rally-accent"
-          : "bg-rally-surface border-rally-border"
+      className={`rounded-xl border p-4 transition-colors ${
+        isNow
+          ? "bg-rally-launch/15 border-rally-launch motion-safe:animate-launch-pulse"
+          : highlight
+            ? "bg-rally-ice/10 border-rally-ice/50"
+            : "bg-rally-surface border-rally-border"
       }`}
     >
-      <div className="flex justify-between items-start">
-        <div>
-          <p className="font-bold">{displayName}</p>
-          <p className="text-rally-muted text-xs font-mono">March {marchFormatted}</p>
+      <div className="flex justify-between items-start gap-3">
+        <div className="min-w-0">
+          <p className="font-bold text-rally-snow truncate">{displayName}</p>
+          <p className="text-rally-muted text-xs font-mono mt-0.5">
+            March {marchFormatted}
+          </p>
         </div>
-        <span className="text-xs">{statusLabel(status)}</span>
+        <StatusBadge tone={statusToneForAssignment(status, isNow)} pulse={isNow}>
+          {isNow ? "Launch Now" : statusLabel(status)}
+        </StatusBadge>
       </div>
       {launchTime ? (
-        <div className="mt-2">
-          <p className="text-rally-muted text-xs">THROW RALLY IN</p>
-          <p className={`text-2xl font-mono font-bold ${isNow ? "text-rally-danger animate-pulse" : "text-rally-accent"}`}>
-            {isNow ? "🚨 THROW RALLY NOW" : display}
+        <div className="mt-3">
+          <SectionLabel>{isNow ? "Action" : "Throw rally in"}</SectionLabel>
+          {isNow ? (
+            <p className="mt-1 text-3xl font-black uppercase tracking-tight text-rally-launch">
+              Launch Now
+            </p>
+          ) : (
+            <p className="timer-display text-3xl text-rally-ice mt-1">{display}</p>
+          )}
+          <p className="text-rally-muted text-xs mt-1.5 font-mono">
+            Launch {formatArrivalTime(launchTime)}
           </p>
-          <p className="text-rally-muted text-xs mt-1 font-mono">Launch {formatArrivalTime(launchTime)}</p>
         </div>
       ) : (
-        <p className="text-rally-muted text-sm mt-2">Waiting for GO</p>
+        <p className="text-rally-muted text-sm mt-3">Waiting for GO</p>
       )}
     </div>
   );

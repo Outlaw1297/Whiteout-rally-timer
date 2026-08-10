@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Clock } from "lucide-react";
 import { formatTimeLocal } from "@/lib/time";
 import { ConnectionIndicator } from "@/components/ConnectionIndicator";
+import { Panel, SectionLabel } from "@/components/ui/AppShell";
 
 export function ServerClock({
   correctedNow,
@@ -26,9 +28,10 @@ export function ServerClock({
   if (compact) {
     return (
       <div className="flex items-center justify-between gap-3 text-sm font-mono">
-        <div>
-          <span className="text-rally-muted text-xs mr-2">SERVER</span>
-          <span className="font-bold">{display}</span>
+        <div className="inline-flex items-center gap-2">
+          <Clock className="h-3.5 w-3.5 text-rally-muted" aria-hidden />
+          <span className="text-rally-muted text-xs">Server</span>
+          <span className="font-semibold text-rally-snow">{display}</span>
         </div>
         {isLive !== undefined && <ConnectionIndicator isLive={isLive} />}
       </div>
@@ -36,16 +39,19 @@ export function ServerClock({
   }
 
   return (
-    <section className="p-4 mb-4 bg-rally-surface border border-rally-border rounded-lg">
+    <Panel className="mb-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-rally-muted text-xs">SERVER TIME</p>
-          <p className="text-2xl font-mono font-bold">{display}</p>
+          <div className="flex items-center gap-2">
+            <Clock className="h-4 w-4 text-rally-ice" aria-hidden />
+            <SectionLabel>Server Time</SectionLabel>
+          </div>
+          <p className="timer-display text-2xl mt-1">{display}</p>
         </div>
         {isLive !== undefined && (
           <ConnectionIndicator isLive={isLive} label={isLive ? "SYNCED" : "SYNCING"} />
         )}
       </div>
-    </section>
+    </Panel>
   );
 }

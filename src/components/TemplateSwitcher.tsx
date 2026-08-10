@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { LayoutGrid, Pin, PinOff, Rocket, X } from "lucide-react";
 import type { SerializedEvent } from "@/hooks/useEventSocket";
+import { StatusBadge, statusToneForEvent } from "@/components/ui/StatusBadge";
 
 interface TemplateSwitcherProps {
   currentEventId?: string;
@@ -70,8 +72,10 @@ export function TemplateSwitcher({ currentEventId, onChanged }: TemplateSwitcher
     return (
       <div
         key={event.id}
-        className={`p-3 rounded-lg border ${
-          active ? "border-rally-accent bg-rally-accent/10" : "border-rally-border bg-rally-bg"
+        className={`p-3 rounded-xl border ${
+          active
+            ? "border-rally-ice/40 bg-rally-ice/10"
+            : "border-rally-border bg-rally-bg"
         }`}
       >
         <div className="flex items-start justify-between gap-2">
@@ -80,21 +84,28 @@ export function TemplateSwitcher({ currentEventId, onChanged }: TemplateSwitcher
             onClick={() => setOpen(false)}
             className="min-w-0 flex-1"
           >
-            <p className="font-bold text-sm truncate">{event.name}</p>
-            <p className="text-rally-muted text-xs mt-0.5">
-              {event.status} · {event.assignments.length} caller
-              {event.assignments.length !== 1 ? "s" : ""}
-            </p>
+            <p className="font-bold text-sm truncate text-rally-snow">{event.name}</p>
+            <div className="flex items-center gap-2 mt-0.5">
+              <StatusBadge tone={statusToneForEvent(event.status)}>{event.status}</StatusBadge>
+              <span className="text-rally-muted text-xs">
+                {event.assignments.length} caller
+                {event.assignments.length !== 1 ? "s" : ""}
+              </span>
+            </div>
           </Link>
           <button
             type="button"
             onClick={() => togglePin(event.id, !!event.pinned)}
-            className={`text-xs px-2 py-1 rounded ${
+            className={`btn-ghost !min-h-[32px] !py-1 !px-2 text-xs ${
               event.pinned ? "text-rally-warning" : "text-rally-muted"
             }`}
             title={event.pinned ? "Unpin" : "Pin"}
           >
-            {event.pinned ? "★" : "☆"}
+            {event.pinned ? (
+              <Pin className="h-3.5 w-3.5" aria-hidden />
+            ) : (
+              <PinOff className="h-3.5 w-3.5" aria-hidden />
+            )}
           </button>
         </div>
         {(event.status === "READY" || event.status === "DRAFT" || event.status === "COMPLETED") &&
@@ -103,9 +114,10 @@ export function TemplateSwitcher({ currentEventId, onChanged }: TemplateSwitcher
               type="button"
               disabled={startingId === event.id}
               onClick={() => startOne(event.id)}
-              className="mt-2 w-full py-2 text-xs font-bold rounded bg-rally-success/20 border border-rally-success text-rally-success disabled:opacity-50"
+              className="btn-success mt-2 w-full !min-h-[36px] !py-2 text-xs gap-1"
             >
-              {startingId === event.id ? "STARTING..." : "GO"}
+              <Rocket className="h-3.5 w-3.5" aria-hidden />
+              {startingId === event.id ? "Starting..." : "GO"}
             </button>
           )}
       </div>
@@ -117,30 +129,34 @@ export function TemplateSwitcher({ currentEventId, onChanged }: TemplateSwitcher
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="fixed right-0 top-1/3 z-40 writing-mode-vertical px-2 py-4 bg-rally-surface border border-r-0 border-rally-border rounded-l-lg text-rally-accent text-xs font-bold shadow-lg"
+        className="fixed right-0 top-1/3 z-40 writing-mode-vertical px-2 py-4 bg-rally-surface border border-r-0 border-rally-border rounded-l-xl text-rally-ice text-xs font-semibold shadow-lg hover:bg-rally-surface-2 transition-colors"
         style={{ writingMode: "vertical-rl", textOrientation: "mixed" }}
         aria-label="Open templates"
       >
-        TEMPLATES
+        <span className="inline-flex items-center gap-1">
+          <LayoutGrid className="h-3.5 w-3.5" aria-hidden />
+          Templates
+        </span>
       </button>
 
       {open && (
         <div className="fixed inset-0 z-50 flex justify-end">
           <button
             type="button"
-            className="absolute inset-0 bg-black/50"
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             aria-label="Close templates"
             onClick={() => setOpen(false)}
           />
           <aside className="relative w-full max-w-sm h-full bg-rally-bg border-l border-rally-border p-4 overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-bold text-rally-accent">Quick Templates</h2>
+              <h2 className="font-bold text-rally-ice">Quick Templates</h2>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="text-rally-muted text-sm"
+                className="btn-ghost !min-h-[36px] !p-2"
+                aria-label="Close"
               >
-                Close
+                <X className="h-4 w-4" aria-hidden />
               </button>
             </div>
 
@@ -152,14 +168,18 @@ export function TemplateSwitcher({ currentEventId, onChanged }: TemplateSwitcher
 
             {pinned.length > 0 && (
               <section className="mb-4">
-                <p className="text-rally-muted text-xs mb-2">PINNED</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-rally-muted mb-2">
+                  Pinned
+                </p>
                 <div className="flex flex-col gap-2">{pinned.map(renderRow)}</div>
               </section>
             )}
 
             {rest.length > 0 && (
               <section>
-                <p className="text-rally-muted text-xs mb-2">ALL TEMPLATES</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-rally-muted mb-2">
+                  All Templates
+                </p>
                 <div className="flex flex-col gap-2">{rest.map(renderRow)}</div>
               </section>
             )}
@@ -167,7 +187,7 @@ export function TemplateSwitcher({ currentEventId, onChanged }: TemplateSwitcher
             <Link
               href="/admin"
               onClick={() => setOpen(false)}
-              className="mt-6 block text-center text-rally-accent text-sm font-bold"
+              className="mt-6 block text-center nav-link text-sm font-semibold justify-center"
             >
               Manage all templates →
             </Link>

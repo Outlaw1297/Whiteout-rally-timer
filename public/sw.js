@@ -26,15 +26,24 @@ function broadcastToClients(clientList, payload) {
   }
 }
 
-/** True when some app window is focused/visible — otherwise treat as background. */
-function hasForegroundClient(clientList) {
-  return clientList.some(
-    (c) => c.focused || (typeof c.visibilityState === "string" && c.visibilityState === "visible")
-  );
+/**
+ * Only treat a truly focused window as foreground.
+ * Fold/multi-window "visible but unfocused" must still get a real OS alert
+ * and must not auto-dismiss banners.
+ */
+function hasFocusedClient(clientList) {
+  return clientList.some((c) => c.focused);
 }
 
-async function clearOtherRallyNotifications(assignmentId, rallyId, keepTag) {
+/**
+ * Close older notifications for THIS caller only, after a delay so Samsung
+ * One UI can finish showing the heads-up / brief pop-up first.
+ * Never clear the whole rally — that was cancelling banners on Fold.
+ */
+async function clearPriorCallerNotifications(assignmentId, keepTag) {
+  if (!assignmentId) return;
   try {
+    await sleep(2800);
     const notes = await Promise.race([
       self.registration.getNotifications(),
       sleep(400).then(() => []),
@@ -42,13 +51,7 @@ async function clearOtherRallyNotifications(assignmentId, rallyId, keepTag) {
     for (const note of notes) {
       if (keepTag && note.tag === keepTag) continue;
       const data = note.data || {};
-      const sameAssignment = assignmentId && data.assignmentId === assignmentId;
-      const sameRally = rallyId && data.rallyId === rallyId;
-      const isRallyAlert =
-        data.notificationType &&
-        data.notificationType !== "CALIBRATION" &&
-        !String(note.tag || "").startsWith("calibration-");
-      if (sameAssignment || (sameRally && isRallyAlert)) {
+      if (data.assignmentId === assignmentId) {
         note.close();
       }
     }
@@ -84,13 +87,24 @@ function presentForLatency(data, receivedAtMs) {
 /**
  * Chrome on Android can reject richer notification options. Always try to show
  * something — background delivery depends on this succeeding (userVisibleOnly).
+ * Prefer a simple options set first — Samsung heads-up is more reliable without
+ * action buttons / exotic vibrate patterns.
  */
 async function showRallyNotification(title, options) {
+  // Pass 1: heads-up friendly (no actions)
+  try {
+    const { actions: _a, ...noActions } = options;
+    await self.registration.showNotification(title, noActions);
+    return true;
+  } catch {
+    /* try with actions / full set */
+  }
+
   try {
     await self.registration.showNotification(title, options);
     return true;
   } catch {
-    /* try stripped options */
+    /* try stripped */
   }
 
   try {
@@ -108,7 +122,6 @@ async function showRallyNotification(title, options) {
       badge: "/icons/icon-192.png",
       tag: options.tag,
       renotify: true,
-      requireInteraction: !!options.requireInteraction,
       data: options.data,
     });
     return true;
@@ -173,35 +186,38 @@ self.addEventListener("push", (event) => {
     url,
   };
 
+  /**
+   * STABLE TAG + renotify: replace the previous alert for this caller instead of
+   * stacking unique rows. Unique tags (with timestamps) caused Android/Samsung to
+   * rate-limit heads-up — later alerts only appeared in the shade / quick panel.
+   */
   const tag = isCalibration
-    ? `calibration-${isLivePing ? "live" : "setup"}-${calibrationIndex}-${receivedAtMs}`
-    : `rally-${rallyId}-${notificationType}-${assignmentId}-${receivedAtMs}`;
+    ? `calibration-${isLivePing ? "live" : "setup"}-${assignmentId || "device"}`
+    : assignmentId
+      ? `rally-caller-${assignmentId}`
+      : `rally-event-${rallyId || "general"}`;
 
   event.waitUntil(
     (async () => {
       const clientList = await listWindowClients();
-      const inForeground = hasForegroundClient(clientList);
+      const inForeground = hasFocusedClient(clientList);
 
-      // Only skip the OS banner for silent live pings while the app is actually open.
+      // Only skip the OS banner for silent live pings while the app is focused.
       const skipBanner = isLivePing && preferSilent && inForeground;
-
-      // Background: keep banners sticky so Pixel doesn't bury them.
-      const sticky = !preferSilent && (isLaunch || !inForeground);
 
       const notificationOptions = {
         body: preferSilent && isLivePing ? " " : body,
         icon: "/icons/icon-192.png",
         badge: "/icons/icon-192.png",
         tag,
-        renotify: true,
-        requireInteraction: sticky,
+        renotify: !preferSilent,
+        // Keep THROW sticky when possible; Android mostly ignores this, but it
+        // does not hurt heads-up when Pop-up is enabled.
+        requireInteraction: !preferSilent && isLaunch,
         silent: preferSilent,
         timestamp: receivedAtMs,
-        vibrate: preferSilent
-          ? []
-          : isLaunch
-            ? [600, 120, 600, 120, 600, 120, 600]
-            : [300, 100, 300],
+        // Short patterns — long multi-pulse vibrates are less reliable on One UI.
+        vibrate: preferSilent ? [] : isLaunch ? [400, 120, 400] : [220, 100, 220],
         actions: preferSilent
           ? []
           : [
@@ -226,6 +242,8 @@ self.addEventListener("push", (event) => {
           await self.registration.showNotification(title || "Whiteout Rally", {
             body: body || "Rally notification",
             icon: "/icons/icon-192.png",
+            tag,
+            renotify: true,
           });
         }
       }
@@ -233,11 +251,13 @@ self.addEventListener("push", (event) => {
       // Then notify open pages (in-app banner when foreground).
       broadcastToClients(clientList, payload);
 
-      if (!preferSilent && !skipBanner) {
-        void clearOtherRallyNotifications(assignmentId, rallyId, tag);
+      // Delayed, caller-scoped cleanup only (stable tags already replace in place).
+      if (!preferSilent && !skipBanner && assignmentId) {
+        void clearPriorCallerNotifications(assignmentId, tag);
       }
 
-      // Only auto-dismiss while foreground — background users need time to see it.
+      // Auto-dismiss only when the PWA is actually focused — never while gaming
+      // in another app (Fold cover / multi-window visible-but-unfocused).
       if (inForeground && notificationType === "RALLY_STARTED" && !preferSilent) {
         setTimeout(() => {
           self.registration

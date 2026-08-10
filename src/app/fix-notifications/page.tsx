@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   AndroidNotificationFix,
   PixelHeadsUpGuide,
+  SamsungHeadsUpGuide,
   detectOem,
   openAppNotificationSettings,
   openBatteryOptimizationSettings,
@@ -18,6 +19,7 @@ export default function FixNotificationsPage() {
   }, []);
 
   const isPixel = oem === "pixel";
+  const isSamsung = oem === "samsung";
 
   return (
     <main className="min-h-screen px-4 py-8 max-w-lg mx-auto">
@@ -26,15 +28,21 @@ export default function FixNotificationsPage() {
       </Link>
 
       <p className="text-rally-warning text-[10px] font-bold tracking-widest mt-4 mb-1">
-        {isPixel ? "GOOGLE PIXEL" : "ANDROID FIX"}
+        {isPixel ? "GOOGLE PIXEL" : isSamsung ? "SAMSUNG / GALAXY FOLD" : "ANDROID FIX"}
       </p>
       <h1 className="text-2xl font-bold mb-2">
-        {isPixel ? "Pixel: alerts only work when app is open?" : "Make rally alerts pop on screen"}
+        {isPixel
+          ? "Pixel: alerts only work when app is open?"
+          : isSamsung
+            ? "Samsung: alerts only in the quick panel?"
+            : "Make rally alerts pop on screen"}
       </h1>
       <p className="text-rally-muted text-sm mb-6 leading-relaxed">
         {isPixel
           ? "If you see alerts inside Rally Timer but nothing when the app is closed or in Whiteout, Pixel is pausing Chrome. Fix battery + Pop on screen below, then test with the app fully closed."
-          : "If the alert only appears as an icon in the top bar, or only while the app is open, use the steps below once."}
+          : isSamsung
+            ? "If the alert only shows in the shade / quick panel and never as a brief banner over the game, One UI has pop-up disabled for Chrome/Rally Timer. Fix Sound and pop-up below, then retest."
+            : "If the alert only appears as an icon in the top bar, or only while the app is open, use the steps below once."}
       </p>
 
       <section className="mb-6 p-4 rounded-lg border-2 border-rally-warning bg-rally-warning/10 space-y-3 text-sm">
@@ -43,14 +51,14 @@ export default function FixNotificationsPage() {
         </p>
         <ol className="list-decimal list-inside text-rally-text space-y-2 text-xs leading-relaxed">
           <li>
-            Settings → Apps → <span className="font-bold">Chrome</span> → App battery usage →{" "}
+            Settings → Apps → <span className="font-bold">Chrome</span> → Battery →{" "}
             <span className="font-bold">Unrestricted</span>
           </li>
           <li>
             If Rally Timer is installed: Apps → <span className="font-bold">Rally Timer</span> →
-            App battery usage → <span className="font-bold">Unrestricted</span>
+            Battery → <span className="font-bold">Unrestricted</span>
           </li>
-          <li>Turn off Battery Saver while coordinating</li>
+          <li>Turn off Battery Saver / Power saving while coordinating</li>
           <li>
             In Rally Timer: Send test → <span className="font-bold">fully close</span> the app
             (swipe away) → ask for another test. You must get the banner without reopening.
@@ -71,6 +79,8 @@ export default function FixNotificationsPage() {
       >
         {isPixel ? (
           <PixelHeadsUpGuide />
+        ) : isSamsung ? (
+          <SamsungHeadsUpGuide />
         ) : (
           <>
             <p className="text-rally-accent font-bold text-xs tracking-wide">MOST COMMON FIX</p>

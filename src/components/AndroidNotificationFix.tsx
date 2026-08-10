@@ -24,6 +24,80 @@ function openAndroidIntent(intentUrl: string) {
   window.location.href = intentUrl;
 }
 
+/** Samsung One UI — Fold / Galaxy exact labels for shade-only (no banner). */
+export function SamsungHeadsUpGuide({ showVerify = true }: { showVerify?: boolean }) {
+  const appName = isStandalonePWA() ? "Rally Timer" : "Chrome";
+  return (
+    <div className="space-y-3 text-sm">
+      <p className="text-rally-accent font-bold text-xs tracking-wide">SAMSUNG / GALAXY FOLD</p>
+      <h3 className="font-bold text-rally-text text-base">
+        Turn on Sound and pop-up (brief banner)
+      </h3>
+      <p className="text-rally-muted text-xs leading-relaxed">
+        If the alert only appears in the quick panel / notification shade, One UI has the category
+        set to <span className="font-bold">Sound</span> (or Silent) without{" "}
+        <span className="font-bold">pop-up</span>. Apps cannot override this.
+      </p>
+
+      <div className="p-3 rounded-lg bg-rally-bg border border-rally-border space-y-2">
+        <p className="font-bold text-rally-text text-xs">Fastest way (from a test alert)</p>
+        <ol className="list-decimal list-inside space-y-2 text-rally-text text-xs leading-relaxed">
+          <li>
+            In Rally Timer, tap <span className="font-bold">Send test notification</span>
+          </li>
+          <li>Swipe down to open the shade</li>
+          <li>
+            <span className="font-bold">Long-press</span> the Rally alert →{" "}
+            <span className="font-bold">Settings</span> (gear)
+          </li>
+          <li>
+            Set style to{" "}
+            <span className="font-bold text-rally-accent">Sound and pop-up</span> — not Sound, not
+            Silent
+          </li>
+          <li>
+            If you see categories: open <span className="font-bold">General</span> (or the site
+            name) → turn <span className="font-bold text-rally-accent">Show as pop-up</span> ON
+          </li>
+          <li>Send another test with Whiteout open — you should get a brief banner</li>
+        </ol>
+      </div>
+
+      <div className="p-3 rounded-lg bg-rally-bg border border-rally-border space-y-2">
+        <p className="font-bold text-rally-text text-xs">From Samsung Settings</p>
+        <ol className="list-decimal list-inside space-y-2 text-rally-muted text-xs leading-relaxed">
+          <li>
+            Settings → Notifications → Advanced settings → turn on{" "}
+            <span className="font-bold text-rally-text">Manage notification categories for each app</span>
+          </li>
+          <li>
+            Settings → Apps →{" "}
+            <span className="font-bold text-rally-text">{appName}</span>
+            {isStandalonePWA() ? " (also check Chrome)" : " (or Rally Timer if installed)"}
+          </li>
+          <li>Notifications → allowed</li>
+          <li>
+            Notification categories → <span className="font-bold text-rally-text">General</span>{" "}
+            (tap the text, not just the switch)
+          </li>
+          <li>
+            Style: <span className="font-bold text-rally-text">Sound and pop-up</span> / Show as
+            pop-up ON
+          </li>
+        </ol>
+      </div>
+
+      {showVerify && (
+        <p className="text-rally-muted text-[11px] leading-relaxed">
+          Fold tip: test on the screen you play on (cover or open). Also disable Do Not Disturb /
+          Bedtime, and set Chrome + Rally Timer battery to{" "}
+          <span className="font-bold text-rally-text">Unrestricted</span>.
+        </p>
+      )}
+    </div>
+  );
+}
+
 /** Pixel-first copy — exact stock Android labels. */
 export function PixelHeadsUpGuide({ showVerify = true }: { showVerify?: boolean }) {
   return (
@@ -95,12 +169,13 @@ export function PixelHeadsUpGuide({ showVerify = true }: { showVerify?: boolean 
 
 const HEADS_UP_STEPS: Record<AndroidOem, { title: string; steps: string[] }> = {
   samsung: {
-    title: "Samsung — turn on pop-up",
+    title: "Samsung — Sound and pop-up",
     steps: [
-      "Pull down the shade and long-press the Rally Timer / Chrome alert",
-      "Tap Settings (gear) on that notification",
-      "Set category (often “General”) to Sound and pop-up — not Sound only",
-      "Or: Settings → Apps → Rally Timer (or Chrome) → Notifications → General → Pop on screen ON",
+      "Settings → Notifications → Advanced settings → enable Manage notification categories for each app",
+      "Long-press a Rally alert in the shade → Settings",
+      "Set to Sound and pop-up (not Sound, not Silent)",
+      "Categories → General → Show as pop-up ON",
+      "Apps → Chrome and Rally Timer → Battery → Unrestricted",
     ],
   },
   xiaomi: {
@@ -270,6 +345,27 @@ export function AndroidHeadsUpTip({ visible }: { visible: boolean }) {
     );
   }
 
+  if (oem === "samsung") {
+    return (
+      <div className="w-full p-3 rounded-lg border border-rally-accent/50 bg-rally-accent/10 text-sm space-y-2">
+        <p className="font-bold text-rally-accent">Samsung: only in the quick panel?</p>
+        <ol className="list-decimal list-inside text-rally-text text-xs space-y-1.5 leading-relaxed">
+          <li>Long-press this test alert in the shade → Settings</li>
+          <li>
+            Choose <span className="font-bold">Sound and pop-up</span> (not Sound)
+          </li>
+          <li>
+            Categories → General → <span className="font-bold">Show as pop-up</span> ON
+          </li>
+          <li>Send another test while in Whiteout — brief banner should appear</li>
+        </ol>
+        <Link href="/fix-notifications#heads-up" className="block text-rally-accent text-xs font-bold">
+          Full Samsung / Fold steps →
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full p-3 rounded-lg border border-rally-accent/50 bg-rally-accent/10 text-sm space-y-2">
       <p className="font-bold text-rally-accent">Only in the top bar — not on screen?</p>
@@ -303,6 +399,7 @@ export function AndroidNotificationFix({
   const headsUp = HEADS_UP_STEPS[oem];
   const battery = BATTERY_STEPS[oem];
   const isPixel = oem === "pixel";
+  const isSamsung = oem === "samsung";
 
   useEffect(() => {
     setIsAndroid(isAndroidDevice());
@@ -329,7 +426,9 @@ export function AndroidNotificationFix({
         <Link href="/fix-notifications" className="text-rally-muted hover:text-rally-accent">
           {isPixel
             ? "Pixel: fix Alerting / Pop on screen →"
-            : "Android: fix pop-on-screen / background alerts →"}
+            : isSamsung
+              ? "Samsung: fix Sound and pop-up →"
+              : "Android: fix pop-on-screen / background alerts →"}
         </Link>
       </p>
     );
@@ -348,6 +447,8 @@ export function AndroidNotificationFix({
         <div>
           {isPixel ? (
             <PixelHeadsUpGuide />
+          ) : isSamsung ? (
+            <SamsungHeadsUpGuide />
           ) : (
             <>
               <p className="text-rally-warning font-bold text-xs tracking-wide mb-1">
@@ -377,7 +478,7 @@ export function AndroidNotificationFix({
               onClick={markHeadsUpDone}
               className="w-full py-2.5 border border-rally-success text-rally-success font-bold rounded-lg text-sm"
             >
-              ✓ Pop on screen is on
+              {isSamsung ? "✓ Sound and pop-up is on" : "✓ Pop on screen is on"}
             </button>
           )}
         </div>

@@ -289,38 +289,48 @@ export async function sendPushNotification(
   // Don't let a hung FCM/web-push call block the scheduler tick forever.
   const SEND_TIMEOUT_MS = isEphemeral ? 5_000 : 8_000;
 
+  const sendPromise = webpush.sendNotification(
+    {
+      endpoint: subscription.endpoint,
+      keys: {
+        p256dh: subscription.p256dh,
+        auth: subscription.auth,
+      },
+    },
+    JSON.stringify(payload),
+    {
+      TTL: ttlSeconds,
+      urgency: "high",
+    }
+  );
+
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
   try {
     await Promise.race([
-      webpush.sendNotification(
-        {
-          endpoint: subscription.endpoint,
-          keys: {
-            p256dh: subscription.p256dh,
-            auth: subscription.auth,
-          },
-        },
-        JSON.stringify(payload),
-        {
-          TTL: ttlSeconds,
-          urgency: "high",
-        }
-      ),
+      sendPromise,
       new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error("webpush_send_timeout")), SEND_TIMEOUT_MS);
+        timeoutId = setTimeout(() => reject(new Error("webpush_send_timeout")), SEND_TIMEOUT_MS);
       }),
     ]);
     return { success: true };
   } catch (err: unknown) {
     const error = err as { statusCode?: number; message?: string; body?: string };
+
+    // Timeout only unblocks the scheduler; the in-flight send is not cancelled and
+    // may still deliver, so do not treat this as a hard failure (which would mark
+    // LAUNCH/THROW as FAILED with no retry). Swallow late settle to avoid
+    // unhandled rejections from the loser of the race.
+    if (error.message === "webpush_send_timeout") {
+      void sendPromise.catch(() => {});
+      logger.error("push_send_timeout", { error: error.message });
+      return { success: true };
+    }
+
     logger.error("push_send_failed", {
       statusCode: error.statusCode,
       error: error.message,
       body: error.body,
     });
-
-    if (error.message === "webpush_send_timeout") {
-      return { success: false, error: "push send timed out" };
-    }
 
     if (error.statusCode === 401) {
       return {
@@ -336,6 +346,8 @@ export async function sendPushNotification(
       statusCode: error.statusCode,
       error: error.message || "Unknown push error",
     };
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
   }
 }
 

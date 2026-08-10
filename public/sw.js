@@ -19,6 +19,7 @@ function broadcastToClients(payload) {
       for (const client of clientList) {
         client.postMessage(payload);
       }
+      return clientList;
     });
 }
 
@@ -42,6 +43,8 @@ self.addEventListener("push", (event) => {
   const calibrationIndex = data.calibrationIndex || 0;
   const calibrationTotal = data.calibrationTotal || 0;
   const isCalibration = notificationType === "CALIBRATION";
+  const isLivePing = !!data.livePing || rallyId === "calibration-live";
+  const preferSilent = isCalibration || !!data.silent;
   const receivedAtMs = Date.now();
   const url = assignmentId
     ? `/caller/events/${rallyId}`
@@ -64,16 +67,16 @@ self.addEventListener("push", (event) => {
   };
 
   const notificationOptions = {
-    body,
+    body: preferSilent && isLivePing ? " " : body,
     icon: "/icons/icon-192.png",
     badge: "/icons/icon-192.png",
     tag: isCalibration
-      ? `calibration-${calibrationIndex}-${receivedAtMs}`
+      ? `calibration-${isLivePing ? "live" : "setup"}-${calibrationIndex}-${receivedAtMs}`
       : `rally-${rallyId}-${notificationType}-${assignmentId}-${scheduledAt}`,
-    renotify: !isCalibration,
-    requireInteraction: !isCalibration && notificationType === "LAUNCH",
-    silent: isCalibration,
-    vibrate: isCalibration
+    renotify: !preferSilent,
+    requireInteraction: !preferSilent && notificationType === "LAUNCH",
+    silent: preferSilent,
+    vibrate: preferSilent
       ? []
       : notificationType === "LAUNCH"
         ? [300, 100, 300, 100, 300]
@@ -87,10 +90,37 @@ self.addEventListener("push", (event) => {
   };
 
   event.waitUntil(
-    Promise.all([
-      self.registration.showNotification(title, notificationOptions),
-      broadcastToClients(payload),
-      targetAt
+    (async () => {
+      const clients = await broadcastToClients(payload);
+      const hasOpenClient = clients.length > 0;
+
+      // Live silent pings: when the app is open, skip the OS banner entirely.
+      // Setup calibration still shows a silent notification so iOS delivers it.
+      const shouldShow =
+        !(isLivePing && preferSilent && hasOpenClient) &&
+        !(isLivePing && preferSilent === false);
+
+      const showPromise =
+        isLivePing && preferSilent && hasOpenClient
+          ? Promise.resolve()
+          : self.registration.showNotification(
+              preferSilent && isLivePing ? " " : title,
+              notificationOptions
+            );
+
+      // Close ephemeral silent live notifications quickly if shown (no open clients).
+      const closePromise =
+        isLivePing && preferSilent
+          ? showPromise.then(async () => {
+              if (hasOpenClient) return;
+              const notes = await self.registration.getNotifications({
+                tag: notificationOptions.tag,
+              });
+              for (const note of notes) note.close();
+            })
+          : Promise.resolve();
+
+      const feedbackPromise = targetAt
         ? fetch("/api/push/delivery-feedback", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -103,8 +133,11 @@ self.addEventListener("push", (event) => {
               rallyId,
             }),
           }).catch(() => {})
-        : Promise.resolve(),
-    ]).catch(() =>
+        : Promise.resolve();
+
+      void shouldShow;
+      await Promise.all([showPromise, closePromise, feedbackPromise]);
+    })().catch(() =>
       Promise.all([
         broadcastToClients(payload),
         targetAt

@@ -105,11 +105,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     include: eventIncludeBasic,
   });
   if (!event) return errorResponse("Event not found", 404);
-  if (event.status === "CANCELLED" || event.status === "COMPLETED") {
+  if (event.status === "CANCELLED") {
     return errorResponse("Cannot edit this event", 400);
-  }
-  if (event.status === "ACTIVE") {
-    return errorResponse("Cannot edit template while rally is running", 400);
   }
 
   let body: {
@@ -117,12 +114,31 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     gatherDurationSeconds?: number;
     firstCallerLeadSeconds?: number;
     pushLeadMs?: number;
+    pinned?: boolean;
+    sortOrder?: number;
     status?: "DRAFT" | "READY";
   };
   try {
     body = await request.json();
   } catch {
     return errorResponse("Invalid JSON");
+  }
+
+  const isPinOnly =
+    (body.pinned !== undefined || body.sortOrder !== undefined) &&
+    body.name === undefined &&
+    body.gatherDurationSeconds === undefined &&
+    body.firstCallerLeadSeconds === undefined &&
+    body.pushLeadMs === undefined &&
+    body.status === undefined;
+
+  if (!isPinOnly) {
+    if (event.status === "COMPLETED") {
+      return errorResponse("Cannot edit this event", 400);
+    }
+    if (event.status === "ACTIVE") {
+      return errorResponse("Cannot edit template while rally is running", 400);
+    }
   }
 
   const updateData: Record<string, unknown> = {};
@@ -141,6 +157,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return errorResponse("pushLeadMs must be 0–5000");
     }
     updateData.pushLeadMs = body.pushLeadMs;
+  }
+  if (body.pinned !== undefined) updateData.pinned = !!body.pinned;
+  if (body.sortOrder !== undefined) {
+    if (typeof body.sortOrder !== "number" || !Number.isFinite(body.sortOrder)) {
+      return errorResponse("sortOrder must be a number");
+    }
+    updateData.sortOrder = Math.floor(body.sortOrder);
   }
   if (body.status !== undefined) {
     updateData.status = body.status;

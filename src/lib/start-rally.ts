@@ -12,7 +12,10 @@ const eventInclude = {
   assignments: { include: { user: true }, orderBy: { marchDurationSeconds: "desc" as const } },
 };
 
-export async function startOrRestartRally(eventId: string) {
+export async function startOrRestartRally(
+  eventId: string,
+  options: { startedAt?: Date } = {}
+) {
   const event = await prisma.rallyEvent.findUnique({
     where: { id: eventId },
     include: eventInclude,
@@ -33,13 +36,15 @@ export async function startOrRestartRally(eventId: string) {
   // Always wipe prior run rows so GO AGAIN / RESTART schedules fresh PENDING events.
   await clearEventNotificationEvents(eventId);
 
-  const startedAt = new Date();
+  const startedAt = options.startedAt ?? new Date();
   const marches = event.assignments.map((a) => a.marchDurationSeconds);
+  const offsets = event.assignments.map((a) => a.arrivalOffsetSeconds ?? 0);
   const targetArrivalTime = computeTargetArrivalOnGo(
     startedAt,
     event.gatherDurationSeconds,
     marches,
-    event.firstCallerLeadSeconds
+    event.firstCallerLeadSeconds,
+    offsets
   );
 
   await prisma.$transaction(async (tx) => {
@@ -58,7 +63,8 @@ export async function startOrRestartRally(eventId: string) {
       const times = recalculateAssignmentTimes(
         targetArrivalTime,
         event.gatherDurationSeconds,
-        assignment.marchDurationSeconds
+        assignment.marchDurationSeconds,
+        assignment.arrivalOffsetSeconds ?? 0
       );
       await tx.rallyAssignment.update({
         where: { id: assignment.id },

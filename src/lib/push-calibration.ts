@@ -4,12 +4,20 @@ import { defaultDeliveryLeadMs } from "@/lib/delivery-lead";
 
 export const CALIBRATION_PING_COUNT = 3;
 export const CALIBRATION_PING_SPACING_MS = 700;
+export const LIVE_PING_COUNT = 1;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export async function sendCalibrationPings(userId: string) {
+export async function sendCalibrationPings(
+  userId: string,
+  options: { mode?: "setup" | "live"; silent?: boolean } = {}
+) {
+  const mode = options.mode === "live" ? "live" : "setup";
+  const silent = options.silent !== false; // default quiet
+  const pingCount = mode === "live" ? LIVE_PING_COUNT : CALIBRATION_PING_COUNT;
+
   const subscriptions = await prisma.pushSubscription.findMany({
     where: { userId, active: true },
   });
@@ -20,34 +28,37 @@ export async function sendCalibrationPings(userId: string) {
 
   const pings: Array<{ index: number; targetAt: string }> = [];
 
-  for (let i = 0; i < CALIBRATION_PING_COUNT; i++) {
+  for (let i = 0; i < pingCount; i++) {
     const targetAt = new Date(Date.now() + 300).toISOString();
 
     for (const sub of subscriptions) {
       await sendPushNotification(
         { endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth },
         {
-          title: "Calibrating notifications",
-          body: `Timing setup ${i + 1} of ${CALIBRATION_PING_COUNT}`,
-          rallyId: "calibration",
+          title: mode === "live" ? " " : "Calibrating notifications",
+          body: mode === "live" ? " " : `Timing setup ${i + 1} of ${pingCount}`,
+          rallyId: mode === "live" ? "calibration-live" : "calibration",
           notificationType: "CALIBRATION",
           targetAt,
           calibrationIndex: i + 1,
-          calibrationTotal: CALIBRATION_PING_COUNT,
+          calibrationTotal: pingCount,
+          silent,
+          livePing: mode === "live",
         }
       );
     }
 
     pings.push({ index: i + 1, targetAt });
 
-    if (i < CALIBRATION_PING_COUNT - 1) {
+    if (i < pingCount - 1) {
       await sleep(CALIBRATION_PING_SPACING_MS);
     }
   }
 
   return {
-    total: CALIBRATION_PING_COUNT,
+    total: pingCount,
     pings,
+    mode,
     status: 200 as const,
   };
 }
@@ -75,4 +86,22 @@ export async function getCalibrationStatus(userId: string) {
     maxLeadMs: maxLead,
     isCalibrated: totalSamples >= CALIBRATION_PING_COUNT,
   };
+}
+
+/** True when the user has no ACTIVE rallies (safe for background timing pings). */
+export async function userHasActiveRally(userId: string, role: string): Promise<boolean> {
+  if (role === "ADMIN") {
+    const active = await prisma.rallyEvent.count({
+      where: { status: "ACTIVE" },
+    });
+    return active > 0;
+  }
+
+  const active = await prisma.rallyAssignment.count({
+    where: {
+      userId,
+      rallyEvent: { status: "ACTIVE" },
+    },
+  });
+  return active > 0;
 }

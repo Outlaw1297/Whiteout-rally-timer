@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { formatGather } from "@/lib/display";
 import { PushSetupCard } from "@/components/PushSetupCard";
 import { RolesNote } from "@/components/RolesNote";
+import { TemplateSwitcher } from "@/components/TemplateSwitcher";
 import type { SerializedEvent } from "@/hooks/useEventSocket";
 
 export default function AdminDashboard() {
@@ -14,6 +15,10 @@ export default function AdminDashboard() {
   const router = useRouter();
   const [events, setEvents] = useState<SerializedEvent[]>([]);
   const [showCreate, setShowCreate] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [startingMany, setStartingMany] = useState(false);
+  const [staggerSeconds, setStaggerSeconds] = useState("0");
+  const [batchError, setBatchError] = useState("");
 
   useEffect(() => {
     if (!loading && !user) router.push("/login");
@@ -37,6 +42,11 @@ export default function AdminDashboard() {
         : "Delete this rally template?";
     if (!confirm(msg)) return;
     await fetch(`/api/events/${id}`, { method: "DELETE" });
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
     loadEvents();
   };
 
@@ -46,12 +56,68 @@ export default function AdminDashboard() {
     loadEvents();
   };
 
+  const toggleSelect = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectable = events.filter(
+    (e) =>
+      (e.status === "READY" || e.status === "DRAFT" || e.status === "COMPLETED") &&
+      e.assignments.length > 0
+  );
+
+  const startSelected = async () => {
+    setBatchError("");
+    if (selected.size === 0) {
+      setBatchError("Select at least one template");
+      return;
+    }
+    setStartingMany(true);
+    try {
+      const res = await fetch("/api/events/start-many", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventIds: Array.from(selected),
+          staggerSeconds: parseInt(staggerSeconds, 10) || 0,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setBatchError(data.error || "Failed to start selected rallies");
+        return;
+      }
+      setSelected(new Set());
+      loadEvents();
+      const firstOk = (data.results || []).find((r: { ok: boolean; id: string }) => r.ok);
+      if (firstOk) router.push(`/admin/events/${firstOk.id}`);
+    } finally {
+      setStartingMany(false);
+    }
+  };
+
+  const togglePin = async (id: string, pinned: boolean) => {
+    await fetch(`/api/events/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pinned: !pinned }),
+    });
+    loadEvents();
+  };
+
   if (loading || !user) {
     return <div className="p-8 text-center text-rally-muted">Loading...</div>;
   }
 
   return (
     <main className="min-h-screen px-4 py-6 max-w-lg mx-auto">
+      <TemplateSwitcher onChanged={loadEvents} />
+
       <header className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold text-rally-accent">ADMIN</h1>
@@ -94,52 +160,111 @@ export default function AdminDashboard() {
         />
       )}
 
+      {selectable.length > 0 && (
+        <section className="p-3 mb-4 bg-rally-surface border border-rally-border rounded-lg space-y-2">
+          <p className="text-rally-muted text-xs font-bold">START MULTIPLE TEMPLATES</p>
+          <p className="text-rally-muted text-xs">
+            Check templates below, then start them together. Optional stagger delays each GO.
+          </p>
+          <div className="flex items-center gap-2">
+            <label className="text-rally-muted text-xs shrink-0">Stagger (s)</label>
+            <input
+              type="number"
+              min={0}
+              max={600}
+              value={staggerSeconds}
+              onChange={(e) => setStaggerSeconds(e.target.value)}
+              className="w-20 px-2 py-1 bg-rally-bg border border-rally-border rounded font-mono text-sm"
+            />
+            <button
+              type="button"
+              onClick={startSelected}
+              disabled={startingMany || selected.size === 0}
+              className="flex-1 py-2 bg-rally-success text-white text-sm font-bold rounded disabled:opacity-50"
+            >
+              {startingMany
+                ? "STARTING..."
+                : `START ${selected.size || ""} SELECTED`.trim()}
+            </button>
+          </div>
+          {batchError && <p className="text-rally-danger text-xs">{batchError}</p>}
+        </section>
+      )}
+
       <section className="flex flex-col gap-4">
         {events.length === 0 && (
           <p className="text-rally-muted text-center py-8">No rally templates yet</p>
         )}
-        {events.map((event) => (
-          <div
-            key={event.id}
-            className="p-4 bg-rally-surface border border-rally-border rounded-lg"
-          >
-            <div className="flex justify-between items-start gap-2">
-              <Link href={`/admin/events/${event.id}`} className="flex-1 min-w-0">
-                <h2 className="font-bold text-lg">{event.name}</h2>
-                <span className="text-xs text-rally-muted">{event.status}</span>
-                <p className="text-rally-muted text-sm mt-1">
-                  Gather: {formatGather(event.gatherDurationSeconds)} ·{" "}
-                  {event.assignments.length} caller{event.assignments.length !== 1 ? "s" : ""}
-                </p>
-                {event.status === "READY" && (
-                  <p className="text-rally-warning text-xs font-bold mt-2">Ready — tap to GO</p>
+        {events.map((event) => {
+          const canSelect =
+            (event.status === "READY" ||
+              event.status === "DRAFT" ||
+              event.status === "COMPLETED") &&
+            event.assignments.length > 0;
+          return (
+            <div
+              key={event.id}
+              className="p-4 bg-rally-surface border border-rally-border rounded-lg"
+            >
+              <div className="flex justify-between items-start gap-2">
+                {canSelect && (
+                  <input
+                    type="checkbox"
+                    checked={selected.has(event.id)}
+                    onChange={() => toggleSelect(event.id)}
+                    className="mt-1.5"
+                    aria-label={`Select ${event.name}`}
+                  />
                 )}
-                {event.status === "ACTIVE" && (
-                  <p className="text-rally-success text-xs font-bold mt-2">● LIVE</p>
-                )}
-                {event.status === "COMPLETED" && (
-                  <p className="text-rally-muted text-xs font-bold mt-2">Completed — reset to run again</p>
-                )}
-              </Link>
-              <div className="flex flex-col gap-1 shrink-0">
-                {(event.status === "ACTIVE" || event.status === "COMPLETED") && (
+                <Link href={`/admin/events/${event.id}`} className="flex-1 min-w-0">
+                  <h2 className="font-bold text-lg">
+                    {event.pinned ? "★ " : ""}
+                    {event.name}
+                  </h2>
+                  <span className="text-xs text-rally-muted">{event.status}</span>
+                  <p className="text-rally-muted text-sm mt-1">
+                    Gather: {formatGather(event.gatherDurationSeconds)} ·{" "}
+                    {event.assignments.length} caller
+                    {event.assignments.length !== 1 ? "s" : ""}
+                  </p>
+                  {event.status === "READY" && (
+                    <p className="text-rally-warning text-xs font-bold mt-2">Ready — tap to GO</p>
+                  )}
+                  {event.status === "ACTIVE" && (
+                    <p className="text-rally-success text-xs font-bold mt-2">● LIVE</p>
+                  )}
+                  {event.status === "COMPLETED" && (
+                    <p className="text-rally-muted text-xs font-bold mt-2">
+                      Completed — reset to run again
+                    </p>
+                  )}
+                </Link>
+                <div className="flex flex-col gap-1 shrink-0">
                   <button
-                    onClick={() => resetEvent(event.id)}
-                    className="text-rally-warning text-xs font-bold px-2 py-1 border border-rally-warning rounded"
+                    onClick={() => togglePin(event.id, !!event.pinned)}
+                    className="text-rally-warning text-xs font-bold px-2 py-1 border border-rally-border rounded"
                   >
-                    Reset
+                    {event.pinned ? "Unpin" : "Pin"}
                   </button>
-                )}
-                <button
-                  onClick={() => deleteEvent(event.id, event.status)}
-                  className="text-rally-danger text-xs font-bold px-2 py-1 border border-rally-danger rounded"
-                >
-                  Delete
-                </button>
+                  {(event.status === "ACTIVE" || event.status === "COMPLETED") && (
+                    <button
+                      onClick={() => resetEvent(event.id)}
+                      className="text-rally-warning text-xs font-bold px-2 py-1 border border-rally-warning rounded"
+                    >
+                      Reset
+                    </button>
+                  )}
+                  <button
+                    onClick={() => deleteEvent(event.id, event.status)}
+                    className="text-rally-danger text-xs font-bold px-2 py-1 border border-rally-danger rounded"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </section>
     </main>
   );

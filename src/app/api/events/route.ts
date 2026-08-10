@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     const events = await prisma.rallyEvent.findMany({
       where: { status: { not: "CANCELLED" } },
       include: eventInclude,
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ pinned: "desc" }, { sortOrder: "asc" }, { updatedAt: "desc" }],
       take: 50,
     });
     return jsonResponse({ events: events.map(serializeEvent) });

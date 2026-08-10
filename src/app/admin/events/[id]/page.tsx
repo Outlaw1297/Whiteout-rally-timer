@@ -12,6 +12,7 @@ import { CallerCountdownRow } from "@/components/CallerCountdownRow";
 import { MarchDuplicateNotice } from "@/components/MarchDuplicateNotice";
 import { PushSetupCard } from "@/components/PushSetupCard";
 import { ServerClock } from "@/components/ServerClock";
+import { TemplateSwitcher } from "@/components/TemplateSwitcher";
 import { formatArrivalTime, formatGather, statusLabel } from "@/lib/display";
 import { parseMarchDuration } from "@/lib/timing";
 import {
@@ -51,11 +52,13 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
   const [callerName, setCallerName] = useState("");
   const [linkUserId, setLinkUserId] = useState("");
   const [addMarch, setAddMarch] = useState("8:00");
+  const [addOffset, setAddOffset] = useState("0");
   const [useMyAccount, setUseMyAccount] = useState(true);
   const [starting, setStarting] = useState(false);
   const [firstCallerLead, setFirstCallerLead] = useState("3");
   const [pushLeadMs, setPushLeadMs] = useState("1000");
   const [timingSaving, setTimingSaving] = useState(false);
+  const [cloning, setCloning] = useState(false);
 
   const { correctedNow, isLive } = useServerClock({
     activeRally: event?.status === "ACTIVE",
@@ -112,6 +115,7 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
 
   const addCaller = async () => {
     if (!callerName.trim() || !addMarch) return;
+    const offset = parseInt(addOffset, 10);
     await fetch(`/api/events/${params.id}/assignments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -119,11 +123,35 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
         callerName: callerName.trim(),
         userId: linkUserId || (useMyAccount && user ? user.id : undefined),
         marchDuration: addMarch,
+        arrivalOffsetSeconds: Number.isFinite(offset) ? Math.max(0, offset) : 0,
       }),
     });
     setCallerName("");
     setLinkUserId("");
+    setAddOffset("0");
     loadEvent();
+  };
+
+  const updateOffset = async (assignmentId: string, value: string) => {
+    const offset = parseInt(value, 10);
+    if (!Number.isFinite(offset) || offset < 0) return;
+    await fetch(`/api/events/${params.id}/assignments/${assignmentId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ arrivalOffsetSeconds: offset }),
+    });
+    loadEvent();
+  };
+
+  const cloneTemplate = async () => {
+    setCloning(true);
+    try {
+      const res = await fetch(`/api/events/${params.id}/clone`, { method: "POST" });
+      const data = await res.json();
+      if (res.ok && data.id) router.push(`/admin/events/${data.id}`);
+    } finally {
+      setCloning(false);
+    }
   };
 
   const removeCaller = async (assignmentId: string) => {
@@ -212,6 +240,8 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
 
   return (
     <main className="min-h-screen px-4 py-6 max-w-lg mx-auto">
+      <TemplateSwitcher currentEventId={event.id} onChanged={loadEvent} />
+
       <Link href="/admin" className="text-rally-muted text-sm hover:text-rally-accent">
         ← Templates
       </Link>
@@ -221,10 +251,21 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
         <p className="text-rally-muted text-sm">
           {isTemplate ? "TEMPLATE" : event.status}
           {event.isTestMode ? " · TEST" : ""}
+          {event.pinned ? " · PINNED" : ""}
         </p>
-        <Link href={`/events/${event.id}`} className="text-rally-accent text-xs mt-1 inline-block">
-          Public live view →
-        </Link>
+        <div className="flex flex-wrap gap-3 mt-1">
+          <Link href={`/events/${event.id}`} className="text-rally-accent text-xs">
+            Public live view →
+          </Link>
+          <button
+            type="button"
+            onClick={cloneTemplate}
+            disabled={cloning}
+            className="text-rally-muted text-xs hover:text-rally-accent"
+          >
+            {cloning ? "Cloning…" : "Clone template"}
+          </button>
+        </div>
       </header>
 
       <ServerClock correctedNow={correctedNow} isLive={isLive} />
@@ -300,7 +341,8 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
         )}
         {isTemplate && (
           <p className="text-rally-muted text-sm mt-2">
-            Launch times are calculated when you press GO. Longest-march caller throws first.
+            Launch times are calculated when you press GO. Use arrival offsets to stagger hit
+            order (0 = first wave, higher = later).
           </p>
         )}
       </section>
@@ -340,7 +382,12 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
               >
                 <div>
                   <p className="font-bold">{slot.displayNames.join(", ")}</p>
-                  <p className="text-rally-muted text-xs font-mono">March {slot.marchFormatted}</p>
+                  <p className="text-rally-muted text-xs font-mono">
+                    March {slot.marchFormatted}
+                    {(slot.arrivalOffsetSeconds ?? 0) > 0
+                      ? ` · +${slot.arrivalOffsetSeconds}s hit`
+                      : " · hit at target"}
+                  </p>
                   {slot.displayNames.length > 1 && (
                     <p className="text-rally-warning text-xs mt-0.5">Launch together</p>
                   )}
@@ -350,13 +397,25 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                     const caller = event.assignments.find((a) => a.id === id);
                     if (!caller) return null;
                     return (
-                      <button
-                        key={id}
-                        onClick={() => removeCaller(id)}
-                        className="text-rally-danger text-xs"
-                      >
-                        Remove {caller.displayName}
-                      </button>
+                      <div key={id} className="flex items-center gap-2">
+                        <label className="text-rally-muted text-[10px]">
+                          Offset
+                          <input
+                            type="number"
+                            min={0}
+                            max={3600}
+                            defaultValue={caller.arrivalOffsetSeconds ?? 0}
+                            onBlur={(e) => updateOffset(id, e.target.value)}
+                            className="ml-1 w-14 px-1 py-0.5 bg-rally-bg border border-rally-border rounded font-mono text-xs"
+                          />
+                        </label>
+                        <button
+                          onClick={() => removeCaller(id)}
+                          className="text-rally-danger text-xs"
+                        >
+                          Remove
+                        </button>
+                      </div>
                     );
                   })}
                 </div>
@@ -378,6 +437,20 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
               placeholder="March (M:SS)"
               className="px-3 py-2 bg-rally-bg border border-rally-border rounded"
             />
+            <div>
+              <label className="text-rally-muted text-xs">ARRIVAL OFFSET (seconds later)</label>
+              <input
+                type="number"
+                min={0}
+                max={3600}
+                value={addOffset}
+                onChange={(e) => setAddOffset(e.target.value)}
+                className="w-full px-3 py-2 bg-rally-bg border border-rally-border rounded font-mono"
+              />
+              <p className="text-rally-muted text-xs mt-1">
+                Example: call1=0, call3=2, call2=4 → hits in order call1 → call3 → call2.
+              </p>
+            </div>
             {matchingMarchCallers.length > 0 && (
               <p className="text-rally-warning text-xs">
                 Same march as {matchingMarchCallers.map((a) => a.displayName).join(", ")} — they

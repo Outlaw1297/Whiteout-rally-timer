@@ -31,6 +31,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     marchDuration?: string;
     marchDurationSeconds?: number;
     userId?: string | null;
+    arrivalOffsetSeconds?: number;
   };
   try {
     body = await request.json();
@@ -40,9 +41,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
   if (
     event.status === "ACTIVE" &&
-    (body.marchDuration !== undefined || body.marchDurationSeconds !== undefined)
+    (body.marchDuration !== undefined ||
+      body.marchDurationSeconds !== undefined ||
+      body.arrivalOffsetSeconds !== undefined)
   ) {
-    return errorResponse("Cannot edit march times while rally is running", 400);
+    return errorResponse("Cannot edit march/offset while rally is running", 400);
   }
 
   let marchSeconds = body.marchDurationSeconds;
@@ -51,16 +54,32 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (parsed === null) return errorResponse("Invalid march duration");
     marchSeconds = parsed;
   }
-  if (!marchSeconds && body.userId === undefined) {
-    return errorResponse("marchDuration or userId required");
+  if (
+    !marchSeconds &&
+    body.userId === undefined &&
+    body.arrivalOffsetSeconds === undefined
+  ) {
+    return errorResponse("marchDuration, arrivalOffsetSeconds, or userId required");
   }
 
   const updateData: {
     marchDurationSeconds?: number;
     userId?: string | null;
+    arrivalOffsetSeconds?: number;
   } = {};
 
   if (marchSeconds) updateData.marchDurationSeconds = marchSeconds;
+  if (body.arrivalOffsetSeconds !== undefined) {
+    if (
+      typeof body.arrivalOffsetSeconds !== "number" ||
+      !Number.isFinite(body.arrivalOffsetSeconds) ||
+      body.arrivalOffsetSeconds < 0 ||
+      body.arrivalOffsetSeconds > 3600
+    ) {
+      return errorResponse("arrivalOffsetSeconds must be 0–3600");
+    }
+    updateData.arrivalOffsetSeconds = Math.floor(body.arrivalOffsetSeconds);
+  }
   if (body.userId !== undefined) {
     if (body.userId === null) {
       updateData.userId = null;

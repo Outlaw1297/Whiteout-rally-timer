@@ -8,14 +8,17 @@ export const DEFAULT_FIRST_CALLER_LEAD_SECONDS = 3;
 export const DEFAULT_PUSH_LEAD_MS = 1000;
 
 /**
- * launchTime = targetArrivalTime - gatherDurationSeconds - marchDurationSeconds
+ * launchTime = targetArrivalTime + arrivalOffset - gather - march
+ * Offset 0 = hit at shared target; positive = arrive later (stagger order).
  */
 export function calculateLaunchTime(
   targetArrivalTime: Date,
   gatherDurationSeconds: number,
-  marchDurationSeconds: number
+  marchDurationSeconds: number,
+  arrivalOffsetSeconds = 0
 ): Date {
-  const offsetMs = (gatherDurationSeconds + marchDurationSeconds) * 1000;
+  const offsetMs =
+    (gatherDurationSeconds + marchDurationSeconds - arrivalOffsetSeconds) * 1000;
   return new Date(targetArrivalTime.getTime() - offsetMs);
 }
 
@@ -28,20 +31,42 @@ export function calculateExpectedArrival(
   return new Date(launchTime.getTime() + offsetMs);
 }
 
+export function calculateEffectiveArrival(
+  targetArrivalTime: Date,
+  arrivalOffsetSeconds = 0
+): Date {
+  return new Date(targetArrivalTime.getTime() + arrivalOffsetSeconds * 1000);
+}
+
 /**
- * When GO is pressed: target arrival = now + gather + longest march.
- * Longest-march caller launches immediately; others launch later so all arrive together.
+ * When GO is pressed: choose a shared target so the earliest launch is
+ * startedAt + firstCallerLead, accounting for per-caller arrival offsets.
+ *
+ * For each caller: launch = target + offset - gather - march
+ * ⇒ target = startedAt + lead + gather + max(march - offset)
  */
 export function computeTargetArrivalOnGo(
   startedAt: Date,
   gatherDurationSeconds: number,
   marchDurationsSeconds: number[],
-  firstCallerLeadSeconds = DEFAULT_FIRST_CALLER_LEAD_SECONDS
+  firstCallerLeadSeconds = DEFAULT_FIRST_CALLER_LEAD_SECONDS,
+  arrivalOffsetsSeconds: number[] = []
 ): Date {
-  const maxMarch = Math.max(...marchDurationsSeconds);
+  if (marchDurationsSeconds.length === 0) {
+    return new Date(
+      startedAt.getTime() + (gatherDurationSeconds + firstCallerLeadSeconds) * 1000
+    );
+  }
+
+  let maxAdjustedMarch = Number.NEGATIVE_INFINITY;
+  for (let i = 0; i < marchDurationsSeconds.length; i++) {
+    const offset = arrivalOffsetsSeconds[i] ?? 0;
+    maxAdjustedMarch = Math.max(maxAdjustedMarch, marchDurationsSeconds[i] - offset);
+  }
+
   return new Date(
     startedAt.getTime() +
-      (gatherDurationSeconds + maxMarch + firstCallerLeadSeconds) * 1000
+      (gatherDurationSeconds + maxAdjustedMarch + firstCallerLeadSeconds) * 1000
   );
 }
 

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { ServiceWorkerRegistrar } from "@/components/ServiceWorkerRegistrar";
 import { ForegroundNotificationListener } from "@/components/ForegroundNotificationListener";
+import { SilentLivePing } from "@/components/SilentLivePing";
 
 export const metadata: Metadata = {
   title: "Whiteout Rally Timer",
@@ -36,6 +37,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="bg-rally-bg text-rally-text min-h-screen antialiased">
         <ServiceWorkerRegistrar />
         <ForegroundNotificationListener />
+        <SilentLivePing />
         {children}
       </body>
     </html>

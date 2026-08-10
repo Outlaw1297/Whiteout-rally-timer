@@ -31,6 +31,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     userId?: string;
     marchDuration?: string;
     marchDurationSeconds?: number;
+    arrivalOffsetSeconds?: number;
   };
   try {
     body = await request.json();
@@ -46,6 +47,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   }
   if (!marchSeconds || marchSeconds <= 0) {
     return errorResponse("marchDuration or marchDurationSeconds required");
+  }
+
+  let arrivalOffsetSeconds = 0;
+  if (body.arrivalOffsetSeconds !== undefined) {
+    if (
+      typeof body.arrivalOffsetSeconds !== "number" ||
+      !Number.isFinite(body.arrivalOffsetSeconds) ||
+      body.arrivalOffsetSeconds < 0 ||
+      body.arrivalOffsetSeconds > 3600
+    ) {
+      return errorResponse("arrivalOffsetSeconds must be 0–3600");
+    }
+    arrivalOffsetSeconds = Math.floor(body.arrivalOffsetSeconds);
   }
 
   let callerName = body.callerName?.trim();
@@ -70,10 +84,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       callerName,
       userId,
       marchDurationSeconds: marchSeconds,
+      arrivalOffsetSeconds,
     },
     update: {
       userId,
       marchDurationSeconds: marchSeconds,
+      arrivalOffsetSeconds,
       status: "WAITING",
       launchedConfirmedAt: null,
     },

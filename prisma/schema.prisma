@@ -74,6 +74,10 @@ model RallyEvent {
   pushLeadMs            Int              @default(1000)
   status                RallyEventStatus @default(DRAFT)
   isTestMode            Boolean          @default(false)
+  /** Pin for quick-switch drawer */
+  pinned                Boolean          @default(false)
+  /** Manual sort order in template lists (lower first) */
+  sortOrder             Int              @default(0)
   startedAt             DateTime?        @db.Timestamptz(3)
   completedAt           DateTime?        @db.Timestamptz(3)
   cancelledAt           DateTime?        @db.Timestamptz(3)
@@ -84,6 +88,7 @@ model RallyEvent {
 
   @@index([status])
   @@index([targetArrivalTime])
+  @@index([pinned, sortOrder])
 }
 
 model RallyAssignment {
@@ -92,6 +97,8 @@ model RallyAssignment {
   callerName           String
   userId               String?
   marchDurationSeconds Int
+  /** Seconds after the shared target arrival — positive = hit later (stagger order) */
+  arrivalOffsetSeconds Int              @default(0)
   launchTime           DateTime?        @db.Timestamptz(3)
   expectedArrivalTime  DateTime?        @db.Timestamptz(3)
   status               AssignmentStatus @default(WAITING)

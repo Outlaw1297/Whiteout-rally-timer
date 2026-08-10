@@ -269,6 +269,8 @@ export interface PushPayload {
   targetAt?: string;
   calibrationIndex?: number;
   calibrationTotal?: number;
+  silent?: boolean;
+  livePing?: boolean;
 }
 
 export async function sendPushNotification(

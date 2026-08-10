@@ -13,12 +13,15 @@ export interface SerializedEvent {
   status: string;
   isTestMode: boolean;
   isTemplate?: boolean;
+  pinned?: boolean;
+  sortOrder?: number;
   assignments: Array<{
     id: string;
     userId: string | null;
     displayName: string;
     marchDurationSeconds: number;
     marchFormatted: string;
+    arrivalOffsetSeconds?: number;
     launchTime: string | null;
     expectedArrivalTime: string | null;
     status: string;

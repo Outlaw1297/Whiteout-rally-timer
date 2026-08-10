@@ -6,6 +6,7 @@ import {
   CALIBRATION_PING_COUNT,
   getCalibrationStatus,
   sendCalibrationPings,
+  userHasActiveRally,
 } from "@/lib/push-calibration";
 
 export async function GET(request: NextRequest) {
@@ -21,11 +22,35 @@ export async function POST(request: NextRequest) {
   if (session instanceof Response) return session;
 
   const ip = getClientIp(request);
-  const limit = rateLimit(`push-calibrate:${ip}`, RATE_LIMITS.pushSubscribe);
+
+  let body: { mode?: string; silent?: boolean } = {};
+  try {
+    body = await request.json();
+  } catch {
+    body = {};
+  }
+
+  const mode = body.mode === "live" ? "live" : "setup";
+  const silent = body.silent !== false;
+
+  const limitKey =
+    mode === "live" ? `push-calibrate-live:${session.id}` : `push-calibrate:${ip}`;
+  const limitConfig =
+    mode === "live"
+      ? { windowMs: 5 * 60_000, maxRequests: 3 }
+      : RATE_LIMITS.pushSubscribe;
+  const limit = rateLimit(limitKey, limitConfig);
   if (!limit.allowed) return rateLimitResponse(limit.resetAt);
 
+  if (mode === "live") {
+    const busy = await userHasActiveRally(session.id, session.role);
+    if (busy) {
+      return errorResponse("Skip live ping while a rally timer is active", 409);
+    }
+  }
+
   const before = await getCalibrationStatus(session.id);
-  const result = await sendCalibrationPings(session.id);
+  const result = await sendCalibrationPings(session.id, { mode, silent });
 
   if ("error" in result) {
     return errorResponse(result.error!, result.status);
@@ -33,7 +58,8 @@ export async function POST(request: NextRequest) {
 
   return jsonResponse({
     started: true,
-    total: CALIBRATION_PING_COUNT,
+    mode,
+    total: result.total ?? CALIBRATION_PING_COUNT,
     pings: result.pings,
     samplesBefore: before.totalSamples,
   });

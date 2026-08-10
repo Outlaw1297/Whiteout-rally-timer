@@ -2,6 +2,7 @@ export interface LaunchSlotGroup {
   launchTime: string | null;
   marchFormatted: string;
   marchDurationSeconds: number;
+  arrivalOffsetSeconds?: number;
   assignmentIds: string[];
   displayNames: string[];
   status: string;
@@ -13,6 +14,7 @@ export interface MarchAssignment {
   marchDurationSeconds: number;
   marchFormatted: string;
   launchTime?: string | null;
+  arrivalOffsetSeconds?: number;
   status?: string;
 }
 
@@ -64,7 +66,7 @@ export function groupAssignmentsByLaunchSlot(assignments: MarchAssignment[]): La
   for (const assignment of assignments) {
     const key = assignment.launchTime
       ? assignment.launchTime
-      : `march-${assignment.marchDurationSeconds}`;
+      : `offset-${assignment.arrivalOffsetSeconds ?? 0}-march-${assignment.marchDurationSeconds}`;
     const list = bySlot.get(key) ?? [];
     list.push(assignment);
     bySlot.set(key, list);
@@ -84,6 +86,7 @@ export function groupAssignmentsByLaunchSlot(assignments: MarchAssignment[]): La
         launchTime: group[0].launchTime ?? null,
         marchFormatted: group[0].marchFormatted,
         marchDurationSeconds: group[0].marchDurationSeconds,
+        arrivalOffsetSeconds: group[0].arrivalOffsetSeconds ?? 0,
         assignmentIds: group.map((a) => a.id),
         displayNames: sortedNames,
         status: aggregateStatus,
@@ -95,6 +98,8 @@ export function groupAssignmentsByLaunchSlot(assignments: MarchAssignment[]): La
       }
       if (a.launchTime) return -1;
       if (b.launchTime) return 1;
+      const offsetDiff = (a.arrivalOffsetSeconds ?? 0) - (b.arrivalOffsetSeconds ?? 0);
+      if (offsetDiff !== 0) return offsetDiff;
       return b.marchDurationSeconds - a.marchDurationSeconds;
     });
 }

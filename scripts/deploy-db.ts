@@ -4,7 +4,7 @@
  */
 import { execSync } from "child_process";
 import { PrismaClient } from "@prisma/client";
-import { migrateLegacyData, migrateTemplateSchema, migrateNotificationEnum } from "../src/lib/db-migrate";
+import { migrateLegacyData, migrateTemplateSchema, migrateNotificationEnum, migrateFeaturePackColumns } from "../src/lib/db-migrate";
 import { initWebPush } from "../src/lib/push";
 
 const prisma = new PrismaClient();
@@ -14,6 +14,7 @@ async function main() {
     await migrateLegacyData();
     await migrateTemplateSchema();
     await migrateNotificationEnum();
+    await migrateFeaturePackColumns();
   } catch (err) {
     console.warn(
       JSON.stringify({

@@ -141,3 +141,33 @@ export async function migrateNotificationEnum(): Promise<void> {
 
   logger.info("migrated_notification_enum");
 }
+
+/** Add arrival offset + template pin columns when upgrading. */
+export async function migrateFeaturePackColumns(): Promise<void> {
+  if (await tableExists("RallyAssignment")) {
+    if (!(await columnExists("RallyAssignment", "arrivalOffsetSeconds"))) {
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE "RallyAssignment"
+        ADD COLUMN IF NOT EXISTS "arrivalOffsetSeconds" INTEGER NOT NULL DEFAULT 0
+      `);
+      logger.info("migrated_arrival_offset_seconds");
+    }
+  }
+
+  if (await tableExists("RallyEvent")) {
+    if (!(await columnExists("RallyEvent", "pinned"))) {
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE "RallyEvent"
+        ADD COLUMN IF NOT EXISTS "pinned" BOOLEAN NOT NULL DEFAULT false
+      `);
+      logger.info("migrated_event_pinned");
+    }
+    if (!(await columnExists("RallyEvent", "sortOrder"))) {
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE "RallyEvent"
+        ADD COLUMN IF NOT EXISTS "sortOrder" INTEGER NOT NULL DEFAULT 0
+      `);
+      logger.info("migrated_event_sort_order");
+    }
+  }
+}

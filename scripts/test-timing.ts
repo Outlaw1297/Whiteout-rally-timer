@@ -205,3 +205,32 @@ if (getEffectivePushLeadMs(500, [{ deliveryLeadMs: 900 }, { deliveryLeadMs: 1200
   process.exit(1);
 }
 console.log("PASS adaptive delivery lead");
+
+// Arrival offsets: call1=0, call3=2, call2=4 → staggered hits
+{
+  const go = new Date();
+  go.setHours(20, 0, 0, 0);
+  const marches = [480, 390, 255]; // call1, call3, call2
+  const offsets = [0, 2, 4];
+  const target = computeTargetArrivalOnGo(go, 300, marches, 3, offsets);
+  const launch1 = calculateLaunchTime(target, 300, 480, 0);
+  const launch3 = calculateLaunchTime(target, 300, 390, 2);
+  const launch2 = calculateLaunchTime(target, 300, 255, 4);
+  const arrive1 = calculateExpectedArrival(launch1, 300, 480);
+  const arrive3 = calculateExpectedArrival(launch3, 300, 390);
+  const arrive2 = calculateExpectedArrival(launch2, 300, 255);
+
+  if (arrive3.getTime() - arrive1.getTime() !== 2000) {
+    console.error("FAIL offset stagger call3 vs call1", arrive3.getTime() - arrive1.getTime());
+    process.exit(1);
+  }
+  if (arrive2.getTime() - arrive1.getTime() !== 4000) {
+    console.error("FAIL offset stagger call2 vs call1");
+    process.exit(1);
+  }
+  if (launch1.getTime() !== go.getTime() + 3000) {
+    console.error("FAIL first launch should be GO + lead with offsets", launch1.toISOString());
+    process.exit(1);
+  }
+  console.log("PASS arrival offset stagger order");
+}

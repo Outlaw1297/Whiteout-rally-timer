@@ -21,12 +21,14 @@ export type EventWithAssignments = RallyEvent & {
 export function recalculateAssignmentTimes(
   targetArrivalTime: Date,
   gatherDurationSeconds: number,
-  marchDurationSeconds: number
+  marchDurationSeconds: number,
+  arrivalOffsetSeconds = 0
 ) {
   const launchTime = calculateLaunchTime(
     targetArrivalTime,
     gatherDurationSeconds,
-    marchDurationSeconds
+    marchDurationSeconds,
+    arrivalOffsetSeconds
   );
   const expectedArrivalTime = calculateExpectedArrival(
     launchTime,
@@ -49,6 +51,7 @@ export function serializeAssignment(
     username: assignment.user?.username ?? null,
     marchDurationSeconds: assignment.marchDurationSeconds,
     marchFormatted: formatMarch(assignment.marchDurationSeconds),
+    arrivalOffsetSeconds: assignment.arrivalOffsetSeconds ?? 0,
     launchTime: assignment.launchTime?.toISOString() ?? null,
     expectedArrivalTime: assignment.expectedArrivalTime?.toISOString() ?? null,
     status: assignment.status,
@@ -66,13 +69,19 @@ function formatMarch(seconds: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-function sortAssignments<T extends { launchTime: string | null; marchDurationSeconds: number }>(
-  assignments: T[]
-): T[] {
+function sortAssignments<
+  T extends {
+    launchTime: string | null;
+    marchDurationSeconds: number;
+    arrivalOffsetSeconds?: number;
+  }
+>(assignments: T[]): T[] {
   return [...assignments].sort((a, b) => {
     if (a.launchTime && b.launchTime) return a.launchTime.localeCompare(b.launchTime);
     if (a.launchTime) return -1;
     if (b.launchTime) return 1;
+    const offsetDiff = (a.arrivalOffsetSeconds ?? 0) - (b.arrivalOffsetSeconds ?? 0);
+    if (offsetDiff !== 0) return offsetDiff;
     return b.marchDurationSeconds - a.marchDurationSeconds;
   });
 }
@@ -96,6 +105,8 @@ export function serializeEvent(event: EventWithAssignments) {
     pushLeadMs: event.pushLeadMs,
     status: event.status,
     isTestMode: event.isTestMode,
+    pinned: event.pinned ?? false,
+    sortOrder: event.sortOrder ?? 0,
     isTemplate: !event.targetArrivalTime && event.status !== "ACTIVE",
     startedAt: event.startedAt?.toISOString() ?? null,
     completedAt: event.completedAt?.toISOString() ?? null,

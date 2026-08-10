@@ -232,9 +232,6 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
     ? event.assignments.filter((a) => a.marchDurationSeconds === addMarchSeconds)
     : [];
   const launchSlots = groupAssignmentsByLaunchSlot(event.assignments);
-  const templateSlots = groupAssignmentsByLaunchSlot(
-    event.assignments.map((a) => ({ ...a, launchTime: null }))
-  );
 
   return (
     <main className="min-h-screen px-4 py-6 max-w-lg mx-auto">
@@ -359,52 +356,61 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
         <section className="mb-4">
           <h2 className="text-rally-muted text-xs mb-2">TEMPLATE CALLERS</h2>
           <div className="flex flex-col gap-2 mb-4">
-            {templateSlots.map((slot) => (
-              <div
-                key={slot.assignmentIds.join("-")}
-                className="flex justify-between items-center p-3 bg-rally-surface border border-rally-border rounded-lg"
-              >
-                <div>
-                  <p className="font-bold">{slot.displayNames.join(", ")}</p>
-                  <p className="text-rally-muted text-xs font-mono">
-                    March {slot.marchFormatted}
-                    {(slot.arrivalOffsetSeconds ?? 0) > 0
-                      ? ` · +${slot.arrivalOffsetSeconds}s hit`
-                      : " · hit at target"}
-                  </p>
-                  {slot.displayNames.length > 1 && (
-                    <p className="text-rally-warning text-xs mt-0.5">Launch together</p>
-                  )}
+            {event.assignments.map((caller) => {
+              const sameMarch = event.assignments.filter(
+                (a) =>
+                  a.id !== caller.id &&
+                  a.marchDurationSeconds === caller.marchDurationSeconds &&
+                  (a.arrivalOffsetSeconds ?? 0) === (caller.arrivalOffsetSeconds ?? 0)
+              );
+              const offset = caller.arrivalOffsetSeconds ?? 0;
+              return (
+                <div
+                  key={caller.id}
+                  className="p-3 bg-rally-surface border border-rally-border rounded-lg"
+                >
+                  <div className="flex justify-between items-start gap-3">
+                    <div className="min-w-0">
+                      <p className="font-bold">{caller.displayName}</p>
+                      <p className="text-rally-muted text-xs font-mono mt-0.5">
+                        March {caller.marchFormatted}
+                        {offset > 0 ? ` · +${offset}s hit` : " · hit at target"}
+                      </p>
+                      {sameMarch.length > 0 && (
+                        <p className="text-rally-warning text-xs mt-0.5">
+                          Same march/offset as {sameMarch.map((a) => a.displayName).join(", ")} —
+                          launch together
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => removeCaller(caller.id)}
+                      className="text-rally-danger text-xs shrink-0"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  <div className="mt-3 pt-3 border-t border-rally-border flex items-center gap-2">
+                    <label className="text-rally-muted text-xs flex items-center gap-2 flex-1">
+                      <span className="shrink-0">
+                        <span className="font-bold text-rally-text">{caller.displayName}</span>
+                        {" "}hit offset (s)
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={3600}
+                        defaultValue={offset}
+                        key={`${caller.id}-${offset}`}
+                        onBlur={(e) => updateOffset(caller.id, e.target.value)}
+                        className="w-20 px-2 py-1 bg-rally-bg border border-rally-border rounded font-mono text-sm"
+                        aria-label={`Arrival offset for ${caller.displayName}`}
+                      />
+                    </label>
+                  </div>
                 </div>
-                <div className="flex flex-col items-end gap-1">
-                  {slot.assignmentIds.map((id) => {
-                    const caller = event.assignments.find((a) => a.id === id);
-                    if (!caller) return null;
-                    return (
-                      <div key={id} className="flex items-center gap-2">
-                        <label className="text-rally-muted text-[10px]">
-                          Offset
-                          <input
-                            type="number"
-                            min={0}
-                            max={3600}
-                            defaultValue={caller.arrivalOffsetSeconds ?? 0}
-                            onBlur={(e) => updateOffset(id, e.target.value)}
-                            className="ml-1 w-14 px-1 py-0.5 bg-rally-bg border border-rally-border rounded font-mono text-xs"
-                          />
-                        </label>
-                        <button
-                          onClick={() => removeCaller(id)}
-                          className="text-rally-danger text-xs"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="p-4 bg-rally-surface border border-rally-border rounded-lg flex flex-col gap-2">
@@ -432,13 +438,13 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                 className="w-full px-3 py-2 bg-rally-bg border border-rally-border rounded font-mono"
               />
               <p className="text-rally-muted text-xs mt-1">
-                Example: call1=0, call3=2, call2=4 → hits in order call1 → call3 → call2.
+                Example: Call1=0, Call3=2, Call2=4 → hits in order Call1 → Call3 → Call2.
               </p>
             </div>
             {matchingMarchCallers.length > 0 && (
               <p className="text-rally-warning text-xs">
                 Same march as {matchingMarchCallers.map((a) => a.displayName).join(", ")} — they
-                will launch together.
+                will launch together if offsets also match.
               </p>
             )}
             <select

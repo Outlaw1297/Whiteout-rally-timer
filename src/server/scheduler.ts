@@ -4,6 +4,7 @@ import { sendPushNotification, isExpiredSubscription } from "@/lib/push";
 import {
   getNotificationPayload,
   getNotificationTargetAt,
+  resolveLateNotificationPresentation,
   shouldSkipNotification,
   type NotificationOffsetType,
 } from "@/lib/timing";
@@ -14,6 +15,13 @@ const DUE_GRACE_MS = 100;
 
 let schedulerRunning = false;
 let schedulerInterval: ReturnType<typeof setInterval> | null = null;
+
+function notificationPriority(type: string): number {
+  if (type === "LAUNCH") return 0;
+  if (String(type).startsWith("WARNING_")) return 1;
+  if (type === "RALLY_STARTED") return 2;
+  return 3;
+}
 
 async function processNotificationEvent(eventId: string) {
   const now = Date.now();
@@ -51,6 +59,33 @@ async function processNotificationEvent(eventId: string) {
       return null;
     }
 
+    // If throw is imminent and LAUNCH is also due, skip stale warnings so the
+    // Pixel gets one clear THROW banner instead of a late "10 seconds".
+    if (
+      String(event.type).startsWith("WARNING_") &&
+      event.assignment.launchTime
+    ) {
+      const secondsLeft =
+        (event.assignment.launchTime.getTime() - now) / 1000;
+      if (secondsLeft <= 5) {
+        const launchDue = await tx.notificationEvent.findFirst({
+          where: {
+            rallyAssignmentId: event.assignment.id,
+            type: "LAUNCH",
+            status: "PENDING",
+            scheduledAt: { lte: new Date(now + DUE_GRACE_MS) },
+          },
+        });
+        if (launchDue) {
+          await tx.notificationEvent.updateMany({
+            where: { id: eventId, status: "PENDING" },
+            data: { status: "SKIPPED", error: "superseded by launch" },
+          });
+          return null;
+        }
+      }
+    }
+
     return event;
   });
 
@@ -83,13 +118,20 @@ async function processNotificationEvent(eventId: string) {
       startedAt: rallyEvent.startedAt,
     }).toISOString();
 
-  const { title, body } = getNotificationPayload(
+  const basePayload = getNotificationPayload(
     notificationType,
     rallyEvent.name,
     callerName,
     rallyEvent.targetArrivalTime,
     assignment.marchDurationSeconds,
     rallyEvent.gatherDurationSeconds
+  );
+
+  const presented = resolveLateNotificationPresentation(
+    notificationType,
+    assignment.launchTime,
+    now,
+    basePayload
   );
 
   if (!user) {
@@ -117,13 +159,14 @@ async function processNotificationEvent(eventId: string) {
     const result = await sendPushNotification(
       { endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth },
       {
-        title,
-        body,
+        title: presented.title,
+        body: presented.body,
         rallyId: rallyEvent.id,
-        notificationType: notification.type,
+        notificationType: presented.type,
         assignmentId: assignment.id,
         scheduledAt: notification.scheduledAt.toISOString(),
         targetAt: targetAt || undefined,
+        launchTime: assignment.launchTime?.toISOString(),
       }
     );
 
@@ -157,15 +200,15 @@ async function processNotificationEvent(eventId: string) {
     caller: callerName,
     rally: rallyEvent.name,
     type: notification.type,
+    presentedType: presented.type,
+    escalated: presented.escalated,
     scheduledAt: notification.scheduledAt.toISOString(),
     sentAt: sentAt.toISOString(),
     latencyMs,
     success,
   });
 
-  if (notification.type === "LAUNCH") {
-    // Complete as soon as every caller has been told to throw — do not wait
-    // for target arrival (troops still marching).
+  if (presented.type === "LAUNCH" || notification.type === "LAUNCH") {
     await completeRallyAfterLastCaller(rallyEvent.id, "last launch notification sent");
   }
 }
@@ -185,12 +228,17 @@ async function tick() {
     take: 100,
   });
 
+  // Prefer LAUNCH over late warnings so Pixel gets THROW, not a stale "10s".
+  pending.sort((a, b) => {
+    const byType = notificationPriority(a.type) - notificationPriority(b.type);
+    if (byType !== 0) return byType;
+    return a.scheduledAt.getTime() - b.scheduledAt.getTime();
+  });
+
   for (const event of pending) {
     await processNotificationEvent(event.id);
   }
 
-  // End ACTIVE rallies once every caller's throw time has passed (or they
-  // confirmed LAUNCHED) — not when target arrival is reached.
   const activeEvents = await prisma.rallyEvent.findMany({
     where: { status: "ACTIVE" },
     select: { id: true },

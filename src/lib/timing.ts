@@ -153,6 +153,50 @@ export function shouldSkipNotification(
 }
 
 /**
+ * When Android delivers a warning late, rewrite so we never show "10 seconds"
+ * after that moment has already passed. Escalate to LAUNCH when throw is imminent.
+ */
+export function resolveLateNotificationPresentation(
+  type: NotificationOffsetType,
+  launchTime: Date | null | undefined,
+  nowMs: number,
+  base: { title: string; body: string }
+): { type: NotificationOffsetType; title: string; body: string; escalated: boolean } {
+  if (!launchTime || type === "RALLY_STARTED" || type === "LAUNCH") {
+    return { type, title: base.title, body: base.body, escalated: false };
+  }
+  if (!String(type).startsWith("WARNING_")) {
+    return { type, title: base.title, body: base.body, escalated: false };
+  }
+
+  const secondsLeft = (launchTime.getTime() - nowMs) / 1000;
+  if (secondsLeft <= 3) {
+    return {
+      type: "LAUNCH",
+      title: "🚨 THROW RALLY NOW",
+      body: base.body.includes("Target:")
+        ? base.body
+        : `${base.body}\nThrow window is now.`,
+      escalated: true,
+    };
+  }
+
+  const idealBefore = getNotificationSecondsBefore(type);
+  // More than ~1.5s late vs the labeled warning → show real remaining time.
+  if (secondsLeft < idealBefore - 1.5) {
+    const secs = Math.max(1, Math.ceil(secondsLeft));
+    return {
+      type,
+      title: `${secs}s — throw soon`,
+      body: base.body,
+      escalated: true,
+    };
+  }
+
+  return { type, title: base.title, body: base.body, escalated: false };
+}
+
+/**
  * Build the push schedule for one caller.
  * LAUNCH is always included. Optional warnings come from warningLeads.
  */

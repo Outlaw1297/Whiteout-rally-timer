@@ -153,8 +153,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     updateData.firstCallerLeadSeconds = body.firstCallerLeadSeconds;
   }
   if (body.pushLeadMs !== undefined) {
-    if (body.pushLeadMs < 0 || body.pushLeadMs > 5000) {
-      return errorResponse("pushLeadMs must be 0–5000");
+    if (body.pushLeadMs < 0 || body.pushLeadMs > 8000) {
+      return errorResponse("pushLeadMs must be 0–8000");
     }
     updateData.pushLeadMs = body.pushLeadMs;
   }

@@ -77,6 +77,15 @@ export default function DeveloperPage() {
   const [vapidSource, setVapidSource] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
+  const [testing, setTesting] = useState<string | null>(null);
+  const [testResults, setTestResults] = useState<Array<{
+    subscriptionId: string;
+    platform: string | null;
+    user: string;
+    success: boolean;
+    error?: string;
+  }> | null>(null);
+  const [statusMsg, setStatusMsg] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -105,13 +114,8 @@ export default function DeveloperPage() {
 
       if (timeRes.ok) {
         const timeData = await timeRes.json();
-        const rtt =
-          typeof timeData.serverSendTime === "number" &&
-          typeof timeData.serverReceiveTime === "number"
-            ? clientReceive - clientSend
-            : clientReceive - clientSend;
+        const rtt = clientReceive - clientSend;
 
-        // Prefer NTP-style midpoint when the health route echoes timestamps.
         let offset: number;
         if (
           typeof timeData.serverReceiveTime === "number" &&
@@ -142,6 +146,39 @@ export default function DeveloperPage() {
       setError("Failed to load developer diagnostics");
     }
   }, [router]);
+
+  const sendTest = useCallback(
+    async (opts: { subscriptionId?: string; userId?: string; all?: boolean }) => {
+      setError("");
+      setStatusMsg("");
+      setTestResults(null);
+      setTesting(opts.all ? "all" : opts.subscriptionId || opts.userId || "one");
+      try {
+        const res = await fetch("/api/admin/push/test", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(opts),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setError(data.error || "Test failed");
+          return;
+        }
+        setTestResults(data.results || []);
+        setStatusMsg(
+          `Sent to ${data.devicesNotified}/${data.devicesTested} device${
+            data.devicesTested === 1 ? "" : "s"
+          }`
+        );
+        load();
+      } catch {
+        setError("Test request failed");
+      } finally {
+        setTesting(null);
+      }
+    },
+    [load]
+  );
 
   useEffect(() => {
     if (!loading && !user) router.push("/login");
@@ -211,7 +248,17 @@ export default function DeveloperPage() {
       {error && <p className="text-rally-danger text-sm mb-4">{error}</p>}
 
       <section className="p-4 mb-4 bg-rally-surface border border-rally-border rounded-lg space-y-2">
-        <p className="text-rally-muted text-xs font-bold">SERVER CLOCK / NTP</p>
+        <div className="flex justify-between items-start gap-2">
+          <p className="text-rally-muted text-xs font-bold">SERVER CLOCK / NTP</p>
+          <button
+            type="button"
+            disabled={!pushEnabled || testing === "all" || totalDevices === 0}
+            onClick={() => sendTest({ all: true })}
+            className="px-3 py-1 bg-rally-accent text-white text-xs font-bold rounded disabled:opacity-50"
+          >
+            {testing === "all" ? "TESTING…" : "TEST ALL DEVICES"}
+          </button>
+        </div>
         {clock ? (
           <>
             <p className="font-mono text-sm">{clock.serverTime}</p>
@@ -257,6 +304,21 @@ export default function DeveloperPage() {
         </p>
       </section>
 
+      {(statusMsg || (testResults && testResults.length > 0)) && (
+        <section className="p-3 mb-4 bg-rally-surface border border-rally-border rounded-lg text-xs space-y-1">
+          {statusMsg && <p className="text-rally-success font-bold">{statusMsg}</p>}
+          {testResults?.map((r) => (
+            <p
+              key={r.subscriptionId}
+              className={r.success ? "text-rally-success" : "text-rally-danger"}
+            >
+              {r.success ? "✓" : "✗"} {r.user} · {r.platform || "unknown"}
+              {r.error ? ` — ${r.error}` : ""}
+            </p>
+          ))}
+        </section>
+      )}
+
       <div className="mb-4">
         <input
           type="search"
@@ -279,7 +341,7 @@ export default function DeveloperPage() {
               className="p-3 bg-rally-surface border border-rally-border rounded-lg text-sm"
             >
               <div className="flex justify-between gap-2 items-start">
-                <div>
+                <div className="min-w-0">
                   <p className="font-bold">
                     {u.displayName}{" "}
                     <span className="text-rally-muted text-xs font-normal">@{u.username}</span>
@@ -295,6 +357,16 @@ export default function DeveloperPage() {
                       : ""}
                   </p>
                 </div>
+                {u.devices.length > 0 && (
+                  <button
+                    type="button"
+                    disabled={!pushEnabled || testing === u.id}
+                    onClick={() => sendTest({ userId: u.id })}
+                    className="shrink-0 px-2 py-1 border border-rally-accent text-rally-accent text-xs font-bold rounded disabled:opacity-50"
+                  >
+                    {testing === u.id ? "…" : "TEST USER"}
+                  </button>
+                )}
               </div>
 
               <p className="text-rally-muted text-[11px] mt-1">
@@ -322,11 +394,21 @@ export default function DeveloperPage() {
                       key={d.id}
                       className="p-2 bg-rally-bg border border-rally-border rounded text-xs"
                     >
-                      <div className="flex justify-between gap-2">
-                        <span className="font-mono text-rally-accent">{d.platform}</span>
-                        <span className="font-mono text-rally-muted">
-                          lead {d.deliveryLeadMs}ms · {d.deliverySampleCount} samples
-                        </span>
+                      <div className="flex justify-between gap-2 items-start">
+                        <div className="min-w-0">
+                          <span className="font-mono text-rally-accent">{d.platform}</span>
+                          <span className="font-mono text-rally-muted ml-2">
+                            lead {d.deliveryLeadMs}ms · {d.deliverySampleCount} samples
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={!pushEnabled || testing === d.id}
+                          onClick={() => sendTest({ subscriptionId: d.id })}
+                          className="shrink-0 px-2 py-0.5 bg-rally-accent text-white text-[11px] font-bold rounded disabled:opacity-50"
+                        >
+                          {testing === d.id ? "…" : "TEST"}
+                        </button>
                       </div>
                       <p className="text-rally-muted text-[11px] mt-1">
                         Calibrated {formatWhen(d.lastCalibratedAt)} · Updated{" "}

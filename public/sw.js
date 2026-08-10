@@ -121,7 +121,8 @@ async function showRallyNotification(title, options) {
       icon: "/icons/icon-192.png",
       badge: "/icons/icon-192.png",
       tag: options.tag,
-      renotify: true,
+      renotify: options.renotify !== false && !options.silent,
+      silent: !!options.silent,
       data: options.data,
     });
     return true;

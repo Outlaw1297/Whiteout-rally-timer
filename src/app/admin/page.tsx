@@ -125,17 +125,23 @@ export default function AdminDashboard() {
       <header className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold text-rally-accent">ADMIN</h1>
-          <p className="text-rally-muted text-sm">{user.displayName}</p>
+          <p className="text-rally-muted text-sm">
+            {user.displayName}
+            {user.role === "DEVELOPER" ? (
+              <span className="text-rally-success text-xs font-bold ml-2">DEVELOPER</span>
+            ) : null}
+          </p>
         </div>
         <div className="flex gap-2 flex-wrap justify-end">
           <HomeButton />
           <Link href="/admin/users" className="text-rally-muted text-sm hover:text-rally-accent">
             Users
           </Link>
-          {(user.role === "DEVELOPER") && (
+          {user.role === "DEVELOPER" && (
             <Link
               href="/admin/developer"
-              className="text-rally-muted text-sm hover:text-rally-accent"
+              className="text-rally-accent text-sm font-bold hover:underline"
+              title="Device diagnostics (replaces Test Bench)"
             >
               Developer
             </Link>
@@ -144,6 +150,14 @@ export default function AdminDashboard() {
             Logout
           </button>
         </div>
+        {user.role === "DEVELOPER" && (
+          <p className="w-full text-right text-rally-muted text-[11px] mt-1">
+            Former Test Bench →{" "}
+            <Link href="/admin/developer" className="text-rally-accent font-bold">
+              Developer diagnostics
+            </Link>
+          </p>
+        )}
       </header>
 
       <RolesNote compact />

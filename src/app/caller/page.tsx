@@ -17,7 +17,7 @@ export default function CallerHomePage() {
 
   useEffect(() => {
     if (!loading && !user) router.push("/login");
-    if (!loading && user && user.role === "ADMIN") router.push("/admin");
+    if (!loading && user && (user.role === "ADMIN" || user.role === "DEVELOPER")) router.push("/admin");
   }, [user, loading, router]);
 
   useEffect(() => {

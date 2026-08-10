@@ -7,7 +7,7 @@ import {
 
 export type { NotificationOffsetType } from "./notification-prefs";
 
-/** Default gather duration: 5 minutes */
+/** Default rally (gather) duration: 5 minutes */
 export const DEFAULT_GATHER_SECONDS = 300;
 
 /** Default lead time before first caller launches after GO */
@@ -375,7 +375,7 @@ export function getNotificationPayload(
     case "LAUNCH":
       return {
         title: `🚨 THROW RALLY NOW`,
-        body: `${eventName}\nTarget: ${arrival}\nMarch: ${march} | Gather: ${gather}`,
+        body: `${eventName}\nTarget: ${arrival}\nMarch: ${march} | Rally: ${gather}`,
       };
   }
 }

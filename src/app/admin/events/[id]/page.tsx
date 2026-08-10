@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
@@ -13,12 +13,14 @@ import { MarchDuplicateNotice } from "@/components/MarchDuplicateNotice";
 import { PushSetupCard } from "@/components/PushSetupCard";
 import { TemplateSwitcher } from "@/components/TemplateSwitcher";
 import { HomeButton } from "@/components/HomeButton";
+import { StatusBanner } from "@/components/StatusBanner";
 import { formatArrivalTime, formatGather, statusLabel } from "@/lib/display";
-import { parseMarchDuration } from "@/lib/timing";
+import { formatMarchDuration, parseMarchDuration } from "@/lib/timing";
 import {
   getMarchDuplicateGroups,
   groupAssignmentsByLaunchSlot,
 } from "@/lib/march-groups";
+import { isAdminRole } from "@/lib/roles";
 
 interface NotificationMonitor {
   callerName: string;
@@ -42,6 +44,15 @@ interface EventDetail extends SerializedEvent {
   notificationMonitor?: NotificationMonitor[];
 }
 
+const OFFSET_TOOLTIP =
+  "Offset adjusts a rally from hitting at the same time. Example: call1 at +1 hits one second later than the calculated time; call2 at -1 hits one second earlier.";
+
+function formatOffsetLabel(offset: number): string {
+  if (offset > 0) return `· +${offset}s hit`;
+  if (offset < 0) return `· ${offset}s hit`;
+  return "· hit at target";
+}
+
 export default function AdminEventPage({ params }: { params: { id: string } }) {
   const { user, loading } = useAuth();
   const router = useRouter();
@@ -53,11 +64,17 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
   const [linkUserId, setLinkUserId] = useState("");
   const [addMarch, setAddMarch] = useState("8:00");
   const [addOffset, setAddOffset] = useState("0");
-  const [useMyAccount, setUseMyAccount] = useState(true);
   const [starting, setStarting] = useState(false);
   const [firstCallerLead, setFirstCallerLead] = useState("3");
   const [timingSaving, setTimingSaving] = useState(false);
   const [cloning, setCloning] = useState(false);
+  const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [savingCallerId, setSavingCallerId] = useState<string | null>(null);
+  const [quickAddingId, setQuickAddingId] = useState<string | null>(null);
+  const [editDrafts, setEditDrafts] = useState<
+    Record<string, { march: string; offset: string; userId: string; name: string }>
+  >({});
 
   const { correctedNow } = useServerClock({
     activeRally: event?.status === "ACTIVE",
@@ -68,6 +85,31 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
   const nextLaunchMs = nextCaller?.launchTime ? new Date(nextCaller.launchTime).getTime() : null;
   const { display: nextCountdown } = useCountdown(nextLaunchMs, correctedNow);
 
+  const flash = (ok: string | null, err: string | null = null) => {
+    setStatusMsg(ok);
+    setErrorMsg(err);
+    if (ok || err) {
+      window.setTimeout(() => {
+        setStatusMsg((cur) => (cur === ok ? null : cur));
+        setErrorMsg((cur) => (cur === err ? null : cur));
+      }, 4000);
+    }
+  };
+
+  const syncDrafts = useCallback((data: EventDetail) => {
+    const next: Record<string, { march: string; offset: string; userId: string; name: string }> =
+      {};
+    for (const a of data.assignments) {
+      next[a.id] = {
+        march: a.marchFormatted || formatMarchDuration(a.marchDurationSeconds),
+        offset: String(a.arrivalOffsetSeconds ?? 0),
+        userId: a.userId || "",
+        name: a.displayName,
+      };
+    }
+    setEditDrafts(next);
+  }, []);
+
   const loadEvent = useCallback(() => {
     fetch(`/api/events/${params.id}`)
       .then((r) => r.json())
@@ -75,15 +117,14 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
         if (data.error) return;
         setEvent(data);
         setFirstCallerLead(String(data.firstCallerLeadSeconds ?? 3));
+        syncDrafts(data);
       });
-  }, [params.id]);
+  }, [params.id, syncDrafts]);
 
   useEventSocket({
     eventId: params.id,
     onEventUpdate: (e) => {
       setEvent((prev) => ({ ...prev, ...e }));
-      // Websocket payloads omit notificationMonitor — refresh so Throw doesn't
-      // freeze as "overdue" after the rally completes.
       if (e.status === "COMPLETED" || e.status === "CANCELLED") {
         loadEvent();
       }
@@ -93,11 +134,11 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
 
   useEffect(() => {
     if (!loading && !user) router.push("/login");
-    if (!loading && user && user.role !== "ADMIN") router.push("/caller");
+    if (!loading && user && !isAdminRole(user.role)) router.push("/caller");
   }, [user, loading, router]);
 
   useEffect(() => {
-    if (user?.role === "ADMIN") {
+    if (user && isAdminRole(user.role)) {
       loadEvent();
       fetch("/api/admin/users")
         .then((r) => r.json())
@@ -105,7 +146,8 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
           setCallers(
             (data.users || []).filter(
               (u: { role: string; active: boolean }) =>
-                u.active && (u.role === "CALLER" || u.role === "ADMIN")
+                u.active &&
+                (u.role === "CALLER" || u.role === "ADMIN" || u.role === "DEVELOPER")
             )
           )
         );
@@ -118,8 +160,6 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
     return () => clearInterval(interval);
   }, [event?.status, loadEvent]);
 
-  // Keep refreshing the monitor briefly after GO ends so final SENT/FAILED
-  // THROW rows replace a stale "overdue" PENDING snapshot.
   useEffect(() => {
     if (event?.status !== "COMPLETED") return;
     loadEvent();
@@ -131,34 +171,104 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
     };
   }, [event?.status, event?.id, loadEvent]);
 
+  const linkedUserIds = useMemo(
+    () => new Set((event?.assignments || []).map((a) => a.userId).filter(Boolean)),
+    [event?.assignments]
+  );
+
+  const quickAddCandidates = useMemo(
+    () => callers.filter((c) => !linkedUserIds.has(c.id)),
+    [callers, linkedUserIds]
+  );
+
   const addCaller = async () => {
     if (!callerName.trim() || !addMarch) return;
     const offset = parseInt(addOffset, 10);
-    await fetch(`/api/events/${params.id}/assignments`, {
+    const res = await fetch(`/api/events/${params.id}/assignments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         callerName: callerName.trim(),
-        userId: linkUserId || (useMyAccount && user ? user.id : undefined),
+        userId: linkUserId || undefined,
         marchDuration: addMarch,
-        arrivalOffsetSeconds: Number.isFinite(offset) ? Math.max(0, offset) : 0,
+        arrivalOffsetSeconds: Number.isFinite(offset) ? offset : 0,
       }),
     });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      flash(null, data.error || "Failed to add caller");
+      return;
+    }
     setCallerName("");
     setLinkUserId("");
     setAddOffset("0");
+    flash("Caller added to template");
     loadEvent();
   };
 
-  const updateOffset = async (assignmentId: string, value: string) => {
-    const offset = parseInt(value, 10);
-    if (!Number.isFinite(offset) || offset < 0) return;
-    await fetch(`/api/events/${params.id}/assignments/${assignmentId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ arrivalOffsetSeconds: offset }),
-    });
-    loadEvent();
+  const quickAddCaller = async (c: {
+    id: string;
+    displayName: string;
+    username: string;
+  }) => {
+    setQuickAddingId(c.id);
+    try {
+      const res = await fetch(`/api/events/${params.id}/assignments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          callerName: c.displayName,
+          userId: c.id,
+          marchDuration: "8:00",
+          arrivalOffsetSeconds: 0,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        flash(null, data.error || `Failed to add ${c.displayName}`);
+        return;
+      }
+      flash(`Added ${c.displayName}`);
+      loadEvent();
+    } finally {
+      setQuickAddingId(null);
+    }
+  };
+
+  const saveCallerEdits = async (assignmentId: string) => {
+    const draft = editDrafts[assignmentId];
+    if (!draft) return;
+    const offset = parseInt(draft.offset, 10);
+    if (!Number.isFinite(offset) || offset < -3600 || offset > 3600) {
+      flash(null, "Offset must be between -3600 and 3600");
+      return;
+    }
+    if (!parseMarchDuration(draft.march)) {
+      flash(null, "Invalid march duration (use M:SS)");
+      return;
+    }
+    setSavingCallerId(assignmentId);
+    try {
+      const res = await fetch(`/api/events/${params.id}/assignments/${assignmentId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          callerName: draft.name.trim(),
+          marchDuration: draft.march,
+          arrivalOffsetSeconds: offset,
+          userId: draft.userId || null,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        flash(null, data.error || "Failed to save caller");
+        return;
+      }
+      flash("Caller saved");
+      loadEvent();
+    } finally {
+      setSavingCallerId(null);
+    }
   };
 
   const cloneTemplate = async () => {
@@ -167,21 +277,39 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
       const res = await fetch(`/api/events/${params.id}/clone`, { method: "POST" });
       const data = await res.json();
       if (res.ok && data.id) router.push(`/admin/events/${data.id}`);
+      else flash(null, data.error || "Clone failed");
     } finally {
       setCloning(false);
     }
   };
 
   const removeCaller = async (assignmentId: string) => {
-    await fetch(`/api/events/${params.id}/assignments/${assignmentId}`, { method: "DELETE" });
+    const res = await fetch(`/api/events/${params.id}/assignments/${assignmentId}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      flash(null, data.error || "Failed to remove caller");
+      return;
+    }
+    flash("Caller removed");
     loadEvent();
   };
 
   const goRally = async () => {
     setStarting(true);
-    await fetch(`/api/events/${params.id}/start`, { method: "POST" });
-    setStarting(false);
-    loadEvent();
+    try {
+      const res = await fetch(`/api/events/${params.id}/start`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        flash(null, data.error || "Failed to start rally");
+        return;
+      }
+      flash("Rally started");
+      loadEvent();
+    } finally {
+      setStarting(false);
+    }
   };
 
   const restartRally = async () => {
@@ -194,21 +322,34 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
   };
 
   const resetTemplate = async () => {
-    if (!confirm("Reset this rally back to template? Launch times and notifications will be cleared.")) return;
-    await fetch(`/api/events/${params.id}/reset`, { method: "POST" });
+    if (!confirm("Reset this rally back to template? Launch times and notifications will be cleared."))
+      return;
+    const res = await fetch(`/api/events/${params.id}/reset`, { method: "POST" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      flash(null, data.error || "Reset failed");
+      return;
+    }
+    flash("Template reset");
     loadEvent();
   };
 
   const saveTimingSettings = async () => {
     setTimingSaving(true);
     try {
-      await fetch(`/api/events/${params.id}`, {
+      const res = await fetch(`/api/events/${params.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           firstCallerLeadSeconds: parseInt(firstCallerLead, 10),
         }),
       });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        flash(null, data.error || "Failed to save timing");
+        return;
+      }
+      flash("Timing settings saved");
       loadEvent();
     } finally {
       setTimingSaving(false);
@@ -217,11 +358,17 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
 
   const linkMyAccount = async (assignmentId: string) => {
     if (!user) return;
-    await fetch(`/api/events/${params.id}/assignments/${assignmentId}`, {
+    const res = await fetch(`/api/events/${params.id}/assignments/${assignmentId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId: user.id }),
     });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      flash(null, data.error || "Failed to link account");
+      return;
+    }
+    flash("Account linked");
     loadEvent();
   };
 
@@ -285,6 +432,15 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
         </div>
       </header>
 
+      <StatusBanner
+        success={statusMsg}
+        error={errorMsg}
+        onDismiss={() => {
+          setStatusMsg(null);
+          setErrorMsg(null);
+        }}
+      />
+
       <PushSetupCard onSubscribed={loadEvent} />
 
       {marchDuplicateGroups.length > 0 && (
@@ -292,7 +448,7 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
       )}
 
       <section className="p-4 mb-4 bg-rally-surface border border-rally-border rounded-lg">
-        <p className="text-rally-muted text-xs">GATHER</p>
+        <p className="text-rally-muted text-xs">RALLY TIME</p>
         <p className="text-xl font-mono font-bold">{formatGather(event.gatherDurationSeconds)}</p>
 
         {isTemplate ? (
@@ -340,7 +496,7 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
         {isTemplate && (
           <p className="text-rally-muted text-sm mt-2">
             Launch times are calculated when you press GO. Use arrival offsets to stagger hit
-            order (0 = first wave, higher = later).
+            order (0 = at target, positive = later, negative = earlier).
           </p>
         )}
       </section>
@@ -381,17 +537,32 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                   (a.arrivalOffsetSeconds ?? 0) === (caller.arrivalOffsetSeconds ?? 0)
               );
               const offset = caller.arrivalOffsetSeconds ?? 0;
+              const draft = editDrafts[caller.id] || {
+                march: caller.marchFormatted,
+                offset: String(offset),
+                userId: caller.userId || "",
+                name: caller.displayName,
+              };
               return (
                 <div
                   key={caller.id}
-                  className="p-3 bg-rally-surface border border-rally-border rounded-lg"
+                  className="p-3 bg-rally-surface border border-rally-border rounded-lg space-y-2"
                 >
                   <div className="flex justify-between items-start gap-3">
-                    <div className="min-w-0">
-                      <p className="font-bold">{caller.displayName}</p>
+                    <div className="min-w-0 flex-1">
+                      <input
+                        value={draft.name}
+                        onChange={(e) =>
+                          setEditDrafts((prev) => ({
+                            ...prev,
+                            [caller.id]: { ...draft, name: e.target.value },
+                          }))
+                        }
+                        className="w-full px-2 py-1 bg-rally-bg border border-rally-border rounded font-bold text-sm"
+                        aria-label={`Caller name for ${caller.displayName}`}
+                      />
                       <p className="text-rally-muted text-xs font-mono mt-0.5">
-                        March {caller.marchFormatted}
-                        {offset > 0 ? ` · +${offset}s hit` : " · hit at target"}
+                        March {caller.marchFormatted} {formatOffsetLabel(offset)}
                       </p>
                       {sameMarch.length > 0 && (
                         <p className="text-rally-warning text-xs mt-0.5">
@@ -407,31 +578,121 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                       Remove
                     </button>
                   </div>
-                  <div className="mt-3 pt-3 border-t border-rally-border flex items-center gap-2">
-                    <label className="text-rally-muted text-xs flex items-center gap-2 flex-1">
-                      <span className="shrink-0">
-                        <span className="font-bold text-rally-text">{caller.displayName}</span>
-                        {" "}hit offset (s)
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="text-rally-muted text-xs block">
+                      March (M:SS)
+                      <input
+                        value={draft.march}
+                        onChange={(e) =>
+                          setEditDrafts((prev) => ({
+                            ...prev,
+                            [caller.id]: { ...draft, march: e.target.value },
+                          }))
+                        }
+                        className="w-full mt-1 px-2 py-1 bg-rally-bg border border-rally-border rounded font-mono text-sm"
+                      />
+                    </label>
+                    <label className="text-rally-muted text-xs block" title={OFFSET_TOOLTIP}>
+                      Offset (s)
+                      <span className="ml-1 text-rally-accent cursor-help" title={OFFSET_TOOLTIP}>
+                        ⓘ
                       </span>
                       <input
                         type="number"
-                        min={0}
+                        min={-3600}
                         max={3600}
-                        defaultValue={offset}
-                        key={`${caller.id}-${offset}`}
-                        onBlur={(e) => updateOffset(caller.id, e.target.value)}
-                        className="w-20 px-2 py-1 bg-rally-bg border border-rally-border rounded font-mono text-sm"
+                        value={draft.offset}
+                        onChange={(e) =>
+                          setEditDrafts((prev) => ({
+                            ...prev,
+                            [caller.id]: { ...draft, offset: e.target.value },
+                          }))
+                        }
+                        className="w-full mt-1 px-2 py-1 bg-rally-bg border border-rally-border rounded font-mono text-sm"
                         aria-label={`Arrival offset for ${caller.displayName}`}
                       />
                     </label>
                   </div>
+                  <p className="text-rally-muted text-[11px] leading-snug">{OFFSET_TOOLTIP}</p>
+
+                  <label className="text-rally-muted text-xs block">
+                    Linked account
+                    <select
+                      value={draft.userId}
+                      onChange={(e) =>
+                        setEditDrafts((prev) => ({
+                          ...prev,
+                          [caller.id]: { ...draft, userId: e.target.value },
+                        }))
+                      }
+                      className="w-full mt-1 px-2 py-1 bg-rally-bg border border-rally-border rounded text-sm text-rally-text"
+                    >
+                      <option value="">None (name only)</option>
+                      {user && (
+                        <option value={user.id}>Me ({user.displayName})</option>
+                      )}
+                      {callers.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.displayName} (@{c.username})
+                          {c.role === "ADMIN"
+                            ? " — admin"
+                            : c.role === "DEVELOPER"
+                              ? " — developer"
+                              : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={() => saveCallerEdits(caller.id)}
+                    disabled={savingCallerId === caller.id}
+                    className="w-full py-2 bg-rally-accent text-white text-xs font-bold rounded disabled:opacity-50"
+                  >
+                    {savingCallerId === caller.id ? "SAVING..." : "SAVE CALLER"}
+                  </button>
                 </div>
               );
             })}
           </div>
 
+          {quickAddCandidates.length > 0 && (
+            <div className="p-4 mb-4 bg-rally-surface border border-rally-border rounded-lg">
+              <h3 className="text-rally-muted text-xs mb-2">QUICK ADD REGISTERED</h3>
+              <p className="text-rally-muted text-xs mb-3">
+                One-tap add for accounts already registered. Use Add Caller below for new
+                unregistered names.
+              </p>
+              <div className="flex flex-col gap-2">
+                {quickAddCandidates.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    disabled={quickAddingId === c.id}
+                    onClick={() => quickAddCaller(c)}
+                    className="flex items-center justify-between px-3 py-2 border border-rally-border rounded text-sm hover:border-rally-accent disabled:opacity-50"
+                  >
+                    <span>
+                      {c.displayName}{" "}
+                      <span className="text-rally-muted text-xs">@{c.username}</span>
+                    </span>
+                    <span className="text-rally-accent text-xs font-bold">
+                      {quickAddingId === c.id ? "…" : "+ ADD"}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="p-4 bg-rally-surface border border-rally-border rounded-lg flex flex-col gap-2">
             <h3 className="text-rally-muted text-xs">ADD CALLER</h3>
+            <p className="text-rally-muted text-xs">
+              For new callers who have not registered yet. Registered accounts: use Quick Add
+              above.
+            </p>
             <input
               placeholder="Caller name (e.g. Alice)"
               value={callerName}
@@ -445,18 +706,21 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
               className="px-3 py-2 bg-rally-bg border border-rally-border rounded"
             />
             <div>
-              <label className="text-rally-muted text-xs">ARRIVAL OFFSET (seconds later)</label>
+              <label className="text-rally-muted text-xs" title={OFFSET_TOOLTIP}>
+                ARRIVAL OFFSET (seconds){" "}
+                <span className="text-rally-accent cursor-help" title={OFFSET_TOOLTIP}>
+                  ⓘ
+                </span>
+              </label>
               <input
                 type="number"
-                min={0}
+                min={-3600}
                 max={3600}
                 value={addOffset}
                 onChange={(e) => setAddOffset(e.target.value)}
                 className="w-full px-3 py-2 bg-rally-bg border border-rally-border rounded font-mono"
               />
-              <p className="text-rally-muted text-xs mt-1">
-                Example: Call1=0, Call3=2, Call2=4 → hits in order Call1 → Call3 → Call2.
-              </p>
+              <p className="text-rally-muted text-xs mt-1">{OFFSET_TOOLTIP}</p>
             </div>
             {matchingMarchCallers.length > 0 && (
               <p className="text-rally-warning text-xs">
@@ -471,30 +735,27 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
             >
               <option value="">Link push account (optional)</option>
               {user && (
-                <option value={user.id}>
-                  Me ({user.displayName}) — recommended for testing
-                </option>
+                <option value={user.id}>Me ({user.displayName})</option>
               )}
               {callers.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.displayName} (@{c.username})
-                  {c.role === "ADMIN" ? " — admin" : ""}
+                  {c.role === "ADMIN"
+                    ? " — admin"
+                    : c.role === "DEVELOPER"
+                      ? " — developer"
+                      : ""}
                 </option>
               ))}
             </select>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={useMyAccount}
-                onChange={(e) => setUseMyAccount(e.target.checked)}
-              />
-              Auto-link my account to new callers (for push testing)
-            </label>
             <p className="text-rally-muted text-xs">
-              Link a caller or admin account to send push notifications for that slot. Admins
-              can run the rally and throw their own march when linked here.
+              Link a caller, admin, or developer account to send push notifications for that
+              slot.
             </p>
-            <button onClick={addCaller} className="py-2 border border-rally-border rounded font-bold text-sm">
+            <button
+              onClick={addCaller}
+              className="py-2 border border-rally-border rounded font-bold text-sm"
+            >
               ADD TO TEMPLATE
             </button>
           </div>
@@ -606,7 +867,10 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
             on their device. Use the section above to register this phone first.
           </p>
           {event.notificationMonitor.map((m) => (
-            <div key={m.assignmentId} className="p-3 mb-2 bg-rally-surface border border-rally-border rounded-lg text-sm">
+            <div
+              key={m.assignmentId}
+              className="p-3 mb-2 bg-rally-surface border border-rally-border rounded-lg text-sm"
+            >
               <div className="flex justify-between items-start gap-2">
                 <span className="font-bold">{m.callerName}</span>
                 <span className={m.hasActiveDevice ? "text-rally-success" : "text-rally-muted"}>
@@ -638,38 +902,38 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                       n.scheduledAt &&
                       new Date(n.scheduledAt).getTime() < correctedNow() - 2000;
                     return (
-                    <div key={n.type} className="flex justify-between text-xs gap-2">
-                      <span className="text-rally-muted">
-                        {n.type === "RALLY_STARTED"
-                          ? "Started"
-                          : n.type === "LAUNCH"
-                            ? "Throw"
-                            : n.type.replace("WARNING_", "") + "s"}
-                      </span>
-                      <span
-                        className={
-                          n.status === "SENT"
-                            ? "text-rally-success"
+                      <div key={n.type} className="flex justify-between text-xs gap-2">
+                        <span className="text-rally-muted">
+                          {n.type === "RALLY_STARTED"
+                            ? "Started"
+                            : n.type === "LAUNCH"
+                              ? "Throw"
+                              : n.type.replace("WARNING_", "") + "s"}
+                        </span>
+                        <span
+                          className={
+                            n.status === "SENT"
+                              ? "text-rally-success"
+                              : n.status === "SKIPPED"
+                                ? "text-rally-muted"
+                                : n.status === "PENDING" && isOverdue
+                                  ? "text-rally-danger"
+                                  : n.status === "PENDING"
+                                    ? "text-rally-warning"
+                                    : "text-rally-danger"
+                          }
+                        >
+                          {n.status === "SENT" && n.latencyMs != null
+                            ? `sent (${n.latencyMs >= 0 ? "+" : ""}${n.latencyMs}ms)`
                             : n.status === "SKIPPED"
-                              ? "text-rally-muted"
+                              ? n.error === "rally ended" || n.error === "last caller launched"
+                                ? "skipped (rally ended)"
+                                : "skipped"
                               : n.status === "PENDING" && isOverdue
-                                ? "text-rally-danger"
-                                : n.status === "PENDING"
-                                  ? "text-rally-warning"
-                                  : "text-rally-danger"
-                        }
-                      >
-                        {n.status === "SENT" && n.latencyMs != null
-                          ? `sent (${n.latencyMs >= 0 ? "+" : ""}${n.latencyMs}ms)`
-                          : n.status === "SKIPPED"
-                            ? n.error === "rally ended" || n.error === "last caller launched"
-                              ? "skipped (rally ended)"
-                              : "skipped"
-                            : n.status === "PENDING" && isOverdue
-                              ? "overdue"
-                              : n.status.toLowerCase()}
-                      </span>
-                    </div>
+                                ? "overdue"
+                                : n.status.toLowerCase()}
+                        </span>
+                      </div>
                     );
                   })}
                 </div>

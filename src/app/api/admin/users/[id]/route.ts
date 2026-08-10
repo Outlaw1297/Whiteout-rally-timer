@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonResponse, errorResponse, isValidUuid } from "@/lib/api";
 import { requireAdmin, hashPassword, generateTempPassword, validatePassword } from "@/lib/auth";
+import { isDeveloperRole, type AppRole } from "@/lib/roles";
 
 interface RouteParams {
   params: { id: string };
@@ -17,7 +18,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   let body: {
     displayName?: string;
     active?: boolean;
-    role?: "ADMIN" | "CALLER";
+    role?: AppRole;
     resetPassword?: boolean;
     password?: string;
   };
@@ -31,8 +32,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   if (!user) return errorResponse("User not found", 404);
 
   if (body.role !== undefined && body.role !== user.role) {
-    if (id === session.id && body.role === "CALLER") {
-      return errorResponse("You cannot demote your own admin account", 400);
+    if (body.role === "DEVELOPER" && !isDeveloperRole(session.role)) {
+      return errorResponse("Only developers can grant the developer role", 403);
+    }
+    if (
+      id === session.id &&
+      (body.role === "CALLER" || (user.role === "DEVELOPER" && body.role !== "DEVELOPER"))
+    ) {
+      return errorResponse("You cannot demote your own elevated account", 400);
     }
   }
 
@@ -62,5 +69,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       active: updated.active,
     },
     temporaryPassword: tempPassword,
+    message: body.password || body.resetPassword ? "Password updated successfully" : "User updated",
   });
 }

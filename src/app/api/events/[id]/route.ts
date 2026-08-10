@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { jsonResponse, errorResponse, isValidUuid } from "@/lib/api";
 import { requireAdmin } from "@/lib/auth";
 import { getSessionFromRequest } from "@/lib/session";
+import { isAdminRole } from "@/lib/roles";
 import {
   serializeEvent,
   serializeNotificationMonitor,
@@ -33,7 +34,7 @@ async function getEventForUser(eventId: string, userId: string, role: string) {
     include: eventIncludeBasic,
   });
   if (!event) return null;
-  if (role === "ADMIN") return event;
+  if (isAdminRole(role)) return event;
   const assigned = event.assignments.some((a) => a.userId === userId);
   return assigned ? event : null;
 }
@@ -60,14 +61,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
   let payload = serializeEvent(event);
 
-  if (session.role !== "ADMIN") {
+  if (!isAdminRole(session.role)) {
     payload = {
       ...payload,
       assignments: payload.assignments.filter((a) => a.userId === session.id),
     };
   }
 
-  if (session.role === "ADMIN") {
+  if (isAdminRole(session.role)) {
     const full = await prisma.rallyEvent.findUnique({
       where: { id },
       include: {

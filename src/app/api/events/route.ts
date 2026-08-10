@@ -5,6 +5,7 @@ import { requireAdmin } from "@/lib/auth";
 import { getSessionFromRequest } from "@/lib/session";
 import { serializeEvent } from "@/lib/rally-event";
 import { DEFAULT_GATHER_SECONDS, DEFAULT_FIRST_CALLER_LEAD_SECONDS, DEFAULT_PUSH_LEAD_MS } from "@/lib/timing";
+import { isAdminRole } from "@/lib/roles";
 
 const eventInclude = {
   assignments: {
@@ -26,7 +27,7 @@ export async function GET(request: NextRequest) {
     return jsonResponse({ events: events.map(serializeEvent) });
   }
 
-  if (session.role === "ADMIN") {
+  if (isAdminRole(session.role)) {
     const events = await prisma.rallyEvent.findMany({
       where: { status: { not: "CANCELLED" } },
       include: eventInclude,

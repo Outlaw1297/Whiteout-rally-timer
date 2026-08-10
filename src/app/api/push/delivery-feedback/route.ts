@@ -56,17 +56,19 @@ export async function POST(request: NextRequest) {
   const delayMs = receivedAtMs - targetMs;
   const updates = [];
 
+  const calibratedAt = new Date();
   for (const sub of subscriptions) {
     const next = nextDeliveryLeadMs(sub.deliveryLeadMs, delayMs, sub.deliverySampleCount);
     await prisma.pushSubscription.update({
       where: { id: sub.id },
-      data: next,
+      data: { ...next, lastCalibratedAt: calibratedAt },
     });
     updates.push({
       subscriptionId: sub.id,
       platform: sub.platform,
       delayMs,
       ...next,
+      lastCalibratedAt: calibratedAt.toISOString(),
     });
   }
 

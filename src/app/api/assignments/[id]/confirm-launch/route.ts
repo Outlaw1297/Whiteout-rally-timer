@@ -23,7 +23,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   });
 
   if (!assignment) return errorResponse("Assignment not found", 404);
-  if (assignment.userId !== session.id && session.role !== "ADMIN") {
+  if (assignment.userId !== session.id && session.role !== "ADMIN" && session.role !== "DEVELOPER") {
     return errorResponse("Forbidden", 403);
   }
 

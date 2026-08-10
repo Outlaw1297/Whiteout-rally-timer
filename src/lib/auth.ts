@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "./prisma";
 import { getSessionFromRequest, SessionUser } from "./session";
 import { errorResponse } from "./api";
+import { canBeRallyCallerRole, isAdminRole, isDeveloperRole } from "./roles";
 
 const SALT_ROUNDS = 12;
 
@@ -30,7 +31,16 @@ export async function requireAdmin(
 ): Promise<SessionUser | Response> {
   const session = await requireAuth(request);
   if (session instanceof Response) return session;
-  if (session.role !== "ADMIN") return errorResponse("Forbidden", 403);
+  if (!isAdminRole(session.role)) return errorResponse("Forbidden", 403);
+  return session;
+}
+
+export async function requireDeveloper(
+  request: NextRequest
+): Promise<SessionUser | Response> {
+  const session = await requireAuth(request);
+  if (session instanceof Response) return session;
+  if (!isDeveloperRole(session.role)) return errorResponse("Forbidden", 403);
   return session;
 }
 
@@ -58,10 +68,10 @@ export function validatePassword(password: string): string | null {
   return null;
 }
 
-/** Accounts that can be linked to a rally caller slot (callers and admins). */
+/** Accounts that can be linked to a rally caller slot (callers, admins, developers). */
 export function canBeRallyCaller(
   user: { role: string; active: boolean } | null | undefined
 ): boolean {
   if (!user || !user.active) return false;
-  return user.role === "CALLER" || user.role === "ADMIN";
+  return canBeRallyCallerRole(user.role);
 }

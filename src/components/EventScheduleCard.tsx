@@ -34,7 +34,7 @@ export function EventScheduleCard({ event }: { event: SerializedEvent }) {
           </p>
         </div>
         <div>
-          <p className="text-rally-muted text-xs">GATHER</p>
+          <p className="text-rally-muted text-xs">RALLY TIME</p>
           <p className="font-mono">{formatGather(event.gatherDurationSeconds)}</p>
         </div>
       </div>

@@ -193,5 +193,62 @@ export async function migrateFeaturePackColumns(): Promise<void> {
       `);
       logger.info("migrated_warning_leads_seconds");
     }
+
+    if (!(await columnExists("User", "lastCalibratedAt"))) {
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE "User"
+        ADD COLUMN IF NOT EXISTS "lastCalibratedAt" TIMESTAMPTZ(3)
+      `);
+      logger.info("migrated_user_last_calibrated_at");
+    }
+    if (!(await columnExists("User", "lastLoginAt"))) {
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE "User"
+        ADD COLUMN IF NOT EXISTS "lastLoginAt" TIMESTAMPTZ(3)
+      `);
+      logger.info("migrated_user_last_login_at");
+    }
   }
+
+  if (await tableExists("PushSubscription")) {
+    if (!(await columnExists("PushSubscription", "lastCalibratedAt"))) {
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE "PushSubscription"
+        ADD COLUMN IF NOT EXISTS "lastCalibratedAt" TIMESTAMPTZ(3)
+      `);
+      logger.info("migrated_push_last_calibrated_at");
+    }
+  }
+}
+
+/** Ensure DEVELOPER role exists; promote the initial admin if none yet. */
+export async function migrateDeveloperRole(): Promise<void> {
+  await prisma.$executeRawUnsafe(`
+    DO $$ BEGIN
+      ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'DEVELOPER';
+    EXCEPTION
+      WHEN duplicate_object THEN null;
+    END $$;
+  `);
+
+  if (!(await tableExists("User"))) return;
+
+  const developerCount = await prisma.$queryRaw<{ count: number }[]>`
+    SELECT COUNT(*)::int AS count FROM "User" WHERE role::text = 'DEVELOPER'
+  `;
+  if ((developerCount[0]?.count ?? 0) > 0) {
+    logger.info("developer_role_already_present");
+    return;
+  }
+
+  // Initial account (oldest user) gets Developer — matches "first user is developer".
+  const promoted = await prisma.$executeRawUnsafe(`
+    UPDATE "User"
+    SET role = 'DEVELOPER'::"UserRole"
+    WHERE id = (
+      SELECT id FROM "User" ORDER BY "createdAt" ASC LIMIT 1
+    )
+    AND role::text IN ('ADMIN', 'CALLER')
+  `);
+  logger.info("migrated_initial_user_to_developer", { promoted });
 }

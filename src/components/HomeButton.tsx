@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { homePathForRole } from "@/lib/roles";
 
 /**
  * Role-aware home:
  * - Callers → /caller (personal rally countdown)
- * - Admins → /admin
+ * - Admins / Developers → /admin
  * - Guests → / (public schedule)
  */
 export function HomeButton({ className = "" }: { className?: string }) {
@@ -24,8 +25,8 @@ export function HomeButton({ className = "" }: { className?: string }) {
         if (data.user?.role === "CALLER") {
           setHref("/caller");
           setLabel("⌂ Home");
-        } else if (data.user?.role === "ADMIN") {
-          setHref("/admin");
+        } else if (data.user?.role === "ADMIN" || data.user?.role === "DEVELOPER") {
+          setHref(homePathForRole(data.user.role));
           setLabel("⌂ Home");
         } else {
           setHref("/");

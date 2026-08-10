@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonResponse, errorResponse } from "@/lib/api";
 import { requireAdmin, hashPassword, generateTempPassword, validatePassword } from "@/lib/auth";
+import { isDeveloperRole, type AppRole } from "@/lib/roles";
 
 export async function GET(request: NextRequest) {
   const session = await requireAdmin(request);
@@ -17,6 +18,8 @@ export async function GET(request: NextRequest) {
       active: true,
       deliveryLeadMs: true,
       deliverySampleCount: true,
+      lastCalibratedAt: true,
+      lastLoginAt: true,
       createdAt: true,
       _count: { select: { pushSubscriptions: { where: { active: true } } } },
     },
@@ -27,6 +30,8 @@ export async function GET(request: NextRequest) {
       ...u,
       activeDevices: u._count.pushSubscriptions,
       createdAt: u.createdAt.toISOString(),
+      lastCalibratedAt: u.lastCalibratedAt?.toISOString() ?? null,
+      lastLoginAt: u.lastLoginAt?.toISOString() ?? null,
     })),
   });
 }
@@ -38,7 +43,7 @@ export async function POST(request: NextRequest) {
   let body: {
     username?: string;
     displayName?: string;
-    role?: "ADMIN" | "CALLER";
+    role?: AppRole;
     password?: string;
   };
   try {
@@ -49,6 +54,13 @@ export async function POST(request: NextRequest) {
 
   if (!body.username || !body.displayName) {
     return errorResponse("username and displayName required");
+  }
+
+  const requestedRole: AppRole =
+    body.role === "DEVELOPER" ? "DEVELOPER" : body.role === "ADMIN" ? "ADMIN" : "CALLER";
+
+  if (requestedRole === "DEVELOPER" && !isDeveloperRole(session.role)) {
+    return errorResponse("Only developers can create developer accounts", 403);
   }
 
   const username = body.username.toLowerCase().trim();
@@ -66,7 +78,7 @@ export async function POST(request: NextRequest) {
       username,
       displayName: body.displayName.trim(),
       passwordHash: await hashPassword(tempPassword),
-      role: body.role === "ADMIN" ? "ADMIN" : "CALLER",
+      role: requestedRole,
     },
   });
 
@@ -79,6 +91,7 @@ export async function POST(request: NextRequest) {
         role: user.role,
       },
       temporaryPassword: body.password ? undefined : tempPassword,
+      message: "Account created successfully",
     },
     201
   );

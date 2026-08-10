@@ -617,8 +617,11 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                     return (
                     <div key={n.type} className="flex justify-between text-xs gap-2">
                       <span className="text-rally-muted">
-                        {n.type.replace("WARNING_", "")}
-                        {n.type === "LAUNCH" ? "" : "s"}
+                        {n.type === "RALLY_STARTED"
+                          ? "Started"
+                          : n.type === "LAUNCH"
+                            ? "Throw"
+                            : n.type.replace("WARNING_", "") + "s"}
                       </span>
                       <span
                         className={

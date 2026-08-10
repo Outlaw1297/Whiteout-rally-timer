@@ -2,6 +2,11 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonResponse, errorResponse } from "@/lib/api";
 import { requireAuth } from "@/lib/auth";
+import {
+  ALLOWED_WARNING_LEADS,
+  normalizeWarningLeads,
+  parseUserWarningLeads,
+} from "@/lib/notification-prefs";
 
 export async function GET(request: NextRequest) {
   const session = await requireAuth(request);
@@ -10,6 +15,7 @@ export async function GET(request: NextRequest) {
   const user = await prisma.user.findUnique({
     where: { id: session.id },
     select: {
+      warningLeadsSeconds: true,
       warn10Enabled: true,
       warn5Enabled: true,
       launchEnabled: true,
@@ -18,7 +24,16 @@ export async function GET(request: NextRequest) {
 
   if (!user) return errorResponse("User not found", 404);
 
-  return jsonResponse(user);
+  const warningLeadsSeconds = parseUserWarningLeads(user);
+
+  return jsonResponse({
+    warningLeadsSeconds,
+    allowedWarningLeads: ALLOWED_WARNING_LEADS,
+    required: ["RALLY_STARTED", "LAUNCH"],
+    // Always true — kept for older clients
+    launchEnabled: true,
+    rallyStartedEnabled: true,
+  });
 }
 
 export async function PATCH(request: NextRequest) {
@@ -26,6 +41,7 @@ export async function PATCH(request: NextRequest) {
   if (session instanceof Response) return session;
 
   let body: {
+    warningLeadsSeconds?: unknown;
     warn10Enabled?: boolean;
     warn5Enabled?: boolean;
     launchEnabled?: boolean;
@@ -36,20 +52,40 @@ export async function PATCH(request: NextRequest) {
     return errorResponse("Invalid JSON");
   }
 
-  const updateData: Record<string, boolean> = {};
-  if (typeof body.warn10Enabled === "boolean") updateData.warn10Enabled = body.warn10Enabled;
-  if (typeof body.warn5Enabled === "boolean") updateData.warn5Enabled = body.warn5Enabled;
-  if (typeof body.launchEnabled === "boolean") updateData.launchEnabled = body.launchEnabled;
+  let warningLeadsSeconds = normalizeWarningLeads(body.warningLeadsSeconds);
+
+  // Legacy checkbox clients: map booleans into the leads array.
+  if (body.warningLeadsSeconds === undefined) {
+    if (typeof body.warn10Enabled === "boolean" || typeof body.warn5Enabled === "boolean") {
+      const leads: number[] = [];
+      if (body.warn10Enabled !== false) leads.push(10);
+      if (body.warn5Enabled !== false) leads.push(5);
+      warningLeadsSeconds = normalizeWarningLeads(leads);
+    }
+  }
 
   const user = await prisma.user.update({
     where: { id: session.id },
-    data: updateData,
+    data: {
+      warningLeadsSeconds,
+      // Keep legacy flags in sync for older code paths
+      warn10Enabled: warningLeadsSeconds.includes(10),
+      warn5Enabled: warningLeadsSeconds.includes(5),
+      launchEnabled: true,
+    },
     select: {
+      warningLeadsSeconds: true,
       warn10Enabled: true,
       warn5Enabled: true,
       launchEnabled: true,
     },
   });
 
-  return jsonResponse(user);
+  return jsonResponse({
+    warningLeadsSeconds: parseUserWarningLeads(user),
+    allowedWarningLeads: ALLOWED_WARNING_LEADS,
+    required: ["RALLY_STARTED", "LAUNCH"],
+    launchEnabled: true,
+    rallyStartedEnabled: true,
+  });
 }

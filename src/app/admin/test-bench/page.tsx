@@ -355,7 +355,7 @@ Requires iPhone/iPad on iOS 16.4 or newer.`;
         <ol className="list-decimal list-inside text-rally-muted text-xs space-y-1 mb-3">
           <li>Create a TEST RALLY template (10s gather) on Admin dashboard</li>
           <li>Add callers and link each to a test account with a registered device</li>
-          <li>Press GO and verify WARNING_10, WARNING_5, WARNING_3, and LAUNCH fire</li>
+          <li>Press GO and verify RALLY_STARTED, optional warnings, and LAUNCH fire</li>
           <li>Test with app in foreground, background, and screen locked</li>
         </ol>
         <Link href="/admin" className="text-rally-accent text-xs font-bold">

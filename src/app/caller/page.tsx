@@ -10,6 +10,7 @@ import { NotificationButton } from "@/components/NotificationButton";
 import { PushNotificationsProvider } from "@/components/PushNotificationsProvider";
 import { ChangePasswordForm } from "@/components/ChangePasswordForm";
 import { HomeButton } from "@/components/HomeButton";
+import { NotificationPreferences } from "@/components/NotificationPreferences";
 import { formatArrivalTime, formatGather } from "@/lib/display";
 import type { SerializedEvent } from "@/hooks/useEventSocket";
 
@@ -143,55 +144,5 @@ export default function CallerDashboard() {
         ))}
       </section>
     </main>
-  );
-}
-
-function NotificationPreferences() {
-  const [prefs, setPrefs] = useState({ warn10Enabled: true, warn5Enabled: true, launchEnabled: true });
-
-  useEffect(() => {
-    fetch("/api/auth/preferences")
-      .then((r) => r.json())
-      .then(setPrefs);
-  }, []);
-
-  const update = async (key: string, value: boolean) => {
-    const next = { ...prefs, [key]: value };
-    setPrefs(next);
-    await fetch("/api/auth/preferences", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(next),
-    });
-  };
-
-  return (
-    <section className="p-4 mb-6 bg-rally-surface border border-rally-border rounded-lg text-sm">
-      <p className="text-rally-muted text-xs mb-2">WARNING NOTIFICATIONS</p>
-      <label className="flex items-center gap-2 mb-1">
-        <input
-          type="checkbox"
-          checked={prefs.warn10Enabled}
-          onChange={(e) => update("warn10Enabled", e.target.checked)}
-        />
-        10-second warning
-      </label>
-      <label className="flex items-center gap-2 mb-1">
-        <input
-          type="checkbox"
-          checked={prefs.warn5Enabled}
-          onChange={(e) => update("warn5Enabled", e.target.checked)}
-        />
-        5-second warning
-      </label>
-      <label className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          checked={prefs.launchEnabled}
-          onChange={(e) => update("launchEnabled", e.target.checked)}
-        />
-        Launch notification
-      </label>
-    </section>
   );
 }

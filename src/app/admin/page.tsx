@@ -9,6 +9,7 @@ import { PushSetupCard } from "@/components/PushSetupCard";
 import { RolesNote } from "@/components/RolesNote";
 import { TemplateSwitcher } from "@/components/TemplateSwitcher";
 import { HomeButton } from "@/components/HomeButton";
+import { NotificationPreferences } from "@/components/NotificationPreferences";
 import type { SerializedEvent } from "@/hooks/useEventSocket";
 
 export default function AdminDashboard() {
@@ -141,6 +142,8 @@ export default function AdminDashboard() {
       <RolesNote compact />
 
       <PushSetupCard />
+
+      <NotificationPreferences />
 
       <button
         onClick={() => setShowCreate(!showCreate)}

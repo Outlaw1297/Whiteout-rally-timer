@@ -11,6 +11,7 @@ import {
   getNotificationSchedule,
   getNextCaller,
 } from "./timing";
+import { parseUserWarningLeads } from "./notification-prefs";
 import { getServerTime } from "./time";
 
 export type AssignmentWithUser = RallyAssignment & { user: User | null };
@@ -125,20 +126,18 @@ export function buildNotificationEventsForAssignment(
   options: {
     referenceTime?: Date;
     pushLeadMs?: number;
+    includeRallyStarted?: boolean;
+    startedAt?: Date | null;
   } = {}
 ) {
   if (!assignment.launchTime) return [];
-  return getNotificationSchedule(
-    assignment.launchTime,
-    user.warn10Enabled,
-    user.warn5Enabled,
-    user.launchEnabled,
-    {
-      warn3: true,
-      referenceTime: options.referenceTime ?? new Date(),
-      pushLeadMs: options.pushLeadMs,
-    }
-  );
+  const warningLeads = parseUserWarningLeads(user);
+  return getNotificationSchedule(assignment.launchTime, warningLeads, {
+    referenceTime: options.referenceTime ?? new Date(),
+    pushLeadMs: options.pushLeadMs,
+    includeRallyStarted: options.includeRallyStarted ?? true,
+    startedAt: options.startedAt,
+  });
 }
 
 export type AssignmentWithNotifications = RallyAssignment & {

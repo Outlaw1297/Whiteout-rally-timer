@@ -4,9 +4,8 @@ import {
   recalculateAssignmentTimes,
 } from "./rally-event";
 import { getEffectivePushLeadMs } from "./delivery-lead";
+import { ALL_SCHEDULED_NOTIFICATION_TYPES } from "./notification-prefs";
 import type { RallyAssignment, User, RallyEvent } from "@prisma/client";
-
-const ALL_NOTIFICATION_TYPES = ["WARNING_10", "WARNING_5", "WARNING_3", "LAUNCH"] as const;
 
 async function getPushLeadForUser(userId: string, eventPushLeadMs: number) {
   const subscriptions = await prisma.pushSubscription.findMany({
@@ -19,8 +18,12 @@ async function getPushLeadForUser(userId: string, eventPushLeadMs: number) {
 async function syncNotificationEventsForAssignment(
   assignment: RallyAssignment,
   user: User,
-  event: Pick<RallyEvent, "pushLeadMs">,
-  options: { preserveTerminal?: boolean; pushLeadMs?: number } = {}
+  event: Pick<RallyEvent, "pushLeadMs" | "startedAt">,
+  options: {
+    preserveTerminal?: boolean;
+    pushLeadMs?: number;
+    includeRallyStarted?: boolean;
+  } = {}
 ) {
   const preserveTerminal = options.preserveTerminal ?? true;
   if (!assignment.launchTime) return;
@@ -30,11 +33,13 @@ async function syncNotificationEventsForAssignment(
   const schedule = buildNotificationEventsForAssignment(assignment, user, {
     referenceTime: new Date(),
     pushLeadMs,
+    includeRallyStarted: options.includeRallyStarted ?? true,
+    startedAt: event.startedAt,
   });
 
   const scheduledTypes = new Set(schedule.map((s) => s.type));
 
-  for (const eventType of ALL_NOTIFICATION_TYPES) {
+  for (const eventType of ALL_SCHEDULED_NOTIFICATION_TYPES) {
     if (!scheduledTypes.has(eventType)) {
       await prisma.notificationEvent.updateMany({
         where: {
@@ -88,8 +93,12 @@ async function syncNotificationEventsForAssignment(
 export async function createNotificationEventsForAssignment(
   assignment: RallyAssignment,
   user: User,
-  event: Pick<RallyEvent, "pushLeadMs">,
-  options?: { preserveTerminal?: boolean; pushLeadMs?: number }
+  event: Pick<RallyEvent, "pushLeadMs" | "startedAt">,
+  options?: {
+    preserveTerminal?: boolean;
+    pushLeadMs?: number;
+    includeRallyStarted?: boolean;
+  }
 ) {
   await syncNotificationEventsForAssignment(assignment, user, event, options);
 }
@@ -201,7 +210,10 @@ export async function activateEventNotifications(
   });
   if (!event) return;
 
-  const syncOptions = { preserveTerminal: !options?.freshLaunch };
+  const syncOptions = {
+    preserveTerminal: !options?.freshLaunch,
+    includeRallyStarted: true,
+  };
 
   for (const assignment of event.assignments) {
     if (!assignment.user || !assignment.launchTime) continue;

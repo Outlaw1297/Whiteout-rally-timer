@@ -113,8 +113,7 @@ console.log("\nAll timing tests passed.");
 // Notification schedule: skip warnings that cannot fit before first caller
 const goTime = new Date();
 const firstLaunch = new Date(goTime.getTime() + 5_000);
-const shortLead = getNotificationSchedule(firstLaunch, true, true, true, {
-  warn3: true,
+const shortLead = getNotificationSchedule(firstLaunch, [10, 5, 3], {
   referenceTime: goTime,
   pushLeadMs: 0,
 });
@@ -127,13 +126,15 @@ if (!shortTypes.includes("WARNING_5") || !shortTypes.includes("LAUNCH")) {
   console.error("FAIL should keep 5s warning and launch for 5s lead");
   process.exit(1);
 }
+if (!shortTypes.includes("LAUNCH")) {
+  console.error("FAIL LAUNCH must always be scheduled");
+  process.exit(1);
+}
 console.log("PASS skip impossible warnings for short first-caller lead");
 
 const compensated = getNotificationSchedule(
   new Date(goTime.getTime() + 15_000),
-  true,
-  false,
-  true,
+  [10],
   {
     referenceTime: goTime,
     pushLeadMs: 1000,
@@ -148,8 +149,7 @@ console.log("PASS push delivery lead compensation");
 
 // Later caller with only 6s until launch (e.g. linked mid-rally)
 const laterLaunch = new Date(goTime.getTime() + 6_000);
-const laterSchedule = getNotificationSchedule(laterLaunch, true, true, true, {
-  warn3: true,
+const laterSchedule = getNotificationSchedule(laterLaunch, [10, 5, 3], {
   referenceTime: goTime,
   pushLeadMs: 0,
 });
@@ -168,12 +168,28 @@ if (shouldSkipNotification("LAUNCH", laterLaunch, goTime)) {
   console.error("FAIL should never skip LAUNCH");
   process.exit(1);
 }
+if (shouldSkipNotification("RALLY_STARTED", laterLaunch, goTime)) {
+  console.error("FAIL should never skip RALLY_STARTED");
+  process.exit(1);
+}
 const scheduled10 = new Date(laterLaunch.getTime() - 10_000);
 if (shouldSkipNotification("WARNING_10", laterLaunch, goTime, scheduled10)) {
   console.error("FAIL should honor scheduledAt even when lead time is short");
   process.exit(1);
 }
 console.log("PASS runtime stale notification skip");
+
+const withStart = getNotificationSchedule(firstLaunch, [5], {
+  referenceTime: goTime,
+  includeRallyStarted: true,
+  startedAt: goTime,
+  pushLeadMs: 0,
+});
+if (!withStart.some((e) => e.type === "RALLY_STARTED") || !withStart.some((e) => e.type === "LAUNCH")) {
+  console.error("FAIL required rally started + launch notifications");
+  process.exit(1);
+}
+console.log("PASS required rally-started and launch alerts");
 
 const anchor = createMonotonicAnchor(1_000_000);
 const nudged = applyServerTimeSync(anchor, 1_000_080);

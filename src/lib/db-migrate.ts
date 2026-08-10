@@ -127,17 +127,19 @@ export async function migrateTemplateSchema(): Promise<void> {
   logger.info("migrated_template_schema");
 }
 
-/** Add WARNING_3 to NotificationEventType enum when upgrading. */
+/** Add newer NotificationEventType values when upgrading. */
 export async function migrateNotificationEnum(): Promise<void> {
   if (!(await tableExists("NotificationEvent"))) return;
 
-  await prisma.$executeRawUnsafe(`
-    DO $$ BEGIN
-      ALTER TYPE "NotificationEventType" ADD VALUE IF NOT EXISTS 'WARNING_3';
-    EXCEPTION
-      WHEN duplicate_object THEN null;
-    END $$;
-  `);
+  for (const value of ["WARNING_3", "RALLY_STARTED", "WARNING_60", "WARNING_30", "WARNING_15"]) {
+    await prisma.$executeRawUnsafe(`
+      DO $$ BEGIN
+        ALTER TYPE "NotificationEventType" ADD VALUE IF NOT EXISTS '${value}';
+      EXCEPTION
+        WHEN duplicate_object THEN null;
+      END $$;
+    `);
+  }
 
   logger.info("migrated_notification_enum");
 }
@@ -168,6 +170,28 @@ export async function migrateFeaturePackColumns(): Promise<void> {
         ADD COLUMN IF NOT EXISTS "sortOrder" INTEGER NOT NULL DEFAULT 0
       `);
       logger.info("migrated_event_sort_order");
+    }
+  }
+
+  if (await tableExists("User")) {
+    if (!(await columnExists("User", "warningLeadsSeconds"))) {
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE "User"
+        ADD COLUMN IF NOT EXISTS "warningLeadsSeconds" JSONB NOT NULL DEFAULT '[10, 5]'::jsonb
+      `);
+      // Copy legacy boolean prefs into the JSON array when present.
+      await prisma.$executeRawUnsafe(`
+        UPDATE "User"
+        SET "warningLeadsSeconds" = (
+          CASE
+            WHEN "warn10Enabled" IS TRUE AND "warn5Enabled" IS TRUE THEN '[10, 5]'::jsonb
+            WHEN "warn10Enabled" IS TRUE THEN '[10]'::jsonb
+            WHEN "warn5Enabled" IS TRUE THEN '[5]'::jsonb
+            ELSE '[]'::jsonb
+          END
+        )
+      `);
+      logger.info("migrated_warning_leads_seconds");
     }
   }
 }

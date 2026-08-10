@@ -27,6 +27,10 @@ enum AssignmentStatus {
 }
 
 enum NotificationEventType {
+  RALLY_STARTED
+  WARNING_60
+  WARNING_30
+  WARNING_15
   WARNING_10
   WARNING_5
   WARNING_3
@@ -48,8 +52,13 @@ model User {
   passwordHash    String
   role            UserRole @default(CALLER)
   active          Boolean  @default(true)
+  /** Optional warning leads in seconds before throw, e.g. [30, 10, 5]. Launch + rally-start are always sent. */
+  warningLeadsSeconds Json @default("[10, 5]")
+  /** @deprecated Prefer warningLeadsSeconds — kept for migration compatibility */
   warn10Enabled   Boolean  @default(true)
+  /** @deprecated Prefer warningLeadsSeconds */
   warn5Enabled    Boolean  @default(true)
+  /** @deprecated Launch is always required */
   launchEnabled   Boolean  @default(true)
   /** Learned push lead (ms) — max across active devices, for admin debug */
   deliveryLeadMs      Int?

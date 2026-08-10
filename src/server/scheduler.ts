@@ -81,7 +81,9 @@ async function processNotificationEvent(eventId: string) {
   const notificationType = notification.type as NotificationOffsetType;
   const targetAt =
     assignment.launchTime &&
-    getNotificationTargetAt(assignment.launchTime, notificationType).toISOString();
+    getNotificationTargetAt(assignment.launchTime, notificationType, {
+      startedAt: rallyEvent.startedAt,
+    }).toISOString();
 
   const { title, body } = getNotificationPayload(
     notificationType,

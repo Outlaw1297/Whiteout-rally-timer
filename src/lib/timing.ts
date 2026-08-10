@@ -1,3 +1,12 @@
+import type { NotificationOffsetType } from "./notification-prefs";
+import {
+  WARNING_TYPE_BY_SECONDS,
+  SECONDS_BY_WARNING_TYPE,
+  type AllowedWarningLead,
+} from "./notification-prefs";
+
+export type { NotificationOffsetType } from "./notification-prefs";
+
 /** Default gather duration: 5 minutes */
 export const DEFAULT_GATHER_SECONDS = 300;
 
@@ -100,23 +109,31 @@ export function parseGatherDuration(input: string): number | null {
 }
 
 export const NOTIFICATION_OFFSETS = [
+  { type: "RALLY_STARTED" as const, secondsBefore: -1 },
+  { type: "WARNING_60" as const, secondsBefore: 60 },
+  { type: "WARNING_30" as const, secondsBefore: 30 },
+  { type: "WARNING_15" as const, secondsBefore: 15 },
   { type: "WARNING_10" as const, secondsBefore: 10 },
   { type: "WARNING_5" as const, secondsBefore: 5 },
   { type: "WARNING_3" as const, secondsBefore: 3 },
   { type: "LAUNCH" as const, secondsBefore: 0 },
 ];
 
-export type NotificationOffsetType = (typeof NOTIFICATION_OFFSETS)[number]["type"];
-
 export function getNotificationSecondsBefore(type: NotificationOffsetType): number {
-  return NOTIFICATION_OFFSETS.find((o) => o.type === type)?.secondsBefore ?? 0;
+  if (type === "RALLY_STARTED") return 0;
+  if (type === "LAUNCH") return 0;
+  return SECONDS_BY_WARNING_TYPE[type as keyof typeof SECONDS_BY_WARNING_TYPE] ?? 0;
 }
 
 /** Wall-clock moment the caller should experience this notification. */
 export function getNotificationTargetAt(
   launchTime: Date,
-  type: NotificationOffsetType
+  type: NotificationOffsetType,
+  options: { startedAt?: Date | null } = {}
 ): Date {
+  if (type === "RALLY_STARTED") {
+    return options.startedAt ?? new Date();
+  }
   const secondsBefore = getNotificationSecondsBefore(type);
   return new Date(launchTime.getTime() - secondsBefore * 1000);
 }
@@ -128,24 +145,28 @@ export function shouldSkipNotification(
   now: Date = new Date(),
   scheduledAt?: Date
 ): boolean {
-  if (type === "LAUNCH") return false;
+  if (type === "LAUNCH" || type === "RALLY_STARTED") return false;
   // Honor the built schedule once the send time arrives, even if slightly late.
   if (scheduledAt && now.getTime() >= scheduledAt.getTime()) return false;
   const secondsUntilLaunch = (launchTime.getTime() - now.getTime()) / 1000;
   return secondsUntilLaunch < getNotificationSecondsBefore(type);
 }
 
+/**
+ * Build the push schedule for one caller.
+ * LAUNCH is always included. Optional warnings come from warningLeads.
+ */
 export function getNotificationSchedule(
   launchTime: Date,
-  warn10: boolean,
-  warn5: boolean,
-  launch: boolean,
+  warningLeads: AllowedWarningLead[],
   options: {
-    warn3?: boolean;
     /** When the schedule is built. Defaults to now — skips warnings that no longer fit for this caller. */
     referenceTime?: Date;
     /** Send push this many ms before the ideal wall-clock time to offset delivery delay. */
     pushLeadMs?: number;
+    /** Include required rally-started alert (scheduled near GO / referenceTime). */
+    includeRallyStarted?: boolean;
+    startedAt?: Date | null;
   } = {}
 ): Array<{ type: NotificationOffsetType; scheduledAt: Date }> {
   const referenceMs = (options.referenceTime ?? new Date()).getTime();
@@ -154,17 +175,57 @@ export function getNotificationSchedule(
   const secondsUntilLaunch = (launchMs - referenceMs) / 1000;
 
   const candidates: Array<{ type: NotificationOffsetType; secondsBefore: number }> = [];
-  if (options.warn3) candidates.push({ type: "WARNING_3", secondsBefore: 3 });
-  if (warn10) candidates.push({ type: "WARNING_10", secondsBefore: 10 });
-  if (warn5) candidates.push({ type: "WARNING_5", secondsBefore: 5 });
-  if (launch) candidates.push({ type: "LAUNCH", secondsBefore: 0 });
+
+  if (options.includeRallyStarted) {
+    candidates.push({ type: "RALLY_STARTED", secondsBefore: -1 });
+  }
+
+  for (const lead of warningLeads) {
+    candidates.push({ type: WARNING_TYPE_BY_SECONDS[lead], secondsBefore: lead });
+  }
+
+  // Required throw alert
+  candidates.push({ type: "LAUNCH", secondsBefore: 0 });
 
   return candidates
-    .filter(({ secondsBefore }) => secondsBefore <= secondsUntilLaunch)
-    .map(({ type, secondsBefore }) => ({
-      type,
-      scheduledAt: new Date(launchMs - secondsBefore * 1000 - pushLeadMs),
-    }));
+    .filter(({ type, secondsBefore }) => {
+      if (type === "RALLY_STARTED") return true;
+      return secondsBefore <= secondsUntilLaunch;
+    })
+    .map(({ type, secondsBefore }) => {
+      if (type === "RALLY_STARTED") {
+        const startMs = (options.startedAt ?? options.referenceTime ?? new Date()).getTime();
+        return {
+          type,
+          scheduledAt: new Date(Math.max(startMs, referenceMs) - Math.min(pushLeadMs, 200)),
+        };
+      }
+      return {
+        type,
+        scheduledAt: new Date(launchMs - secondsBefore * 1000 - pushLeadMs),
+      };
+    });
+}
+
+/** @deprecated Use getNotificationSchedule(launchTime, warningLeads, options) */
+export function getNotificationScheduleLegacy(
+  launchTime: Date,
+  warn10: boolean,
+  warn5: boolean,
+  launch: boolean,
+  options: {
+    warn3?: boolean;
+    referenceTime?: Date;
+    pushLeadMs?: number;
+  } = {}
+): Array<{ type: NotificationOffsetType; scheduledAt: Date }> {
+  const leads: AllowedWarningLead[] = [];
+  if (options.warn3) leads.push(3);
+  if (warn10) leads.push(10);
+  if (warn5) leads.push(5);
+  // launch flag ignored — LAUNCH is always required
+  void launch;
+  return getNotificationSchedule(launchTime, leads, options);
 }
 
 export interface NextCallerAssignment {
@@ -228,6 +289,26 @@ export function getNotificationPayload(
   });
 
   switch (type) {
+    case "RALLY_STARTED":
+      return {
+        title: `▶ Rally Timer Started`,
+        body: `${eventName}\n${callerName} — timers are live. Target: ${arrival}`,
+      };
+    case "WARNING_60":
+      return {
+        title: `⚠️ ${eventName}`,
+        body: `Rally in 60 seconds — ${callerName}`,
+      };
+    case "WARNING_30":
+      return {
+        title: `⚠️ ${eventName}`,
+        body: `Rally in 30 seconds — ${callerName}`,
+      };
+    case "WARNING_15":
+      return {
+        title: `⚠️ ${eventName}`,
+        body: `Rally in 15 seconds — ${callerName}`,
+      };
     case "WARNING_10":
       return {
         title: `⚠️ ${eventName}`,

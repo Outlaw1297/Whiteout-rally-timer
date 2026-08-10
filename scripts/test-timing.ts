@@ -343,4 +343,36 @@ console.log("PASS adaptive delivery lead");
   console.log("PASS late warning presentation escalation");
 }
 
+{
+  const go = new Date();
+  go.setMilliseconds(0);
+  const launch = new Date(go.getTime() + 3000);
+  const schedule = getNotificationSchedule(launch, [10, 5], {
+    referenceTime: go,
+    pushLeadMs: 3273,
+    includeRallyStarted: true,
+    startedAt: go,
+  });
+  const launchRow = schedule.find((s) => s.type === "LAUNCH");
+  if (!launchRow) {
+    console.error("FAIL LAUNCH missing from short first-caller schedule");
+    process.exit(1);
+  }
+  if (launchRow.scheduledAt.getTime() < go.getTime()) {
+    console.error(
+      "FAIL high delivery lead must not schedule LAUNCH before GO",
+      launchRow.scheduledAt.toISOString(),
+      go.toISOString()
+    );
+    process.exit(1);
+  }
+  const started = schedule.find((s) => s.type === "RALLY_STARTED");
+  if (!started) {
+    console.error("FAIL RALLY_STARTED missing");
+    process.exit(1);
+  }
+  console.log("PASS high delivery lead capped to GO for short first-caller window");
+}
+
+
 

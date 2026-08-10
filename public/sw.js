@@ -23,9 +23,17 @@ function broadcastToClients(payload) {
     });
 }
 
-async function clearPriorRallyNotifications(assignmentId, rallyId, keepTag) {
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Close older rally banners after the new one is shown (never block display). */
+async function clearOtherRallyNotifications(assignmentId, rallyId, keepTag) {
   try {
-    const notes = await self.registration.getNotifications();
+    const notes = await Promise.race([
+      self.registration.getNotifications(),
+      sleep(400).then(() => []),
+    ]);
     for (const note of notes) {
       if (keepTag && note.tag === keepTag) continue;
       const data = note.data || {};
@@ -42,10 +50,6 @@ async function clearPriorRallyNotifications(assignmentId, rallyId, keepTag) {
   } catch {
     /* ignore */
   }
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -91,9 +95,9 @@ self.addEventListener("push", (event) => {
 
   const receivedAtMs = Date.now();
   const presented = presentForLatency(data, receivedAtMs);
-  let title = presented.title;
-  let body = presented.body;
-  let notificationType = presented.notificationType;
+  const title = presented.title;
+  const body = presented.body;
+  const notificationType = presented.notificationType;
 
   const rallyId = data.rallyId || "";
   const assignmentId = data.assignmentId || "";
@@ -126,7 +130,6 @@ self.addEventListener("push", (event) => {
     url,
   };
 
-  // Only THROW stays sticky so earlier banners don't block the next heads-up.
   const sticky = !preferSilent && isLaunch;
 
   const tag = isCalibration
@@ -169,12 +172,7 @@ self.addEventListener("push", (event) => {
       const hasOpenClient = clients.length > 0;
       const skipBanner = isLivePing && preferSilent && hasOpenClient;
 
-      if (!preferSilent && !skipBanner) {
-        await clearPriorRallyNotifications(assignmentId, rallyId, tag);
-        // Brief pause after clearing helps Pixel treat THROW as a fresh interrupt.
-        if (isLaunch) await sleep(180);
-      }
-
+      // SHOW FIRST — never block the banner on getNotifications()/clear (Pixel hang risk).
       const showPromise = skipBanner
         ? Promise.resolve()
         : self.registration.showNotification(
@@ -182,95 +180,76 @@ self.addEventListener("push", (event) => {
             notificationOptions
           );
 
-      if (notificationType === "RALLY_STARTED" && !preferSilent) {
-        void showPromise.then(() => {
-          setTimeout(() => {
-            self.registration
-              .getNotifications({ tag })
-              .then((notes) => {
-                for (const note of notes) note.close();
-              })
-              .catch(() => {});
-          }, 4000);
-        });
+      await showPromise;
+
+      if (!preferSilent && !skipBanner) {
+        void clearOtherRallyNotifications(assignmentId, rallyId, tag);
       }
 
-      // Mid warnings: auto-dismiss quickly so THROW can heads-up.
+      if (notificationType === "RALLY_STARTED" && !preferSilent) {
+        setTimeout(() => {
+          self.registration
+            .getNotifications({ tag })
+            .then((notes) => {
+              for (const note of notes) note.close();
+            })
+            .catch(() => {});
+        }, 5000);
+      }
+
       if (
         !preferSilent &&
         !isLaunch &&
         String(notificationType).startsWith("WARNING_")
       ) {
-        void showPromise.then(() => {
-          setTimeout(() => {
-            self.registration
-              .getNotifications({ tag })
-              .then((notes) => {
-                for (const note of notes) note.close();
-              })
-              .catch(() => {});
-          }, 3500);
-        });
-      }
-
-      const closePromise =
-        isLivePing && preferSilent
-          ? showPromise.then(async () => {
-              if (hasOpenClient) return;
-              const notes = await self.registration.getNotifications({ tag });
+        setTimeout(() => {
+          self.registration
+            .getNotifications({ tag })
+            .then((notes) => {
               for (const note of notes) note.close();
             })
-          : Promise.resolve();
+            .catch(() => {});
+        }, 4000);
+      }
 
-      const feedbackPromise = targetAt
-        ? fetch("/api/push/delivery-feedback", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-            body: JSON.stringify({
-              targetAt,
-              receivedAtMs,
-              assignmentId,
-              notificationType,
-              rallyId,
-            }),
-          }).catch(() => {})
-        : Promise.resolve();
+      if (isLivePing && preferSilent && !hasOpenClient) {
+        const notes = await self.registration.getNotifications({ tag });
+        for (const note of notes) note.close();
+      }
 
-      await Promise.all([showPromise, closePromise, feedbackPromise]);
-    })().catch(() =>
-      self.registration
-        .showNotification(title, {
-          body,
+      if (targetAt) {
+        await fetch("/api/push/delivery-feedback", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            targetAt,
+            receivedAtMs,
+            assignmentId,
+            notificationType,
+            rallyId,
+          }),
+        }).catch(() => {});
+      }
+    })().catch(async () => {
+      try {
+        await self.registration.showNotification(title || "Whiteout Rally", {
+          body: body || "Rally notification",
           icon: "/icons/icon-192.png",
           badge: "/icons/icon-192.png",
           requireInteraction: isLaunch,
           renotify: true,
-          timestamp: Date.now(),
-          vibrate: isLaunch ? [600, 120, 600] : [300, 100, 300],
           data: { url, notificationType, assignmentId, rallyId },
-        })
-        .catch(() => {})
-        .then(() =>
-          Promise.all([
-            broadcastToClients(payload),
-            targetAt
-              ? fetch("/api/push/delivery-feedback", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  credentials: "include",
-                  body: JSON.stringify({
-                    targetAt,
-                    receivedAtMs,
-                    assignmentId,
-                    notificationType,
-                    rallyId,
-                  }),
-                }).catch(() => {})
-              : Promise.resolve(),
-          ])
-        )
-    )
+        });
+      } catch {
+        /* last resort failed */
+      }
+      try {
+        await broadcastToClients(payload);
+      } catch {
+        /* ignore */
+      }
+    })
   );
 });
 

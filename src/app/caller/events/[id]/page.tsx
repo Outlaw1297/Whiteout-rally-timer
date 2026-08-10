@@ -9,8 +9,6 @@ import { useCountdown } from "@/hooks/useCountdown";
 import { useEventSocket, type SerializedEvent } from "@/hooks/useEventSocket";
 import { NotificationButton } from "@/components/NotificationButton";
 import { PushNotificationsProvider } from "@/components/PushNotificationsProvider";
-import { ConnectionIndicator } from "@/components/ConnectionIndicator";
-import { ServerClock } from "@/components/ServerClock";
 import { HomeButton } from "@/components/HomeButton";
 import { formatArrivalTime, formatGather } from "@/lib/display";
 
@@ -20,7 +18,7 @@ export default function CallerEventPage({ params }: { params: { id: string } }) 
   const [event, setEvent] = useState<SerializedEvent | null>(null);
   const [confirmed, setConfirmed] = useState(false);
 
-  const { correctedNow, isLive } = useServerClock({
+  const { correctedNow } = useServerClock({
     activeRally: true,
     useWebSocket: false,
   });
@@ -81,8 +79,6 @@ export default function CallerEventPage({ params }: { params: { id: string } }) 
         <p className="text-rally-muted text-sm">{user.displayName.toUpperCase()}</p>
       </header>
 
-      <ServerClock correctedNow={correctedNow} isLive={isLive} />
-
       <section
         className={`p-8 mb-6 rounded-xl text-center ${
           isNow ? "bg-rally-danger/30 border-2 border-rally-danger animate-pulse" : "bg-rally-surface border border-rally-border"
@@ -114,10 +110,6 @@ export default function CallerEventPage({ params }: { params: { id: string } }) 
           <p className="text-xl font-mono font-bold">{formatArrivalTime(event.targetArrivalTime)}</p>
         </div>
       </section>
-
-      <div className="mb-4 flex justify-center">
-        <ConnectionIndicator isLive={isLive} label={isLive ? "✓ SERVER SYNCHRONIZED" : "SYNCING..."} />
-      </div>
 
       <div className="mb-6">
         <PushNotificationsProvider>

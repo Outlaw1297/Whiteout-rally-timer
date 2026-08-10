@@ -9,7 +9,6 @@ import { useEventSocket } from "@/hooks/useEventSocket";
 import { useNextCaller } from "@/hooks/useNextCaller";
 import { CallerCountdownRow } from "@/components/CallerCountdownRow";
 import { MarchDuplicateNotice } from "@/components/MarchDuplicateNotice";
-import { ServerClock } from "@/components/ServerClock";
 import { HomeButton } from "@/components/HomeButton";
 import { formatArrivalTime, formatGather } from "@/lib/display";
 import {
@@ -22,7 +21,7 @@ export default function PublicEventPage({ params }: { params: { id: string } }) 
   const { user, loading: authLoading } = useAuth();
   const [event, setEvent] = useState<SerializedEvent | null>(null);
   const [error, setError] = useState(false);
-  const { correctedNow, isLive } = useServerClock({
+  const { correctedNow } = useServerClock({
     activeRally: event?.status === "ACTIVE",
     useWebSocket: false,
   });
@@ -79,8 +78,6 @@ export default function PublicEventPage({ params }: { params: { id: string } }) 
           {isTemplate ? "Waiting for GO" : isActive ? "● LIVE" : event.status}
         </p>
       </header>
-
-      <ServerClock correctedNow={correctedNow} isLive={isLive} />
 
       {marchDuplicateGroups.length > 0 && (
         <MarchDuplicateNotice groups={marchDuplicateGroups} />

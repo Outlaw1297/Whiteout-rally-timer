@@ -3,6 +3,7 @@ import "./globals.css";
 import { ServiceWorkerRegistrar } from "@/components/ServiceWorkerRegistrar";
 import { ForegroundNotificationListener } from "@/components/ForegroundNotificationListener";
 import { SilentLivePing } from "@/components/SilentLivePing";
+import { GlobalSyncedClock } from "@/components/GlobalSyncedClock";
 
 export const metadata: Metadata = {
   title: "Whiteout Rally Timer",
@@ -38,6 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ServiceWorkerRegistrar />
         <ForegroundNotificationListener />
         <SilentLivePing />
+        <GlobalSyncedClock />
         {children}
       </body>
     </html>

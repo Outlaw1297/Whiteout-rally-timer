@@ -11,7 +11,6 @@ import { useNextCaller } from "@/hooks/useNextCaller";
 import { CallerCountdownRow } from "@/components/CallerCountdownRow";
 import { MarchDuplicateNotice } from "@/components/MarchDuplicateNotice";
 import { PushSetupCard } from "@/components/PushSetupCard";
-import { ServerClock } from "@/components/ServerClock";
 import { TemplateSwitcher } from "@/components/TemplateSwitcher";
 import { HomeButton } from "@/components/HomeButton";
 import { formatArrivalTime, formatGather, statusLabel } from "@/lib/display";
@@ -60,7 +59,7 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
   const [timingSaving, setTimingSaving] = useState(false);
   const [cloning, setCloning] = useState(false);
 
-  const { correctedNow, isLive } = useServerClock({
+  const { correctedNow } = useServerClock({
     activeRally: event?.status === "ACTIVE",
     useWebSocket: false,
   });
@@ -265,8 +264,6 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
           </button>
         </div>
       </header>
-
-      <ServerClock correctedNow={correctedNow} isLive={isLive} />
 
       <PushSetupCard onSubscribed={loadEvent} />
 

@@ -7,12 +7,17 @@ import { logger } from "@/lib/logger";
 
 export { allCallersHaveCalled, callerHasCalled } from "@/lib/caller-launch";
 
+/** Do not complete while THROW is still waiting to send. */
+export function shouldDeferRallyCompletion(pendingLaunchCount: number): boolean {
+  return pendingLaunchCount > 0;
+}
+
 /**
  * Mark an ACTIVE rally COMPLETED once every caller has thrown.
  * Returns true if the rally was completed in this call.
  *
- * Completion is keyed off the last caller throw — not target arrival —
- * so the template can be reset while marches are still inbound.
+ * Defers while any LAUNCH notification is still PENDING so THROW is never
+ * stranded as "overdue" after the rally flips to COMPLETED.
  */
 export async function completeRallyAfterLastCaller(
   eventId: string,
@@ -25,25 +30,50 @@ export async function completeRallyAfterLastCaller(
   if (!event || event.status !== "ACTIVE") return false;
   if (!allCallersHaveCalled(event.assignments, Date.now())) return false;
 
-  // Only one completer wins if tick + confirm race.
-  const claimed = await prisma.rallyEvent.updateMany({
-    where: { id: eventId, status: "ACTIVE" },
-    data: { status: "COMPLETED", completedAt: new Date() },
-  });
-  if (claimed.count === 0) return false;
-
-  await skipRemainingEventNotifications(eventId, reason);
-
-  const completed = await prisma.rallyEvent.findUnique({
-    where: { id: eventId },
-    include: {
-      assignments: { include: { user: true }, orderBy: { launchTime: "asc" } },
+  const pendingLaunch = await prisma.notificationEvent.count({
+    where: {
+      type: "LAUNCH",
+      status: "PENDING",
+      assignment: { rallyEventId: eventId },
     },
   });
-  if (completed) {
-    broadcastRallyUpdate(eventId, serializeEvent(completed));
+
+  if (shouldDeferRallyCompletion(pendingLaunch)) {
+    logger.info("rally_complete_deferred_pending_launch", {
+      eventId,
+      pendingLaunch,
+      reason,
+    });
+    return false;
   }
 
+  // Complete + skip remaining non-launch alerts atomically with the status flip.
+  const completed = await prisma.$transaction(async (tx) => {
+    const claimed = await tx.rallyEvent.updateMany({
+      where: { id: eventId, status: "ACTIVE" },
+      data: { status: "COMPLETED", completedAt: new Date() },
+    });
+    if (claimed.count === 0) return null;
+
+    await tx.notificationEvent.updateMany({
+      where: {
+        assignment: { rallyEventId: eventId },
+        status: "PENDING",
+      },
+      data: { status: "SKIPPED", error: reason },
+    });
+
+    return tx.rallyEvent.findUnique({
+      where: { id: eventId },
+      include: {
+        assignments: { include: { user: true }, orderBy: { launchTime: "asc" } },
+      },
+    });
+  });
+
+  if (!completed) return false;
+
+  broadcastRallyUpdate(eventId, serializeEvent(completed));
   logger.info("rally_completed", { eventId, reason, name: event.name });
   return true;
 }

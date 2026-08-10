@@ -20,6 +20,7 @@ import {
 } from "../src/lib/clock-sync";
 import { getEffectivePushLeadMs, nextDeliveryLeadMs } from "../src/lib/delivery-lead";
 import { allCallersHaveCalled, callerHasCalled } from "../src/lib/caller-launch";
+import { shouldDeferRallyCompletion } from "../src/lib/complete-rally";
 
 function assertEqual(actual: Date, expectedHour: number, expectedMin: number, expectedSec: number, label: string) {
   const h = actual.getHours();
@@ -373,6 +374,19 @@ console.log("PASS adaptive delivery lead");
   }
   console.log("PASS high delivery lead capped to GO for short first-caller window");
 }
+
+{
+  if (!shouldDeferRallyCompletion(1)) {
+    console.error("FAIL must defer complete while LAUNCH pending");
+    process.exit(1);
+  }
+  if (shouldDeferRallyCompletion(0)) {
+    console.error("FAIL must not defer complete when no pending LAUNCH");
+    process.exit(1);
+  }
+  console.log("PASS defer rally complete while THROW pending");
+}
+
 
 
 

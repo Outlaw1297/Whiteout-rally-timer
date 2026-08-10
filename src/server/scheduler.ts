@@ -15,9 +15,10 @@ const DUE_GRACE_MS = 100;
 
 let schedulerRunning = false;
 let schedulerInterval: ReturnType<typeof setInterval> | null = null;
+/** Prevent overlapping ticks — concurrent ticks were stranding LAUNCH as PENDING overdue. */
+let tickInProgress = false;
 
 function notificationPriority(type: string): number {
-  // Started first so Pixel always gets an immediate confirmation banner.
   if (type === "RALLY_STARTED") return 0;
   if (type === "LAUNCH") return 1;
   if (String(type).startsWith("WARNING_")) return 2;
@@ -42,7 +43,14 @@ async function processNotificationEvent(eventId: string) {
 
     if (!event || event.status !== "PENDING") return null;
     if (event.scheduledAt.getTime() > now + DUE_GRACE_MS) return null;
-    if (event.assignment.rallyEvent.status !== "ACTIVE") return null;
+    if (event.assignment.rallyEvent.status !== "ACTIVE") {
+      logger.warn("notification_blocked_inactive_rally", {
+        eventId,
+        type: event.type,
+        rallyStatus: event.assignment.rallyEvent.status,
+      });
+      return null;
+    }
 
     if (
       event.assignment.launchTime &&
@@ -60,14 +68,9 @@ async function processNotificationEvent(eventId: string) {
       return null;
     }
 
-    // If throw is imminent and LAUNCH is also due, skip stale warnings so the
-    // Pixel gets one clear THROW banner instead of a late "10 seconds".
-    if (
-      String(event.type).startsWith("WARNING_") &&
-      event.assignment.launchTime
-    ) {
-      const secondsLeft =
-        (event.assignment.launchTime.getTime() - now) / 1000;
+    // Skip stale warnings only when LAUNCH is already due — never block LAUNCH itself.
+    if (String(event.type).startsWith("WARNING_") && event.assignment.launchTime) {
+      const secondsLeft = (event.assignment.launchTime.getTime() - now) / 1000;
       if (secondsLeft <= 2) {
         const launchDue = await tx.notificationEvent.findFirst({
           where: {
@@ -208,47 +211,81 @@ async function processNotificationEvent(eventId: string) {
     latencyMs,
     success,
   });
-
-  if (notification.type === "LAUNCH") {
-    // Only the real LAUNCH row completes the rally — not a late warning
-    // rewritten to LOOK like THROW.
-    await completeRallyAfterLastCaller(rallyEvent.id, "last launch notification sent");
-  }
 }
 
-async function tick() {
-  const now = Date.now();
-
-  const pending = await prisma.notificationEvent.findMany({
+async function flushDueLaunchNotifications(now: number) {
+  const dueLaunches = await prisma.notificationEvent.findMany({
     where: {
+      type: "LAUNCH",
       status: "PENDING",
       scheduledAt: { lte: new Date(now + DUE_GRACE_MS) },
-      assignment: {
-        rallyEvent: { status: "ACTIVE" },
-      },
+      assignment: { rallyEvent: { status: "ACTIVE" } },
     },
     orderBy: { scheduledAt: "asc" },
-    take: 100,
+    take: 50,
   });
 
-  // Prefer LAUNCH over late warnings so Pixel gets THROW, not a stale "10s".
-  pending.sort((a, b) => {
-    const byType = notificationPriority(a.type) - notificationPriority(b.type);
-    if (byType !== 0) return byType;
-    return a.scheduledAt.getTime() - b.scheduledAt.getTime();
-  });
-
-  for (const event of pending) {
+  for (const event of dueLaunches) {
+    const overdueMs = now - event.scheduledAt.getTime();
+    if (overdueMs > 2000) {
+      logger.warn("launch_notification_overdue_flushing", {
+        id: event.id,
+        overdueMs,
+        scheduledAt: event.scheduledAt.toISOString(),
+      });
+    }
     await processNotificationEvent(event.id);
   }
 
-  const activeEvents = await prisma.rallyEvent.findMany({
-    where: { status: "ACTIVE" },
-    select: { id: true },
-  });
+  return dueLaunches.length;
+}
 
-  for (const event of activeEvents) {
-    await completeRallyAfterLastCaller(event.id);
+async function tick() {
+  if (tickInProgress) return;
+  tickInProgress = true;
+
+  try {
+    const now = Date.now();
+
+    // 1) THROW first — never let rally-complete strand LAUNCH as PENDING overdue.
+    await flushDueLaunchNotifications(now);
+
+    // 2) Other due notifications (Started / warnings)
+    const pending = await prisma.notificationEvent.findMany({
+      where: {
+        status: "PENDING",
+        type: { not: "LAUNCH" },
+        scheduledAt: { lte: new Date(now + DUE_GRACE_MS) },
+        assignment: {
+          rallyEvent: { status: "ACTIVE" },
+        },
+      },
+      orderBy: { scheduledAt: "asc" },
+      take: 100,
+    });
+
+    pending.sort((a, b) => {
+      const byType = notificationPriority(a.type) - notificationPriority(b.type);
+      if (byType !== 0) return byType;
+      return a.scheduledAt.getTime() - b.scheduledAt.getTime();
+    });
+
+    for (const event of pending) {
+      await processNotificationEvent(event.id);
+    }
+
+    // 3) Complete only after due LAUNCHes were flushed (completeRally also defers
+    //    while any LAUNCH is still PENDING).
+    const activeEvents = await prisma.rallyEvent.findMany({
+      where: { status: "ACTIVE" },
+      select: { id: true },
+    });
+
+    for (const event of activeEvents) {
+      await completeRallyAfterLastCaller(event.id);
+    }
+  } finally {
+    tickInProgress = false;
   }
 }
 
@@ -267,4 +304,5 @@ export function stopScheduler() {
   if (schedulerInterval) clearInterval(schedulerInterval);
   schedulerInterval = null;
   schedulerRunning = false;
+  tickInProgress = false;
 }

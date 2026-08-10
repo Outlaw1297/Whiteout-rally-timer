@@ -66,7 +66,7 @@ export default function CallerSettingsPage() {
         </PushNotificationsProvider>
         <p className="text-center mt-3">
           <Link href="/fix-notifications" className="text-rally-muted text-xs hover:text-rally-accent">
-            Android: fix background notification settings →
+            Android: alerts only in top bar? Enable Pop on screen →
           </Link>
         </p>
       </section>

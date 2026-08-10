@@ -18,35 +18,59 @@ export default function FixNotificationsPage() {
       <p className="text-rally-warning text-[10px] font-bold tracking-widest mt-4 mb-1">
         ANDROID FIX
       </p>
-      <h1 className="text-2xl font-bold mb-2">Notifications only when app is open?</h1>
+      <h1 className="text-2xl font-bold mb-2">Make rally alerts pop on screen</h1>
       <p className="text-rally-muted text-sm mb-6 leading-relaxed">
-        That almost always means Android is pausing Chrome to save battery. Rally Timer cannot
-        change this for you — you must set Chrome (and the installed app) to{" "}
-        <span className="font-bold text-rally-text">Unrestricted</span>. After that, throws
-        arrive with the app closed.
+        If the alert only appears as an icon in the top bar (notification shade) and never banners
+        over your game, Android has the channel set to “sound only.” Web apps cannot change that
+        automatically — use the steps below once.
       </p>
 
-      <AndroidNotificationFix forceShow />
-
-      <section className="mt-6 p-4 rounded-lg border border-rally-border bg-rally-surface space-y-3 text-sm">
-        <h2 className="font-bold text-rally-accent">Quick buttons</h2>
-        <p className="text-rally-muted text-xs">
-          These open Android settings screens when your phone allows it. If a button does nothing,
-          follow the checklist above manually.
-        </p>
+      <section
+        id="heads-up"
+        className="mb-6 p-4 rounded-lg border-2 border-rally-accent bg-rally-accent/10 space-y-3 text-sm scroll-mt-20"
+      >
+        <p className="text-rally-accent font-bold text-xs tracking-wide">MOST COMMON FIX</p>
+        <h2 className="font-bold text-lg text-rally-text">Shows in top bar, not on screen</h2>
+        <ol className="list-decimal list-inside text-rally-text space-y-2 text-sm">
+          <li>
+            Send a test notification from Rally Timer (or wait for any rally alert)
+          </li>
+          <li>
+            Swipe down from the top to open the notification shade
+          </li>
+          <li>
+            <span className="font-bold">Long-press</span> the Rally / Chrome notification
+          </li>
+          <li>
+            Tap <span className="font-bold">Settings</span> / the gear
+          </li>
+          <li>
+            Set the category to{" "}
+            <span className="font-bold text-rally-accent">Alerting</span> (Pixel),{" "}
+            <span className="font-bold text-rally-accent">Sound and pop-up</span> (Samsung), or
+            enable <span className="font-bold text-rally-accent">Pop on screen / Banners</span>
+          </li>
+          <li>Send another test — it should banner over whatever app is open</li>
+        </ol>
         <button
           type="button"
           onClick={openAppNotificationSettings}
           className="w-full py-3 bg-rally-accent text-white font-bold rounded-lg"
         >
-          Chrome notification settings
+          Open notification settings
         </button>
+      </section>
+
+      <AndroidNotificationFix forceShow />
+
+      <section className="mt-6 p-4 rounded-lg border border-rally-border bg-rally-surface space-y-3 text-sm">
+        <h2 className="font-bold text-rally-accent">More settings shortcuts</h2>
         <button
           type="button"
           onClick={openChromeAppSettings}
           className="w-full py-3 bg-rally-bg border border-rally-border font-bold rounded-lg"
         >
-          Chrome app info (then Battery → Unrestricted)
+          Chrome app info (Battery → Unrestricted)
         </button>
         <button
           type="button"
@@ -58,24 +82,12 @@ export default function FixNotificationsPage() {
       </section>
 
       <section className="mt-6 p-4 rounded-lg border border-rally-border bg-rally-surface text-sm space-y-2">
-        <h2 className="font-bold text-rally-accent">Verify it worked</h2>
+        <h2 className="font-bold text-rally-accent">Verify</h2>
         <ol className="list-decimal list-inside text-rally-muted text-xs space-y-1.5">
-          <li>Open Rally Timer → Enable notifications (if needed)</li>
-          <li>Tap Send test notification</li>
-          <li>Swipe Rally Timer away (close from recents)</li>
-          <li>Ask an admin to send another test, or wait for a live ping</li>
-          <li>You should get the alert without reopening the app</li>
+          <li>Send test notification</li>
+          <li>Leave Rally Timer and open Whiteout (or the home screen)</li>
+          <li>You should see a banner on top of the screen, not only a shade icon</li>
         </ol>
-      </section>
-
-      <section className="mt-6 p-4 rounded-lg border border-rally-border bg-rally-surface text-sm space-y-2">
-        <h2 className="font-bold text-rally-accent">Also check</h2>
-        <ul className="list-disc list-inside text-rally-muted text-xs space-y-1.5">
-          <li>Do Not Disturb / Bedtime mode is off</li>
-          <li>Phone is not in Power saving / Ultra saving</li>
-          <li>You installed the app from Chrome (Add to Home screen / Install app)</li>
-          <li>iPhone users: use the /install guide instead — this page is for Android</li>
-        </ul>
       </section>
 
       <p className="mt-6 text-center">

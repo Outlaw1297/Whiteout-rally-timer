@@ -640,9 +640,9 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                         }
                       >
                         {n.status === "SENT" && n.latencyMs != null
-                          ? `sent (+${n.latencyMs}ms)`
+                          ? `sent (${n.latencyMs >= 0 ? "+" : ""}${n.latencyMs}ms)`
                           : n.status === "SKIPPED"
-                            ? n.error === "rally ended"
+                            ? n.error === "rally ended" || n.error === "last caller launched"
                               ? "skipped (rally ended)"
                               : "skipped"
                             : n.status === "PENDING" && isOverdue

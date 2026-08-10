@@ -40,7 +40,8 @@ export default function LoginPage() {
         </h1>
         <p className="text-rally-muted text-sm">Coordinate multi-caller rallies</p>
         <p className="text-rally-muted text-xs mt-2 max-w-xs mx-auto">
-          Admins run rallies; callers receive their launch times. An admin can be a caller too.
+          Admins run rallies; callers receive their launch times. On phones, install the app
+          (iPhone: Safari · Android: Chrome) so throw alerts work.
         </p>
       </header>
 

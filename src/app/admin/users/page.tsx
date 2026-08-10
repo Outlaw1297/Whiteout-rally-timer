@@ -178,8 +178,12 @@ export default function AdminUsersPage() {
         <p className="text-rally-muted text-xs mb-2">SETUP FOR EACH CALLER</p>
         <ol className="list-decimal list-inside space-y-1 text-rally-muted text-xs">
           <li>Create account below (set a password or leave blank for a random one)</li>
-          <li>Caller opens the app and logs in at /login</li>
-          <li>Caller taps Enable Rally Notifications on their dashboard</li>
+          <li>
+            Caller installs the app on their phone (iPhone: Safari → Add to Home Screen ·
+            Android: Chrome → Install app)
+          </li>
+          <li>Caller opens the installed app and logs in at /login</li>
+          <li>Caller taps Enable Rally Notifications</li>
           <li>In your rally template, link that caller slot to their account</li>
         </ol>
       </section>

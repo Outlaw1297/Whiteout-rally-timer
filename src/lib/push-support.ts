@@ -11,6 +11,13 @@ export type PushEnvironment =
   | "ios-use-safari"
   | "ios-install";
 
+export type MobileInstallKind =
+  | "none"
+  | "ios-use-safari"
+  | "ios-install"
+  | "android-use-chrome"
+  | "android-install";
+
 export function isIOSDevice(): boolean {
   if (typeof navigator === "undefined") return false;
   const ua = navigator.userAgent;
@@ -18,6 +25,15 @@ export function isIOSDevice(): boolean {
     /iPhone|iPad|iPod/i.test(ua) ||
     (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
   );
+}
+
+export function isAndroidDevice(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /Android/i.test(navigator.userAgent);
+}
+
+export function isMobileDevice(): boolean {
+  return isIOSDevice() || isAndroidDevice();
 }
 
 export function isIOSChrome(): boolean {
@@ -28,6 +44,13 @@ export function isIOSSafari(): boolean {
   if (!isIOSDevice()) return false;
   const ua = navigator.userAgent;
   return /Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS|DuckDuckGo/i.test(ua);
+}
+
+export function isAndroidChrome(): boolean {
+  if (!isAndroidDevice()) return false;
+  const ua = navigator.userAgent;
+  // Chrome on Android includes Chrome/; exclude Edge/Opera/Samsung if we can
+  return /Chrome\//i.test(ua) && !/EdgA|OPR|SamsungBrowser|Firefox/i.test(ua);
 }
 
 export function isIOSInAppBrowser(): boolean {
@@ -43,6 +66,24 @@ export function isStandalonePWA(): boolean {
     window.matchMedia("(display-mode: standalone)").matches ||
     window.matchMedia("(display-mode: fullscreen)").matches
   );
+}
+
+/**
+ * What install guidance a mobile user needs. Desktop → none.
+ * Already installed (standalone) → none.
+ */
+export function getMobileInstallKind(): MobileInstallKind {
+  if (typeof window === "undefined") return "none";
+  if (isStandalonePWA()) return "none";
+  if (isIOSDevice()) {
+    if (isIOSInAppBrowser() || !isIOSSafari()) return "ios-use-safari";
+    return "ios-install";
+  }
+  if (isAndroidDevice()) {
+    if (!isAndroidChrome()) return "android-use-chrome";
+    return "android-install";
+  }
+  return "none";
 }
 
 export function hasNotificationApi(): boolean {

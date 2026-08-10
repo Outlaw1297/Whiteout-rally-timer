@@ -29,6 +29,11 @@ export async function POST(request: NextRequest) {
   const valid = await verifyPassword(password, user.passwordHash);
   if (!valid) return errorResponse("Invalid credentials", 401);
 
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { lastLoginAt: new Date() },
+  });
+
   const token = await createSessionToken({
     id: user.id,
     username: user.username,

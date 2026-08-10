@@ -6,7 +6,12 @@ export function formatArrivalTime(iso: string | null | undefined): string {
   return formatTimeLocal(new Date(iso));
 }
 
+/** Format rally (gather) duration for display. */
 export function formatGather(seconds: number): string {
+  return formatGatherDuration(seconds);
+}
+
+export function formatRallyTime(seconds: number): string {
   return formatGatherDuration(seconds);
 }
 

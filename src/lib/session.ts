@@ -1,12 +1,13 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
+import type { AppRole } from "./roles";
 
 export interface SessionUser {
   id: string;
   username: string;
   displayName: string;
-  role: "ADMIN" | "CALLER";
+  role: AppRole;
 }
 
 const COOKIE_NAME = "rally_session";
@@ -35,11 +36,13 @@ export async function verifySessionToken(token: string): Promise<SessionUser | n
   try {
     const { payload } = await jwtVerify(token, getSecret());
     if (!payload.id || !payload.username || !payload.role) return null;
+    const role = String(payload.role);
+    if (role !== "ADMIN" && role !== "CALLER" && role !== "DEVELOPER") return null;
     return {
       id: String(payload.id),
       username: String(payload.username),
       displayName: String(payload.displayName || payload.username),
-      role: payload.role as "ADMIN" | "CALLER",
+      role: role as AppRole,
     };
   } catch {
     return null;

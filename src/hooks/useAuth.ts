@@ -3,11 +3,13 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import type { AppRole } from "@/lib/roles";
+
 export interface AuthUser {
   id: string;
   username: string;
   displayName: string;
-  role: "ADMIN" | "CALLER";
+  role: AppRole;
 }
 
 export function useAuth() {

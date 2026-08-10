@@ -12,6 +12,13 @@ import { completeRallyAfterLastCaller } from "@/lib/complete-rally";
 
 const POLL_INTERVAL_MS = 100;
 const DUE_GRACE_MS = 100;
+/** Process many due notifications concurrently — crucial for 100+ simultaneous pushes. */
+const MAX_PARALLEL_NOTIFICATIONS = 20;
+/** Fan out device deliveries for one notification event in parallel. */
+const MAX_PARALLEL_DEVICES = 16;
+/** Cap batch size per tick so we stay within starter-tier memory. */
+const LAUNCH_BATCH = 80;
+const OTHER_BATCH = 120;
 
 let schedulerRunning = false;
 let schedulerInterval: ReturnType<typeof setInterval> | null = null;
@@ -23,6 +30,25 @@ function notificationPriority(type: string): number {
   if (type === "LAUNCH") return 1;
   if (String(type).startsWith("WARNING_")) return 2;
   return 3;
+}
+
+async function mapPool<T>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T) => Promise<void>
+): Promise<void> {
+  if (items.length === 0) return;
+  const limit = Math.max(1, Math.min(concurrency, items.length));
+  let next = 0;
+
+  async function run() {
+    while (next < items.length) {
+      const index = next++;
+      await worker(items[index]);
+    }
+  }
+
+  await Promise.all(Array.from({ length: limit }, () => run()));
 }
 
 async function processNotificationEvent(eventId: string) {
@@ -176,8 +202,9 @@ async function processNotificationEvent(eventId: string) {
   let successCount = 0;
   let failCount = 0;
   let lastError: string | null = null;
+  const expiredIds: string[] = [];
 
-  for (const sub of subscriptions) {
+  await mapPool(subscriptions, MAX_PARALLEL_DEVICES, async (sub) => {
     const result = await sendPushNotification(
       { endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth },
       {
@@ -193,17 +220,21 @@ async function processNotificationEvent(eventId: string) {
     );
 
     if (result.success) {
-      successCount++;
+      successCount += 1;
     } else {
-      failCount++;
+      failCount += 1;
       lastError = result.error || "failed";
       if (isExpiredSubscription(result.statusCode)) {
-        await prisma.pushSubscription.update({
-          where: { id: sub.id },
-          data: { active: false },
-        });
+        expiredIds.push(sub.id);
       }
     }
+  });
+
+  if (expiredIds.length > 0) {
+    await prisma.pushSubscription.updateMany({
+      where: { id: { in: expiredIds } },
+      data: { active: false },
+    });
   }
 
   const success = successCount > 0 || subscriptions.length === 0;
@@ -228,6 +259,9 @@ async function processNotificationEvent(eventId: string) {
     sentAt: sentAt.toISOString(),
     latencyMs,
     success,
+    devices: subscriptions.length,
+    successCount,
+    failCount,
   });
 }
 
@@ -243,10 +277,10 @@ async function flushDueLaunchNotifications(now: number) {
       },
     },
     orderBy: { scheduledAt: "asc" },
-    take: 50,
+    take: LAUNCH_BATCH,
   });
 
-  for (const event of dueLaunches) {
+  await mapPool(dueLaunches, MAX_PARALLEL_NOTIFICATIONS, async (event) => {
     const overdueMs = now - event.scheduledAt.getTime();
     if (overdueMs > 2000) {
       logger.warn("launch_notification_overdue_flushing", {
@@ -256,7 +290,7 @@ async function flushDueLaunchNotifications(now: number) {
       });
     }
     await processNotificationEvent(event.id);
-  }
+  });
 
   return dueLaunches.length;
 }
@@ -282,7 +316,7 @@ async function tick() {
         },
       },
       orderBy: { scheduledAt: "asc" },
-      take: 100,
+      take: OTHER_BATCH,
     });
 
     pending.sort((a, b) => {
@@ -291,9 +325,9 @@ async function tick() {
       return a.scheduledAt.getTime() - b.scheduledAt.getTime();
     });
 
-    for (const event of pending) {
+    await mapPool(pending, MAX_PARALLEL_NOTIFICATIONS, async (event) => {
       await processNotificationEvent(event.id);
-    }
+    });
 
     // 3) Complete only after due LAUNCHes were flushed (completeRally also defers
     //    while any LAUNCH is still PENDING).
@@ -302,9 +336,9 @@ async function tick() {
       select: { id: true },
     });
 
-    for (const event of activeEvents) {
+    await mapPool(activeEvents, 8, async (event) => {
       await completeRallyAfterLastCaller(event.id);
-    }
+    });
   } finally {
     tickInProgress = false;
   }
@@ -313,7 +347,11 @@ async function tick() {
 export function startScheduler() {
   if (schedulerRunning) return;
   schedulerRunning = true;
-  logger.info("scheduler_started", { pollIntervalMs: POLL_INTERVAL_MS });
+  logger.info("scheduler_started", {
+    pollIntervalMs: POLL_INTERVAL_MS,
+    maxParallelNotifications: MAX_PARALLEL_NOTIFICATIONS,
+    maxParallelDevices: MAX_PARALLEL_DEVICES,
+  });
 
   tick().catch((err) => logger.error("scheduler_tick_error", { error: String(err) }));
   schedulerInterval = setInterval(() => {

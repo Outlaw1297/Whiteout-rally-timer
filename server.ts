@@ -5,7 +5,13 @@ import { WebSocketServer } from "ws";
 import { setupWebSocket } from "./src/server/websocket";
 import { startScheduler } from "./src/server/scheduler";
 import { initWebPush } from "./src/lib/push";
-import { migrateLegacyData, migrateTemplateSchema, migrateNotificationEnum } from "./src/lib/db-migrate";
+import {
+  migrateLegacyData,
+  migrateTemplateSchema,
+  migrateNotificationEnum,
+  migrateFeaturePackColumns,
+  migrateDeveloperRole,
+} from "./src/lib/db-migrate";
 
 const dev = process.env.NODE_ENV !== "production";
 const port = parseInt(process.env.PORT || "3000", 10);
@@ -24,6 +30,8 @@ app
       await migrateLegacyData();
       await migrateTemplateSchema();
       await migrateNotificationEnum();
+      await migrateFeaturePackColumns();
+      await migrateDeveloperRole();
     } catch (err) {
       console.error(JSON.stringify({ event: "startup_migration_failed", error: String(err) }));
     }

@@ -8,7 +8,9 @@ import { useCountdown } from "@/hooks/useCountdown";
 import { useEventSocket, type SerializedEvent } from "@/hooks/useEventSocket";
 import { NotificationButton } from "@/components/NotificationButton";
 import { PushNotificationsProvider } from "@/components/PushNotificationsProvider";
+import { StatusBanner } from "@/components/StatusBanner";
 import { formatArrivalTime, formatGather } from "@/lib/display";
+import { parseMarchDuration } from "@/lib/timing";
 
 /** Shared personal rally countdown used as the caller home screen. */
 export function CallerRallyView({
@@ -22,6 +24,10 @@ export function CallerRallyView({
   const [event, setEvent] = useState<SerializedEvent | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [marchDraft, setMarchDraft] = useState("");
+  const [marchSaving, setMarchSaving] = useState(false);
+  const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
 
   const { correctedNow } = useServerClock({
     activeRally: true,
@@ -44,6 +50,7 @@ export function CallerRallyView({
         setEvent(data);
         const mine = data.assignments?.find((a: { userId: string }) => a.userId === user?.id);
         if (mine?.status === "LAUNCHED") setConfirmed(true);
+        if (mine?.marchFormatted) setMarchDraft(mine.marchFormatted);
       })
       .catch(() => setError("Could not load rally"));
   }, [eventId, user?.id]);
@@ -71,6 +78,34 @@ export function CallerRallyView({
     if (res.ok) setConfirmed(true);
   };
 
+  const saveMarch = async () => {
+    if (!assignment || !event) return;
+    if (!parseMarchDuration(marchDraft)) {
+      setStatusError("Invalid march (use M:SS)");
+      setStatusMsg(null);
+      return;
+    }
+    setMarchSaving(true);
+    try {
+      const res = await fetch(`/api/events/${event.id}/assignments/${assignment.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ marchDuration: marchDraft }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setStatusError(data.error || "Failed to save march time");
+        setStatusMsg(null);
+        return;
+      }
+      setStatusMsg("March time saved");
+      setStatusError(null);
+      loadEvent();
+    } finally {
+      setMarchSaving(false);
+    }
+  };
+
   if (error) {
     return <p className="text-rally-danger text-center py-8">{error}</p>;
   }
@@ -79,7 +114,9 @@ export function CallerRallyView({
     return <div className="p-8 text-center text-rally-muted">Loading rally…</div>;
   }
 
-  const waitingForGo = !assignment.launchTime || event.status === "READY" || event.status === "DRAFT";
+  const waitingForGo =
+    !assignment.launchTime || event.status === "READY" || event.status === "DRAFT";
+  const canEditMarch = event.status === "DRAFT" || event.status === "READY";
 
   return (
     <div className="flex flex-col flex-1">
@@ -95,6 +132,15 @@ export function CallerRallyView({
               : event.status}
         </p>
       </header>
+
+      <StatusBanner
+        success={statusMsg}
+        error={statusError}
+        onDismiss={() => {
+          setStatusMsg(null);
+          setStatusError(null);
+        }}
+      />
 
       <section
         className={`p-8 mb-6 rounded-xl text-center ${
@@ -113,21 +159,40 @@ export function CallerRallyView({
             isNow ? "text-rally-danger" : "text-rally-accent"
           }`}
         >
-          {waitingForGo
-            ? "WAITING"
-            : isNow
-              ? "🚨 THROW RALLY NOW"
-              : countdown}
+          {waitingForGo ? "WAITING" : isNow ? "🚨 THROW RALLY NOW" : countdown}
         </p>
       </section>
 
       <section className="grid grid-cols-2 gap-4 mb-6 text-center">
         <div className="p-3 bg-rally-surface border border-rally-border rounded-lg">
           <p className="text-rally-muted text-xs">YOUR MARCH</p>
-          <p className="text-xl font-mono font-bold">{assignment.marchFormatted}</p>
+          {canEditMarch ? (
+            <div className="mt-1 space-y-2">
+              <input
+                value={marchDraft}
+                onChange={(e) => setMarchDraft(e.target.value)}
+                placeholder="M:SS"
+                className="w-full px-2 py-1 bg-rally-bg border border-rally-border rounded font-mono text-lg text-center"
+                aria-label="Your march time"
+              />
+              <button
+                type="button"
+                onClick={saveMarch}
+                disabled={marchSaving}
+                className="w-full py-1.5 bg-rally-accent text-white text-xs font-bold rounded disabled:opacity-50"
+              >
+                {marchSaving ? "SAVING…" : "SAVE MARCH"}
+              </button>
+              <p className="text-rally-muted text-[10px]">
+                Set your march to the target. Admin can still change it.
+              </p>
+            </div>
+          ) : (
+            <p className="text-xl font-mono font-bold">{assignment.marchFormatted}</p>
+          )}
         </div>
         <div className="p-3 bg-rally-surface border border-rally-border rounded-lg">
-          <p className="text-rally-muted text-xs">GATHER</p>
+          <p className="text-rally-muted text-xs">RALLY TIME</p>
           <p className="text-xl font-mono font-bold">
             {formatGather(event.gatherDurationSeconds)}
           </p>

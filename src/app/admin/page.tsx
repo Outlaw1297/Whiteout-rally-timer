@@ -24,7 +24,9 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     if (!loading && !user) router.push("/login");
-    if (!loading && user && user.role !== "ADMIN") router.push("/caller");
+    if (!loading && user && user.role !== "ADMIN" && user.role !== "DEVELOPER") {
+      router.push("/caller");
+    }
   }, [user, loading, router]);
 
   const loadEvents = () => {
@@ -34,7 +36,7 @@ export default function AdminDashboard() {
   };
 
   useEffect(() => {
-    if (user?.role === "ADMIN") loadEvents();
+    if (user?.role === "ADMIN" || user?.role === "DEVELOPER") loadEvents();
   }, [user]);
 
   const deleteEvent = async (id: string, status: string) => {
@@ -130,9 +132,14 @@ export default function AdminDashboard() {
           <Link href="/admin/users" className="text-rally-muted text-sm hover:text-rally-accent">
             Users
           </Link>
-          <Link href="/admin/test-bench" className="text-rally-muted text-sm hover:text-rally-accent">
-            Test Bench
-          </Link>
+          {(user.role === "DEVELOPER") && (
+            <Link
+              href="/admin/developer"
+              className="text-rally-muted text-sm hover:text-rally-accent"
+            >
+              Developer
+            </Link>
+          )}
           <button onClick={logout} className="text-rally-muted text-sm hover:text-rally-danger">
             Logout
           </button>
@@ -225,7 +232,7 @@ export default function AdminDashboard() {
                   </h2>
                   <span className="text-xs text-rally-muted">{event.status}</span>
                   <p className="text-rally-muted text-sm mt-1">
-                    Gather: {formatGather(event.gatherDurationSeconds)} ·{" "}
+                    Rally time: {formatGather(event.gatherDurationSeconds)} ·{" "}
                     {event.assignments.length} caller
                     {event.assignments.length !== 1 ? "s" : ""}
                   </p>
@@ -296,7 +303,7 @@ function CreateTemplateForm({ onCreated }: { onCreated: (id: string) => void }) 
 
     const gatherSeconds = parseGather(gather);
     if (!gatherSeconds) {
-      setError("Invalid gather duration (use M:SS)");
+      setError("Invalid rally time (use M:SS)");
       setLoading(false);
       return;
     }
@@ -331,7 +338,7 @@ function CreateTemplateForm({ onCreated }: { onCreated: (id: string) => void }) 
         onClick={handleTestMode}
         className="text-rally-warning text-sm font-bold text-left"
       >
-        ⚡ Quick test template (10s gather)
+        ⚡ Quick test template (10s rally time)
       </button>
 
       <input
@@ -342,7 +349,7 @@ function CreateTemplateForm({ onCreated }: { onCreated: (id: string) => void }) 
         required
       />
       <div>
-        <label className="text-rally-muted text-xs">GATHER DURATION (M:SS)</label>
+        <label className="text-rally-muted text-xs">RALLY TIME (M:SS)</label>
         <input
           value={gather}
           onChange={(e) => setGather(e.target.value)}

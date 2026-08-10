@@ -19,7 +19,7 @@ export default function CallerSettingsPage() {
 
   useEffect(() => {
     if (!loading && !user) router.push("/login");
-    if (!loading && user && user.role === "ADMIN") router.push("/admin");
+    if (!loading && user && (user.role === "ADMIN" || user.role === "DEVELOPER")) router.push("/admin");
   }, [user, loading, router]);
 
   useEffect(() => {
@@ -104,7 +104,7 @@ export default function CallerSettingsPage() {
                 <p className="font-mono">{assignment.marchFormatted}</p>
               </div>
               <div>
-                <p className="text-rally-muted text-xs">GATHER</p>
+                <p className="text-rally-muted text-xs">RALLY TIME</p>
                 <p className="font-mono">{formatGather(event.gatherDurationSeconds)}</p>
               </div>
             </div>

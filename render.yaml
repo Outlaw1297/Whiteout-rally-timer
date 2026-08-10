@@ -16,7 +16,7 @@ services:
     region: oregon
     branch: main
     buildCommand: npm ci --include=dev && npx tsx scripts/generate-icons.ts && npx prisma generate && npm run build && npm run db:deploy
-    startCommand: npx tsx server.ts
+    startCommand: NODE_OPTIONS=--max-old-space-size=384 npx tsx server.ts
     healthCheckPath: /api/health/time
     envVars:
       - key: NODE_ENV

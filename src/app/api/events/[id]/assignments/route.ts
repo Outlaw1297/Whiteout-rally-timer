@@ -13,6 +13,9 @@ const eventInclude = {
   assignments: { include: { user: true }, orderBy: { marchDurationSeconds: "desc" as const } },
 };
 
+const OFFSET_MIN = -3600;
+const OFFSET_MAX = 3600;
+
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const session = await requireAdmin(request);
   if (session instanceof Response) return session;
@@ -54,10 +57,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (
       typeof body.arrivalOffsetSeconds !== "number" ||
       !Number.isFinite(body.arrivalOffsetSeconds) ||
-      body.arrivalOffsetSeconds < 0 ||
-      body.arrivalOffsetSeconds > 3600
+      body.arrivalOffsetSeconds < OFFSET_MIN ||
+      body.arrivalOffsetSeconds > OFFSET_MAX
     ) {
-      return errorResponse("arrivalOffsetSeconds must be 0–3600");
+      return errorResponse("arrivalOffsetSeconds must be -3600–3600");
     }
     arrivalOffsetSeconds = Math.floor(body.arrivalOffsetSeconds);
   }

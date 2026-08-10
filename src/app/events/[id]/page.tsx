@@ -84,7 +84,7 @@ export default function PublicEventPage({ params }: { params: { id: string } }) 
       )}
 
       <section className="p-4 mb-4 bg-rally-surface border border-rally-border rounded-lg">
-        <p className="text-rally-muted text-xs">GATHER</p>
+        <p className="text-rally-muted text-xs">RALLY TIME</p>
         <p className="text-xl font-mono font-bold">{formatGather(event.gatherDurationSeconds)}</p>
         {!isTemplate && event.targetArrivalTime && (
           <>
@@ -139,10 +139,10 @@ export default function PublicEventPage({ params }: { params: { id: string } }) 
       {!authLoading && user && (
         <footer className="text-center text-sm">
           <Link
-            href={user.role === "ADMIN" ? `/admin/events/${event.id}` : `/caller/events/${event.id}`}
+            href={user.role === "ADMIN" || user.role === "DEVELOPER" ? `/admin/events/${event.id}` : `/caller/events/${event.id}`}
             className="text-rally-accent font-bold hover:underline"
           >
-            {user.role === "ADMIN" ? "Manage →" : "My view →"}
+            {user.role === "ADMIN" || user.role === "DEVELOPER" ? "Manage →" : "My view →"}
           </Link>
         </footer>
       )}

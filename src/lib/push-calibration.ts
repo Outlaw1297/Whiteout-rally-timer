@@ -88,9 +88,11 @@ export async function getCalibrationStatus(userId: string) {
   };
 }
 
+import { isAdminRole } from "./roles";
+
 /** True when the user has no ACTIVE rallies (safe for background timing pings). */
 export async function userHasActiveRally(userId: string, role: string): Promise<boolean> {
-  if (role === "ADMIN") {
+  if (isAdminRole(role)) {
     const active = await prisma.rallyEvent.count({
       where: { status: "ACTIVE" },
     });

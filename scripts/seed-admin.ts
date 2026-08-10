@@ -1,5 +1,6 @@
 /**
- * Seeds admin user and optional callers on first deploy.
+ * Seeds developer/admin user and optional callers on first deploy.
+ * The initial account is always granted the DEVELOPER role.
  */
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
@@ -10,7 +11,25 @@ const SALT_ROUNDS = 12;
 async function main() {
   const count = await prisma.user.count();
   if (count > 0) {
-    console.log(JSON.stringify({ event: "seed_skipped", reason: "users_exist", count }));
+    // Ensure at least one developer exists on upgrades.
+    const developers = await prisma.user.count({ where: { role: "DEVELOPER" } });
+    if (developers === 0) {
+      const first = await prisma.user.findFirst({ orderBy: { createdAt: "asc" } });
+      if (first) {
+        await prisma.user.update({
+          where: { id: first.id },
+          data: { role: "DEVELOPER" },
+        });
+        console.log(
+          JSON.stringify({
+            event: "seed_promoted_initial_developer",
+            username: first.username,
+          })
+        );
+      }
+    } else {
+      console.log(JSON.stringify({ event: "seed_skipped", reason: "users_exist", count }));
+    }
     return;
   }
 
@@ -23,13 +42,13 @@ async function main() {
       username: adminUsername,
       displayName: adminDisplay,
       passwordHash: await bcrypt.hash(adminPassword, SALT_ROUNDS),
-      role: "ADMIN",
+      role: "DEVELOPER",
     },
   });
 
   console.log(
     JSON.stringify({
-      event: "seed_admin_created",
+      event: "seed_developer_created",
       username: admin.username,
       temporaryPassword: process.env.ADMIN_PASSWORD ? undefined : adminPassword,
     })

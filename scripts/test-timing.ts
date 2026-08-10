@@ -254,6 +254,31 @@ console.log("PASS adaptive delivery lead");
   console.log("PASS arrival offset stagger order");
 }
 
+// Negative offsets: earlier hit times
+{
+  const go = new Date();
+  go.setHours(21, 0, 0, 0);
+  const marches = [480, 480];
+  const offsets = [1, -1]; // later / earlier
+  const target = computeTargetArrivalOnGo(go, 300, marches, 3, offsets);
+  const later = calculateLaunchTime(target, 300, 480, 1);
+  const earlier = calculateLaunchTime(target, 300, 480, -1);
+  const arriveLater = calculateExpectedArrival(later, 300, 480);
+  const arriveEarlier = calculateExpectedArrival(earlier, 300, 480);
+  if (arriveLater.getTime() - arriveEarlier.getTime() !== 2000) {
+    console.error(
+      "FAIL +/-1s offset should be 2s apart",
+      arriveLater.getTime() - arriveEarlier.getTime()
+    );
+    process.exit(1);
+  }
+  if (earlier.getTime() >= later.getTime()) {
+    console.error("FAIL negative offset should launch earlier");
+    process.exit(1);
+  }
+  console.log("PASS negative arrival offsets");
+}
+
 {
   const now = Date.now();
   if (!callerHasCalled({ status: "LAUNCHED", launchTime: null }, now)) {

@@ -10,6 +10,7 @@ datasource db {
 enum UserRole {
   ADMIN
   CALLER
+  DEVELOPER
 }
 
 enum RallyEventStatus {
@@ -60,9 +61,13 @@ model User {
   warn5Enabled    Boolean  @default(true)
   /** @deprecated Launch is always required */
   launchEnabled   Boolean  @default(true)
-  /** Learned push lead (ms) — max across active devices, for admin debug */
+  /** Learned push lead (ms) — rolling avg across active devices, for admin debug */
   deliveryLeadMs      Int?
   deliverySampleCount Int      @default(0)
+  /** Last successful push calibration / delivery-feedback sample */
+  lastCalibratedAt    DateTime? @db.Timestamptz(3)
+  /** Last successful login */
+  lastLoginAt         DateTime? @db.Timestamptz(3)
   createdAt       DateTime @default(now()) @db.Timestamptz(3)
   updatedAt       DateTime @updatedAt @db.Timestamptz(3)
 
@@ -106,7 +111,7 @@ model RallyAssignment {
   callerName           String
   userId               String?
   marchDurationSeconds Int
-  /** Seconds after the shared target arrival — positive = hit later (stagger order) */
+  /** Seconds relative to shared target — positive = hit later, negative = hit earlier */
   arrivalOffsetSeconds Int              @default(0)
   launchTime           DateTime?        @db.Timestamptz(3)
   expectedArrivalTime  DateTime?        @db.Timestamptz(3)
@@ -138,6 +143,8 @@ model PushSubscription {
   /** Learned ms to send early so this device receives alerts on time */
   deliveryLeadMs      Int @default(1000)
   deliverySampleCount Int @default(0)
+  /** Last time this device contributed a delivery timing sample */
+  lastCalibratedAt    DateTime? @db.Timestamptz(3)
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 

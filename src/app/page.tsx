@@ -29,10 +29,10 @@ export default function HomePage() {
           {!loading && user ? (
             <>
               <Link
-                href={user.role === "ADMIN" ? "/admin" : "/caller"}
+                href={user.role === "ADMIN" || user.role === "DEVELOPER" ? "/admin" : "/caller"}
                 className="text-rally-accent font-bold hover:underline"
               >
-                {user.role === "ADMIN" ? "Admin" : "My Rallies"} →
+                {user.role === "ADMIN" || user.role === "DEVELOPER" ? "Admin" : "My Rallies"} →
               </Link>
               <span className="text-rally-muted text-xs">{user.displayName}</span>
             </>

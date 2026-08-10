@@ -7,7 +7,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { useServerClock } from "@/hooks/useServerClock";
 import { useCountdown } from "@/hooks/useCountdown";
 import { NotificationButton } from "@/components/NotificationButton";
+import { PushNotificationsProvider } from "@/components/PushNotificationsProvider";
 import { ChangePasswordForm } from "@/components/ChangePasswordForm";
+import { HomeButton } from "@/components/HomeButton";
 import { formatArrivalTime, formatGather } from "@/lib/display";
 import type { SerializedEvent } from "@/hooks/useEventSocket";
 
@@ -68,9 +70,12 @@ export default function CallerDashboard() {
         <div>
           <h1 className="text-xl font-bold text-rally-accent">WELCOME, {user.displayName.toUpperCase()}</h1>
         </div>
-        <button onClick={logout} className="text-rally-muted text-sm hover:text-rally-danger">
-          Logout
-        </button>
+        <div className="flex items-center gap-3">
+          <HomeButton />
+          <button onClick={logout} className="text-rally-muted text-sm hover:text-rally-danger">
+            Logout
+          </button>
+        </div>
       </header>
 
       {nextUp && (
@@ -91,7 +96,9 @@ export default function CallerDashboard() {
       )}
 
       <section className="mb-6">
-        <NotificationButton />
+        <PushNotificationsProvider>
+          <NotificationButton />
+        </PushNotificationsProvider>
       </section>
 
       <NotificationPreferences />

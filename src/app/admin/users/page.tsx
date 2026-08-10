@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { PushSetupCard } from "@/components/PushSetupCard";
 import { ChangePasswordForm } from "@/components/ChangePasswordForm";
 import { RolesNote } from "@/components/RolesNote";
+import { HomeButton } from "@/components/HomeButton";
 
 interface UserRow {
   id: string;
@@ -153,9 +154,12 @@ export default function AdminUsersPage() {
         <Link href="/admin" className="text-rally-muted text-sm hover:text-rally-accent">
           ← Admin
         </Link>
-        <button onClick={logout} className="text-rally-muted text-sm hover:text-rally-danger">
-          Logout
-        </button>
+        <div className="flex items-center gap-3">
+          <HomeButton />
+          <button onClick={logout} className="text-rally-muted text-sm hover:text-rally-danger">
+            Logout
+          </button>
+        </div>
       </header>
 
       <h1 className="text-xl font-bold mb-2">Manage Users</h1>

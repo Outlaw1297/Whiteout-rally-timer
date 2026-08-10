@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     mode === "live" ? `push-calibrate-live:${session.id}` : `push-calibrate:${ip}`;
   const limitConfig =
     mode === "live"
-      ? { windowMs: 5 * 60_000, maxRequests: 3 }
+      ? { windowMs: 2 * 60_000, maxRequests: 2 }
       : RATE_LIMITS.pushSubscribe;
   const limit = rateLimit(limitKey, limitConfig);
   if (!limit.allowed) return rateLimitResponse(limit.resetAt);

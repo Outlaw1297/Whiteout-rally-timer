@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 
-const LIVE_PING_INTERVAL_MS = 5 * 60_000;
+const LIVE_PING_INTERVAL_MS = 2 * 60_000;
 const LIVE_PING_STORAGE_KEY = "rally-live-ping-at";
 
 /**

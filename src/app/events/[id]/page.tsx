@@ -10,6 +10,7 @@ import { useNextCaller } from "@/hooks/useNextCaller";
 import { CallerCountdownRow } from "@/components/CallerCountdownRow";
 import { MarchDuplicateNotice } from "@/components/MarchDuplicateNotice";
 import { ServerClock } from "@/components/ServerClock";
+import { HomeButton } from "@/components/HomeButton";
 import { formatArrivalTime, formatGather } from "@/lib/display";
 import {
   getMarchDuplicateGroups,
@@ -70,9 +71,7 @@ export default function PublicEventPage({ params }: { params: { id: string } }) 
 
   return (
     <main className="min-h-screen px-4 py-6 max-w-lg mx-auto">
-      <Link href="/" className="text-rally-muted text-sm hover:text-rally-accent">
-        ← Schedule
-      </Link>
+      <HomeButton />
 
       <header className="mt-4 mb-6">
         <h1 className="text-2xl font-bold">{event.name}</h1>

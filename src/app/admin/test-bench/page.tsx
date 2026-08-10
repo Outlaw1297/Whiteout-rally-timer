@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
+import { HomeButton } from "@/components/HomeButton";
 
 interface DeviceRow {
   id: string;
@@ -169,9 +170,12 @@ Requires iPhone/iPad on iOS 16.4 or newer.`;
         <Link href="/admin" className="text-rally-muted text-sm hover:text-rally-accent">
           ← Admin
         </Link>
-        <Link href="/admin/users" className="text-rally-muted text-sm hover:text-rally-accent">
-          Users
-        </Link>
+        <div className="flex items-center gap-3">
+          <HomeButton />
+          <Link href="/admin/users" className="text-rally-muted text-sm hover:text-rally-accent">
+            Users
+          </Link>
+        </div>
       </header>
 
       <h1 className="text-xl font-bold mb-2">Notification Test Bench</h1>

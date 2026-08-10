@@ -8,8 +8,10 @@ import { useServerClock } from "@/hooks/useServerClock";
 import { useCountdown } from "@/hooks/useCountdown";
 import { useEventSocket, type SerializedEvent } from "@/hooks/useEventSocket";
 import { NotificationButton } from "@/components/NotificationButton";
+import { PushNotificationsProvider } from "@/components/PushNotificationsProvider";
 import { ConnectionIndicator } from "@/components/ConnectionIndicator";
 import { ServerClock } from "@/components/ServerClock";
+import { HomeButton } from "@/components/HomeButton";
 import { formatArrivalTime, formatGather } from "@/lib/display";
 
 export default function CallerEventPage({ params }: { params: { id: string } }) {
@@ -66,9 +68,12 @@ export default function CallerEventPage({ params }: { params: { id: string } }) 
 
   return (
     <main className="min-h-screen px-4 py-6 max-w-lg mx-auto flex flex-col">
-      <Link href="/caller" className="text-rally-muted text-sm hover:text-rally-accent">
-        ← Dashboard
-      </Link>
+      <div className="flex items-center justify-between gap-3">
+        <Link href="/caller" className="text-rally-muted text-sm hover:text-rally-accent">
+          ← Dashboard
+        </Link>
+        <HomeButton />
+      </div>
 
       <header className="mt-4 mb-6 text-center">
         <p className="text-rally-muted text-xs">⚔️</p>
@@ -115,7 +120,9 @@ export default function CallerEventPage({ params }: { params: { id: string } }) 
       </div>
 
       <div className="mb-6">
-        <NotificationButton />
+        <PushNotificationsProvider>
+          <NotificationButton />
+        </PushNotificationsProvider>
       </div>
 
       <section className="mt-auto">

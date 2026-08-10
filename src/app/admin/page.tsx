@@ -8,6 +8,7 @@ import { formatGather } from "@/lib/display";
 import { PushSetupCard } from "@/components/PushSetupCard";
 import { RolesNote } from "@/components/RolesNote";
 import { TemplateSwitcher } from "@/components/TemplateSwitcher";
+import { HomeButton } from "@/components/HomeButton";
 import type { SerializedEvent } from "@/hooks/useEventSocket";
 
 export default function AdminDashboard() {
@@ -123,10 +124,8 @@ export default function AdminDashboard() {
           <h1 className="text-xl font-bold text-rally-accent">ADMIN</h1>
           <p className="text-rally-muted text-sm">{user.displayName}</p>
         </div>
-        <div className="flex gap-2">
-          <Link href="/" className="text-rally-muted text-sm hover:text-rally-accent">
-            Schedule
-          </Link>
+        <div className="flex gap-2 flex-wrap justify-end">
+          <HomeButton />
           <Link href="/admin/users" className="text-rally-muted text-sm hover:text-rally-accent">
             Users
           </Link>

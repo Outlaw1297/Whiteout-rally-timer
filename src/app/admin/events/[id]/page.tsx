@@ -13,6 +13,7 @@ import { MarchDuplicateNotice } from "@/components/MarchDuplicateNotice";
 import { PushSetupCard } from "@/components/PushSetupCard";
 import { ServerClock } from "@/components/ServerClock";
 import { TemplateSwitcher } from "@/components/TemplateSwitcher";
+import { HomeButton } from "@/components/HomeButton";
 import { formatArrivalTime, formatGather, statusLabel } from "@/lib/display";
 import { parseMarchDuration } from "@/lib/timing";
 import {
@@ -56,7 +57,6 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
   const [useMyAccount, setUseMyAccount] = useState(true);
   const [starting, setStarting] = useState(false);
   const [firstCallerLead, setFirstCallerLead] = useState("3");
-  const [pushLeadMs, setPushLeadMs] = useState("1000");
   const [timingSaving, setTimingSaving] = useState(false);
   const [cloning, setCloning] = useState(false);
 
@@ -76,7 +76,6 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
         if (data.error) return;
         setEvent(data);
         setFirstCallerLead(String(data.firstCallerLeadSeconds ?? 3));
-        setPushLeadMs(String(data.pushLeadMs ?? 1000));
       });
   }, [params.id]);
 
@@ -189,7 +188,6 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           firstCallerLeadSeconds: parseInt(firstCallerLead, 10),
-          pushLeadMs: parseInt(pushLeadMs, 10),
         }),
       });
       loadEvent();
@@ -242,9 +240,12 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
     <main className="min-h-screen px-4 py-6 max-w-lg mx-auto">
       <TemplateSwitcher currentEventId={event.id} onChanged={loadEvent} />
 
-      <Link href="/admin" className="text-rally-muted text-sm hover:text-rally-accent">
-        ← Templates
-      </Link>
+      <div className="flex items-center justify-between gap-3">
+        <Link href="/admin" className="text-rally-muted text-sm hover:text-rally-accent">
+          ← Templates
+        </Link>
+        <HomeButton />
+      </div>
 
       <header className="mt-4 mb-6">
         <h1 className="text-2xl font-bold">{event.name}</h1>
@@ -297,25 +298,8 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
               />
               <p className="text-rally-muted text-xs mt-1">
                 How long after GO before the first caller throws. Each caller only gets
-                warnings that fit before their own launch time.
-              </p>
-            </div>
-            <div>
-              <label className="text-rally-muted text-xs block mb-1">
-                PUSH DELIVERY LEAD (milliseconds)
-              </label>
-              <input
-                type="number"
-                min={0}
-                max={5000}
-                step={100}
-                value={pushLeadMs}
-                onChange={(e) => setPushLeadMs(e.target.value)}
-                className="w-full px-3 py-2 bg-rally-bg border border-rally-border rounded font-mono text-sm"
-              />
-              <p className="text-rally-muted text-xs mt-1">
-                Send notifications early to offset ~1s network delay. Check latency in Caller
-                Push Status after a test rally and adjust if needed.
+                warnings that fit before their own launch time. Push delivery lead is learned
+                per device automatically.
               </p>
             </div>
             <button
@@ -329,7 +313,7 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
         ) : (
           <div className="mt-3 text-rally-muted text-xs space-y-1">
             <p>First caller lead: {event.firstCallerLeadSeconds ?? 3}s after GO</p>
-            <p>Push delivery lead: {event.pushLeadMs ?? 1000}ms</p>
+            <p>Push delivery lead: per-device (learned automatically)</p>
           </div>
         )}
 

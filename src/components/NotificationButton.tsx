@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { usePushNotifications } from "@/hooks/usePushNotifications";
+import { usePushNotificationsContext } from "@/components/PushNotificationsProvider";
 import { usePushCalibration } from "@/hooks/usePushCalibration";
 
 export function NotificationButton({ onStatusChange }: { onStatusChange?: () => void }) {
@@ -14,7 +14,7 @@ export function NotificationButton({ onStatusChange }: { onStatusChange?: () => 
     sendTestNotification,
     isSubscribed,
     checkStatus,
-  } = usePushNotifications();
+  } = usePushNotificationsContext();
 
   const {
     calibration,
@@ -126,6 +126,24 @@ export function NotificationButton({ onStatusChange }: { onStatusChange?: () => 
     return (
       <div className="text-rally-danger text-sm text-center">
         Notifications blocked. Enable in device Settings → Notifications.
+      </div>
+    );
+  }
+
+  if (status === "stale") {
+    return (
+      <div className="flex flex-col items-center gap-3 w-full">
+        <p className="text-rally-warning text-sm text-center font-bold">
+          Registration expired — re-enable notifications
+        </p>
+        <button
+          onClick={handleEnable}
+          disabled={loading || isCalibrating}
+          className="w-full py-4 px-6 bg-rally-accent hover:bg-blue-600 disabled:opacity-50 text-white font-bold text-lg rounded-lg transition-colors"
+        >
+          {loading ? "ENABLING..." : "ENABLE RALLY NOTIFICATIONS"}
+        </button>
+        {error && <p className="text-rally-danger text-xs text-center">{error}</p>}
       </div>
     );
   }

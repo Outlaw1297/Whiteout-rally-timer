@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { NotificationButton } from "@/components/NotificationButton";
+import { PushNotificationsProvider, usePushNotificationsContext } from "@/components/PushNotificationsProvider";
 
 interface PushStatus {
   vapidConfigured: boolean;
@@ -14,11 +15,13 @@ interface PushStatus {
   devices: Array<{ id: string; platform: string }>;
 }
 
-export function PushSetupCard({ onSubscribed }: { onSubscribed?: () => void }) {
+function PushSetupCardInner({ onSubscribed }: { onSubscribed?: () => void }) {
   const [status, setStatus] = useState<PushStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const { isSubscribed, thisDeviceRegistered, checkStatus, status: pushStatus } =
+    usePushNotificationsContext();
 
-  const refresh = useCallback(async () => {
+  const refreshServer = useCallback(async () => {
     setLoading(true);
     try {
       const [statusRes, healthRes] = await Promise.all([
@@ -53,18 +56,26 @@ export function PushSetupCard({ onSubscribed }: { onSubscribed?: () => void }) {
     }
   }, []);
 
+  const refresh = useCallback(async () => {
+    await checkStatus();
+    await refreshServer();
+  }, [checkStatus, refreshServer]);
+
   useEffect(() => {
     refresh();
   }, [refresh]);
 
   useEffect(() => {
-    const interval = setInterval(refresh, 5000);
+    const interval = setInterval(refreshServer, 8000);
     return () => clearInterval(interval);
-  }, [refresh]);
+  }, [refreshServer]);
 
   if (loading && !status) {
     return <div className="text-rally-muted text-sm text-center py-4">Checking push setup...</div>;
   }
+
+  const deviceOk = isSubscribed && thisDeviceRegistered;
+  const otherDevices = (status?.deviceCount ?? 0) > 0 && !deviceOk;
 
   return (
     <section className="p-4 mb-4 bg-rally-surface border border-rally-border rounded-lg">
@@ -78,25 +89,33 @@ export function PushSetupCard({ onSubscribed }: { onSubscribed?: () => void }) {
             Keys are auto-generated on first run — redeploy if this persists.
           </p>
         </div>
-      ) : status?.autoManaged ? (
-        <p className="text-rally-muted text-xs mb-3">
-          Push keys are managed automatically — no Render env setup needed. If test
-          fails, tap Disable then Enable notifications again to refresh your device.
-        </p>
       ) : (
         <p className="text-rally-muted text-xs mb-3">
-          Install the app, then tap enable below. Each caller slot must also be linked to the
-          account that will receive alerts on that device.
+          After a redeploy this page verifies whether <span className="font-bold">this browser</span>{" "}
+          is still registered and repairs it when possible.
         </p>
       )}
 
-      {status && status.deviceCount > 0 ? (
+      {deviceOk ? (
         <div className="mb-3 p-3 bg-rally-success/10 border border-rally-success/40 rounded-lg text-sm">
-          <p className="text-rally-success font-bold">
-            ✓ {status.deviceCount} device{status.deviceCount !== 1 ? "s" : ""} registered
-          </p>
+          <p className="text-rally-success font-bold">✓ This device is registered</p>
           <p className="text-rally-muted text-xs mt-1">
-            {status.devices.map((d) => d.platform).join(", ")}
+            {status?.deviceCount ?? 1} device{(status?.deviceCount ?? 1) !== 1 ? "s" : ""} on your
+            account
+            {status?.devices?.length
+              ? ` · ${status.devices.map((d) => d.platform).join(", ")}`
+              : ""}
+          </p>
+        </div>
+      ) : otherDevices || pushStatus === "stale" ? (
+        <div className="mb-3 p-3 bg-rally-warning/10 border border-rally-warning/40 rounded-lg text-sm text-rally-warning">
+          <p className="font-bold">This browser is not registered for alerts</p>
+          <p className="text-xs mt-1 text-rally-muted">
+            {otherDevices
+              ? `Your account still has ${status?.deviceCount} saved device${
+                  status?.deviceCount !== 1 ? "s" : ""
+                }, but this browser lost its subscription (common after a redeploy). Tap Enable below to fix it.`
+              : "Tap Enable below to register this device again."}
           </p>
         </div>
       ) : (
@@ -105,13 +124,26 @@ export function PushSetupCard({ onSubscribed }: { onSubscribed?: () => void }) {
         </div>
       )}
 
-      <NotificationButton onStatusChange={refresh} />
+      <NotificationButton
+        onStatusChange={() => {
+          refresh();
+          onSubscribed?.();
+        }}
+      />
 
-      {onSubscribed && status && status.deviceCount > 0 && (
+      {onSubscribed && deviceOk && (
         <p className="text-rally-muted text-xs text-center mt-2">
           Linked caller slots will show this device after you link your account below.
         </p>
       )}
     </section>
+  );
+}
+
+export function PushSetupCard({ onSubscribed }: { onSubscribed?: () => void }) {
+  return (
+    <PushNotificationsProvider>
+      <PushSetupCardInner onSubscribed={onSubscribed} />
+    </PushNotificationsProvider>
   );
 }

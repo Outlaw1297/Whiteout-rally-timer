@@ -23,6 +23,32 @@ function broadcastToClients(payload) {
     });
 }
 
+/**
+ * Pixel/Android often suppresses heads-up for follow-up alerts while an earlier
+ * sticky notification (e.g. RALLY_STARTED with requireInteraction) is still up.
+ * Clear prior alerts for this assignment so WARNING/LAUNCH can pop on screen.
+ */
+async function clearPriorRallyNotifications(assignmentId, rallyId, keepTag) {
+  try {
+    const notes = await self.registration.getNotifications();
+    for (const note of notes) {
+      if (keepTag && note.tag === keepTag) continue;
+      const data = note.data || {};
+      const sameAssignment = assignmentId && data.assignmentId === assignmentId;
+      const sameRally = rallyId && data.rallyId === rallyId;
+      const isRallyAlert =
+        data.notificationType &&
+        data.notificationType !== "CALIBRATION" &&
+        !String(note.tag || "").startsWith("calibration-");
+      if (sameAssignment || (sameRally && isRallyAlert)) {
+        note.close();
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 self.addEventListener("push", (event) => {
   if (!event.data) return;
 
@@ -66,25 +92,34 @@ self.addEventListener("push", (event) => {
     url,
   };
 
-  // Keep rally alerts visible until tapped; helps Android treat them as interruptive.
-  const isCritical = !preferSilent;
+  // Only THROW stays sticky. RALLY_STARTED used to stay on screen and blocked
+  // Pixel from heads-up-ing later WARNING / LAUNCH alerts.
+  const sticky =
+    !preferSilent &&
+    (notificationType === "LAUNCH" ||
+      notificationType === "WARNING_5" ||
+      notificationType === "WARNING_3");
+
+  const tag = isCalibration
+    ? `calibration-${isLivePing ? "live" : "setup"}-${calibrationIndex}-${receivedAtMs}`
+    : `rally-${rallyId}-${notificationType}-${assignmentId}-${scheduledAt}-${receivedAtMs}`;
 
   const notificationOptions = {
     body: preferSilent && isLivePing ? " " : body,
     icon: "/icons/icon-192.png",
     badge: "/icons/icon-192.png",
-    tag: isCalibration
-      ? `calibration-${isLivePing ? "live" : "setup"}-${calibrationIndex}-${receivedAtMs}`
-      : `rally-${rallyId}-${notificationType}-${assignmentId}-${scheduledAt}`,
+    tag,
     renotify: !preferSilent,
-    requireInteraction: isCritical,
+    requireInteraction: sticky,
     silent: preferSilent,
-    // Stronger vibrate pattern — some OEMs gate heads-up on vibration/sound.
+    timestamp: receivedAtMs,
     vibrate: preferSilent
       ? []
       : notificationType === "LAUNCH"
         ? [500, 150, 500, 150, 500, 150, 500]
-        : [300, 120, 300, 120, 300],
+        : notificationType === "RALLY_STARTED"
+          ? [200, 100, 200]
+          : [350, 120, 350, 120, 350],
     actions: preferSilent
       ? []
       : [
@@ -104,9 +139,11 @@ self.addEventListener("push", (event) => {
       const clients = await broadcastToClients(payload);
       const hasOpenClient = clients.length > 0;
 
-      // Live silent pings: when the app is open, skip the OS banner entirely.
-      // Setup calibration still shows a silent notification so iOS delivers it.
       const skipBanner = isLivePing && preferSilent && hasOpenClient;
+
+      if (!preferSilent && !skipBanner) {
+        await clearPriorRallyNotifications(assignmentId, rallyId, tag);
+      }
 
       const showPromise = skipBanner
         ? Promise.resolve()
@@ -115,7 +152,21 @@ self.addEventListener("push", (event) => {
             notificationOptions
           );
 
-      // Close ephemeral silent live notifications quickly if shown (no open clients).
+      // Don't await — keeping the push handler open for 8s risks SW timeout.
+      // Auto-dismiss RALLY_STARTED so it does not suppress later heads-ups on Pixel.
+      if (notificationType === "RALLY_STARTED" && !preferSilent) {
+        void showPromise.then(() => {
+          setTimeout(() => {
+            self.registration
+              .getNotifications({ tag })
+              .then((notes) => {
+                for (const note of notes) note.close();
+              })
+              .catch(() => {});
+          }, 8000);
+        });
+      }
+
       const closePromise =
         isLivePing && preferSilent
           ? showPromise.then(async () => {
@@ -144,14 +195,15 @@ self.addEventListener("push", (event) => {
 
       await Promise.all([showPromise, closePromise, feedbackPromise]);
     })().catch(() =>
-      // Last resort: still try to surface a notification if the main path failed.
       self.registration
         .showNotification(title, {
           body,
           icon: "/icons/icon-192.png",
           badge: "/icons/icon-192.png",
-          requireInteraction: true,
-          data: { url },
+          requireInteraction: notificationType === "LAUNCH",
+          renotify: true,
+          timestamp: Date.now(),
+          data: { url, notificationType, assignmentId, rallyId },
         })
         .catch(() => {})
         .then(() =>

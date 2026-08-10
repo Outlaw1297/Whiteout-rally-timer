@@ -296,33 +296,33 @@ export function getNotificationPayload(
       };
     case "WARNING_60":
       return {
-        title: `⚠️ ${eventName}`,
-        body: `Rally in 60 seconds — ${callerName}`,
+        title: `60s — get ready to throw`,
+        body: `${eventName} · ${callerName}`,
       };
     case "WARNING_30":
       return {
-        title: `⚠️ ${eventName}`,
-        body: `Rally in 30 seconds — ${callerName}`,
+        title: `30s — rally coming up`,
+        body: `${eventName} · ${callerName}`,
       };
     case "WARNING_15":
       return {
-        title: `⚠️ ${eventName}`,
-        body: `Rally in 15 seconds — ${callerName}`,
+        title: `15s — prepare to throw`,
+        body: `${eventName} · ${callerName}`,
       };
     case "WARNING_10":
       return {
-        title: `⚠️ ${eventName}`,
-        body: `Rally in 10 seconds — ${callerName}`,
+        title: `10s — almost throw time`,
+        body: `${eventName} · ${callerName}`,
       };
     case "WARNING_5":
       return {
-        title: `⚠️ ${eventName}`,
-        body: `Rally in 5 seconds — ${callerName}`,
+        title: `5s — throw soon`,
+        body: `${eventName} · ${callerName}`,
       };
     case "WARNING_3":
       return {
-        title: `⚠️ ${eventName}`,
-        body: `Rally in 3 seconds — ${callerName}`,
+        title: `3s — throw NOW`,
+        body: `${eventName} · ${callerName}`,
       };
     case "LAUNCH":
       return {

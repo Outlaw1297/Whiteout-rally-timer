@@ -12,22 +12,27 @@ self.addEventListener("message", (event) => {
   }
 });
 
-function broadcastToClients(payload) {
-  return self.clients
-    .matchAll({ type: "window", includeUncontrolled: true })
-    .then((clientList) => {
-      for (const client of clientList) {
-        client.postMessage(payload);
-      }
-      return clientList;
-    });
-}
-
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Close older rally banners after the new one is shown (never block display). */
+async function listWindowClients() {
+  return self.clients.matchAll({ type: "window", includeUncontrolled: true });
+}
+
+function broadcastToClients(clientList, payload) {
+  for (const client of clientList) {
+    client.postMessage(payload);
+  }
+}
+
+/** True when some app window is focused/visible — otherwise treat as background. */
+function hasForegroundClient(clientList) {
+  return clientList.some(
+    (c) => c.focused || (typeof c.visibilityState === "string" && c.visibilityState === "visible")
+  );
+}
+
 async function clearOtherRallyNotifications(assignmentId, rallyId, keepTag) {
   try {
     const notes = await Promise.race([
@@ -52,20 +57,13 @@ async function clearOtherRallyNotifications(assignmentId, rallyId, keepTag) {
   }
 }
 
-/**
- * If a warning arrives late on Pixel/Android, rewrite so we never flash
- * "10 seconds" after that window — escalate to THROW when imminent.
- */
 function presentForLatency(data, receivedAtMs) {
   let title = data.title || "Whiteout Rally";
   let body = data.body || "Rally notification";
   let notificationType = data.notificationType || "";
   const launchMs = data.launchTime ? Date.parse(data.launchTime) : NaN;
 
-  if (
-    String(notificationType).startsWith("WARNING_") &&
-    Number.isFinite(launchMs)
-  ) {
+  if (String(notificationType).startsWith("WARNING_") && Number.isFinite(launchMs)) {
     const secondsLeft = (launchMs - receivedAtMs) / 1000;
     if (secondsLeft <= 3) {
       notificationType = "LAUNCH";
@@ -83,8 +81,53 @@ function presentForLatency(data, receivedAtMs) {
   return { title, body, notificationType };
 }
 
+/**
+ * Chrome on Android can reject richer notification options. Always try to show
+ * something — background delivery depends on this succeeding (userVisibleOnly).
+ */
+async function showRallyNotification(title, options) {
+  try {
+    await self.registration.showNotification(title, options);
+    return true;
+  } catch {
+    /* try stripped options */
+  }
+
+  try {
+    const { actions: _a, vibrate: _v, timestamp: _t, ...rest } = options;
+    await self.registration.showNotification(title, rest);
+    return true;
+  } catch {
+    /* try minimal */
+  }
+
+  try {
+    await self.registration.showNotification(title, {
+      body: options.body || "Rally notification",
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      tag: options.tag,
+      renotify: true,
+      requireInteraction: !!options.requireInteraction,
+      data: options.data,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 self.addEventListener("push", (event) => {
-  if (!event.data) return;
+  // Chrome may drop background pushes if we don't show a notification quickly.
+  if (!event.data) {
+    event.waitUntil(
+      self.registration.showNotification("Whiteout Rally", {
+        body: "Rally update",
+        icon: "/icons/icon-192.png",
+      })
+    );
+    return;
+  }
 
   let data;
   try {
@@ -130,63 +173,72 @@ self.addEventListener("push", (event) => {
     url,
   };
 
-  const sticky = !preferSilent && isLaunch;
-
   const tag = isCalibration
     ? `calibration-${isLivePing ? "live" : "setup"}-${calibrationIndex}-${receivedAtMs}`
     : `rally-${rallyId}-${notificationType}-${assignmentId}-${receivedAtMs}`;
 
-  const notificationOptions = {
-    body: preferSilent && isLivePing ? " " : body,
-    icon: "/icons/icon-192.png",
-    badge: "/icons/icon-192.png",
-    tag,
-    renotify: true,
-    requireInteraction: sticky,
-    silent: preferSilent,
-    timestamp: receivedAtMs,
-    vibrate: preferSilent
-      ? []
-      : isLaunch
-        ? [600, 120, 600, 120, 600, 120, 600]
-        : notificationType === "RALLY_STARTED"
-          ? [180, 80, 180]
-          : [400, 100, 400, 100, 400],
-    actions: preferSilent
-      ? []
-      : [
-          { action: "open", title: "Open rally" },
-          { action: "dismiss", title: "Dismiss" },
-        ],
-    data: {
-      rallyId,
-      assignmentId,
-      notificationType,
-      url,
-    },
-  };
-
   event.waitUntil(
     (async () => {
-      const clients = await broadcastToClients(payload);
-      const hasOpenClient = clients.length > 0;
-      const skipBanner = isLivePing && preferSilent && hasOpenClient;
+      const clientList = await listWindowClients();
+      const inForeground = hasForegroundClient(clientList);
 
-      // SHOW FIRST — never block the banner on getNotifications()/clear (Pixel hang risk).
-      const showPromise = skipBanner
-        ? Promise.resolve()
-        : self.registration.showNotification(
-            preferSilent && isLivePing ? " " : title,
-            notificationOptions
-          );
+      // Only skip the OS banner for silent live pings while the app is actually open.
+      const skipBanner = isLivePing && preferSilent && inForeground;
 
-      await showPromise;
+      // Background: keep banners sticky so Pixel doesn't bury them.
+      const sticky = !preferSilent && (isLaunch || !inForeground);
+
+      const notificationOptions = {
+        body: preferSilent && isLivePing ? " " : body,
+        icon: "/icons/icon-192.png",
+        badge: "/icons/icon-192.png",
+        tag,
+        renotify: true,
+        requireInteraction: sticky,
+        silent: preferSilent,
+        timestamp: receivedAtMs,
+        vibrate: preferSilent
+          ? []
+          : isLaunch
+            ? [600, 120, 600, 120, 600, 120, 600]
+            : [300, 100, 300],
+        actions: preferSilent
+          ? []
+          : [
+              { action: "open", title: "Open rally" },
+              { action: "dismiss", title: "Dismiss" },
+            ],
+        data: {
+          rallyId,
+          assignmentId,
+          notificationType,
+          url,
+        },
+      };
+
+      // OS notification FIRST — this is what background users see.
+      if (!skipBanner) {
+        const shown = await showRallyNotification(
+          preferSilent && isLivePing ? " " : title,
+          notificationOptions
+        );
+        if (!shown) {
+          await self.registration.showNotification(title || "Whiteout Rally", {
+            body: body || "Rally notification",
+            icon: "/icons/icon-192.png",
+          });
+        }
+      }
+
+      // Then notify open pages (in-app banner when foreground).
+      broadcastToClients(clientList, payload);
 
       if (!preferSilent && !skipBanner) {
         void clearOtherRallyNotifications(assignmentId, rallyId, tag);
       }
 
-      if (notificationType === "RALLY_STARTED" && !preferSilent) {
+      // Only auto-dismiss while foreground — background users need time to see it.
+      if (inForeground && notificationType === "RALLY_STARTED" && !preferSilent) {
         setTimeout(() => {
           self.registration
             .getNotifications({ tag })
@@ -198,6 +250,7 @@ self.addEventListener("push", (event) => {
       }
 
       if (
+        inForeground &&
         !preferSilent &&
         !isLaunch &&
         String(notificationType).startsWith("WARNING_")
@@ -212,9 +265,13 @@ self.addEventListener("push", (event) => {
         }, 4000);
       }
 
-      if (isLivePing && preferSilent && !hasOpenClient) {
-        const notes = await self.registration.getNotifications({ tag });
-        for (const note of notes) note.close();
+      if (isLivePing && preferSilent && !inForeground) {
+        try {
+          const notes = await self.registration.getNotifications({ tag });
+          for (const note of notes) note.close();
+        } catch {
+          /* ignore */
+        }
       }
 
       if (targetAt) {
@@ -231,25 +288,7 @@ self.addEventListener("push", (event) => {
           }),
         }).catch(() => {});
       }
-    })().catch(async () => {
-      try {
-        await self.registration.showNotification(title || "Whiteout Rally", {
-          body: body || "Rally notification",
-          icon: "/icons/icon-192.png",
-          badge: "/icons/icon-192.png",
-          requireInteraction: isLaunch,
-          renotify: true,
-          data: { url, notificationType, assignmentId, rallyId },
-        });
-      } catch {
-        /* last resort failed */
-      }
-      try {
-        await broadcastToClients(payload);
-      } catch {
-        /* ignore */
-      }
-    })
+    })()
   );
 });
 
@@ -261,17 +300,15 @@ self.addEventListener("notificationclick", (event) => {
   const url = event.notification.data?.url || "/caller";
 
   event.waitUntil(
-    self.clients
-      .matchAll({ type: "window", includeUncontrolled: true })
-      .then((clientList) => {
-        for (const client of clientList) {
-          if ("focus" in client) {
-            if (client.url.includes(url)) return client.focus();
-          }
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if ("focus" in client) {
+          if (client.url.includes(url)) return client.focus();
         }
-        if (self.clients.openWindow) {
-          return self.clients.openWindow(url);
-        }
-      })
+      }
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(url);
+      }
+    })
   );
 });

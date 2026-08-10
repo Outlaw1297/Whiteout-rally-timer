@@ -29,13 +29,41 @@ export default function FixNotificationsPage() {
         {isPixel ? "GOOGLE PIXEL" : "ANDROID FIX"}
       </p>
       <h1 className="text-2xl font-bold mb-2">
-        {isPixel ? "Pixel: make alerts pop on screen" : "Make rally alerts pop on screen"}
+        {isPixel ? "Pixel: alerts only work when app is open?" : "Make rally alerts pop on screen"}
       </h1>
       <p className="text-rally-muted text-sm mb-6 leading-relaxed">
         {isPixel
-          ? "Your Pixel is receiving the alert (top bar icon) but the category is not set to Alerting with Pop on screen. Do this once:"
-          : "If the alert only appears as an icon in the top bar, Android has the channel set to sound/silent only. Use the steps below once."}
+          ? "If you see alerts inside Rally Timer but nothing when the app is closed or in Whiteout, Pixel is pausing Chrome. Fix battery + Pop on screen below, then test with the app fully closed."
+          : "If the alert only appears as an icon in the top bar, or only while the app is open, use the steps below once."}
       </p>
+
+      <section className="mb-6 p-4 rounded-lg border-2 border-rally-warning bg-rally-warning/10 space-y-3 text-sm">
+        <p className="text-rally-warning font-bold text-xs tracking-wide">
+          WORKS IN APP, NOT IN BACKGROUND?
+        </p>
+        <ol className="list-decimal list-inside text-rally-text space-y-2 text-xs leading-relaxed">
+          <li>
+            Settings → Apps → <span className="font-bold">Chrome</span> → App battery usage →{" "}
+            <span className="font-bold">Unrestricted</span>
+          </li>
+          <li>
+            If Rally Timer is installed: Apps → <span className="font-bold">Rally Timer</span> →
+            App battery usage → <span className="font-bold">Unrestricted</span>
+          </li>
+          <li>Turn off Battery Saver while coordinating</li>
+          <li>
+            In Rally Timer: Send test → <span className="font-bold">fully close</span> the app
+            (swipe away) → ask for another test. You must get the banner without reopening.
+          </li>
+        </ol>
+        <button
+          type="button"
+          onClick={openChromeAppSettings}
+          className="w-full py-3 bg-rally-accent text-white font-bold rounded-lg"
+        >
+          Open Chrome app info (set Unrestricted)
+        </button>
+      </section>
 
       <section
         id="heads-up"

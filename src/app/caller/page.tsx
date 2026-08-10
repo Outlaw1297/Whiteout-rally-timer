@@ -5,48 +5,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { useServerClock } from "@/hooks/useServerClock";
-import { useCountdown } from "@/hooks/useCountdown";
-import { NotificationButton } from "@/components/NotificationButton";
-import { PushNotificationsProvider } from "@/components/PushNotificationsProvider";
-import { ChangePasswordForm } from "@/components/ChangePasswordForm";
+import { CallerRallyView, pickPrimaryCallerEvent } from "@/components/CallerRallyView";
 import { HomeButton } from "@/components/HomeButton";
-import { NotificationPreferences } from "@/components/NotificationPreferences";
-import { formatArrivalTime, formatGather } from "@/lib/display";
 import type { SerializedEvent } from "@/hooks/useEventSocket";
 
-export default function CallerDashboard() {
+export default function CallerHomePage() {
   const { user, loading, logout } = useAuth();
   const router = useRouter();
-  const [events, setEvents] = useState<SerializedEvent[]>([]);
+  const [events, setEvents] = useState<SerializedEvent[] | null>(null);
   const { correctedNow } = useServerClock({ activeRally: true });
-
-  const myAssignments = events
-    .map((event) => {
-      const assignment = event.assignments.find((a) => a.userId === user?.id);
-      return assignment ? { event, assignment } : null;
-    })
-    .filter(Boolean)
-    .sort((a, b) => {
-      const aTime = a!.assignment.launchTime ?? "";
-      const bTime = b!.assignment.launchTime ?? "";
-      return aTime.localeCompare(bTime);
-    }) as Array<{
-    event: SerializedEvent;
-    assignment: SerializedEvent["assignments"][0];
-  }>;
-
-  const now = correctedNow();
-  const nextUp = myAssignments.find(
-    (a) =>
-      a.assignment.status === "WAITING" &&
-      a.assignment.launchTime &&
-      new Date(a.assignment.launchTime).getTime() > now
-  );
-
-  const nextLaunchMs = nextUp?.assignment.launchTime
-    ? new Date(nextUp.assignment.launchTime).getTime()
-    : null;
-  const { display: countdown, isNow } = useCountdown(nextLaunchMs, correctedNow);
 
   useEffect(() => {
     if (!loading && !user) router.push("/login");
@@ -54,95 +21,59 @@ export default function CallerDashboard() {
   }, [user, loading, router]);
 
   useEffect(() => {
-    if (user?.role === "CALLER") {
+    if (user?.role !== "CALLER") return;
+    let cancelled = false;
+    const load = () => {
       fetch("/api/events")
         .then((r) => r.json())
-        .then((data) => setEvents(data.events || []));
-    }
+        .then((data) => {
+          if (!cancelled) setEvents(data.events || []);
+        })
+        .catch(() => {
+          if (!cancelled) setEvents([]);
+        });
+    };
+    load();
+    const t = setInterval(load, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
   }, [user]);
 
-  if (loading || !user) {
+  if (loading || !user || events === null) {
     return <div className="p-8 text-center text-rally-muted">Loading...</div>;
   }
 
+  const primary = pickPrimaryCallerEvent(events, user.id, correctedNow());
+
   return (
-    <main className="min-h-screen px-4 py-6 max-w-lg mx-auto">
-      <header className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-bold text-rally-accent">WELCOME, {user.displayName.toUpperCase()}</h1>
-        </div>
+    <main className="min-h-screen px-4 py-6 max-w-lg mx-auto flex flex-col">
+      <div className="flex items-center justify-between gap-3 mb-2">
+        <HomeButton />
         <div className="flex items-center gap-3">
-          <HomeButton />
+          <Link href="/caller/settings" className="text-rally-muted text-sm hover:text-rally-accent">
+            Settings
+          </Link>
           <button onClick={logout} className="text-rally-muted text-sm hover:text-rally-danger">
             Logout
           </button>
         </div>
-      </header>
+      </div>
 
-      {nextUp && (
-        <section className="p-6 mb-6 bg-rally-accent/20 border-2 border-rally-accent rounded-xl text-center">
-          <p className="text-rally-muted text-xs">NEXT RALLY</p>
-          <p className="text-2xl font-bold mb-2">{nextUp.event.name}</p>
-          <p className="text-rally-muted text-xs">THROW RALLY IN</p>
-          <p className={`text-4xl font-mono font-bold ${isNow ? "text-rally-danger animate-pulse" : "text-rally-accent"}`}>
-            {isNow ? "🚨 THROW RALLY NOW" : countdown}
+      {primary ? (
+        <CallerRallyView eventId={primary.id} />
+      ) : (
+        <div className="flex-1 flex flex-col items-center justify-center text-center py-16">
+          <p className="text-rally-muted text-sm mb-2">No rally assigned yet</p>
+          <p className="text-rally-muted text-xs mb-6">
+            When an admin links you to a template, your throw countdown will show here.
           </p>
-          <Link
-            href={`/caller/events/${nextUp.event.id}`}
-            className="inline-block mt-4 text-rally-accent text-sm font-bold"
-          >
-            Open active view →
+          <Link href="/caller/settings" className="text-rally-accent text-sm font-bold">
+            Notification settings →
           </Link>
-        </section>
+        </div>
       )}
-
-      <section className="mb-6">
-        <PushNotificationsProvider>
-          <NotificationButton />
-        </PushNotificationsProvider>
-      </section>
-
-      <NotificationPreferences />
-
-      <ChangePasswordForm />
-
-      <section className="flex flex-col gap-4">
-        <h2 className="text-rally-muted text-xs">UPCOMING ASSIGNMENTS</h2>
-        {myAssignments.length === 0 && (
-          <p className="text-rally-muted text-center py-8">No rally assignments yet</p>
-        )}
-        {myAssignments.map(({ event, assignment }) => (
-          <Link
-            key={assignment.id}
-            href={`/caller/events/${event.id}`}
-            className="block p-4 bg-rally-surface border border-rally-border rounded-lg hover:border-rally-accent"
-          >
-            <h2 className="font-bold text-lg">{event.name}</h2>
-            <p className="text-rally-accent font-mono font-bold text-lg mt-1">
-              YOUR RALLY {formatArrivalTime(assignment.launchTime)}
-            </p>
-            <div className="grid grid-cols-2 gap-2 mt-3 text-sm">
-              <div>
-                <p className="text-rally-muted text-xs">TARGET ARRIVAL</p>
-                <p className="font-mono">{formatArrivalTime(event.targetArrivalTime)}</p>
-              </div>
-              <div>
-                <p className="text-rally-muted text-xs">EXPECTED ARRIVAL</p>
-                <p className="font-mono">{formatArrivalTime(assignment.expectedArrivalTime)}</p>
-              </div>
-              <div>
-                <p className="text-rally-muted text-xs">YOUR MARCH</p>
-                <p className="font-mono">{assignment.marchFormatted}</p>
-              </div>
-              <div>
-                <p className="text-rally-muted text-xs">GATHER</p>
-                <p className="font-mono">{formatGather(event.gatherDurationSeconds)}</p>
-              </div>
-            </div>
-            <p className="text-xs text-rally-muted mt-2">{event.status} · {assignment.status}</p>
-          </Link>
-        ))}
-      </section>
     </main>
   );
 }

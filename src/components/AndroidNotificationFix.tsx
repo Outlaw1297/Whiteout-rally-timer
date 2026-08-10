@@ -84,8 +84,9 @@ export function PixelHeadsUpGuide({ showVerify = true }: { showVerify?: boolean 
 
       {showVerify && (
         <p className="text-rally-muted text-[11px] leading-relaxed">
-          Still tray-only? Check Do Not Disturb is off, and that Bedtime mode / Priority only isn’t
-          silencing Chrome.
+          Still tray-only after the first alert? Swipe away “Rally Timer Started” if it is still
+          sitting in the shade — Pixel often blocks the next banner while an earlier one is up.
+          Also check Do Not Disturb / Bedtime mode.
         </p>
       )}
     </div>

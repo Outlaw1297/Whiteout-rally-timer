@@ -23,11 +23,6 @@ function broadcastToClients(payload) {
     });
 }
 
-/**
- * Pixel/Android often suppresses heads-up for follow-up alerts while an earlier
- * sticky notification (e.g. RALLY_STARTED with requireInteraction) is still up.
- * Clear prior alerts for this assignment so WARNING/LAUNCH can pop on screen.
- */
 async function clearPriorRallyNotifications(assignmentId, rallyId, keepTag) {
   try {
     const notes = await self.registration.getNotifications();
@@ -49,6 +44,41 @@ async function clearPriorRallyNotifications(assignmentId, rallyId, keepTag) {
   }
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * If a warning arrives late on Pixel/Android, rewrite so we never flash
+ * "10 seconds" after that window — escalate to THROW when imminent.
+ */
+function presentForLatency(data, receivedAtMs) {
+  let title = data.title || "Whiteout Rally";
+  let body = data.body || "Rally notification";
+  let notificationType = data.notificationType || "";
+  const launchMs = data.launchTime ? Date.parse(data.launchTime) : NaN;
+
+  if (
+    String(notificationType).startsWith("WARNING_") &&
+    Number.isFinite(launchMs)
+  ) {
+    const secondsLeft = (launchMs - receivedAtMs) / 1000;
+    if (secondsLeft <= 3) {
+      notificationType = "LAUNCH";
+      title = "🚨 THROW RALLY NOW";
+    } else {
+      const match = /^WARNING_(\d+)$/.exec(notificationType);
+      const ideal = match ? Number(match[1]) : 10;
+      if (secondsLeft < ideal - 1.5) {
+        const secs = Math.max(1, Math.ceil(secondsLeft));
+        title = `${secs}s — throw soon`;
+      }
+    }
+  }
+
+  return { title, body, notificationType };
+}
+
 self.addEventListener("push", (event) => {
   if (!event.data) return;
 
@@ -59,10 +89,13 @@ self.addEventListener("push", (event) => {
     data = { title: "Whiteout Rally", body: event.data.text() };
   }
 
-  const title = data.title || "Whiteout Rally";
-  const body = data.body || "Rally notification";
+  const receivedAtMs = Date.now();
+  const presented = presentForLatency(data, receivedAtMs);
+  let title = presented.title;
+  let body = presented.body;
+  let notificationType = presented.notificationType;
+
   const rallyId = data.rallyId || "";
-  const notificationType = data.notificationType || "";
   const assignmentId = data.assignmentId || "";
   const scheduledAt = data.scheduledAt || "";
   const targetAt = data.targetAt || "";
@@ -71,12 +104,13 @@ self.addEventListener("push", (event) => {
   const isCalibration = notificationType === "CALIBRATION";
   const isLivePing = !!data.livePing || rallyId === "calibration-live";
   const preferSilent = isCalibration || !!data.silent;
-  const receivedAtMs = Date.now();
   const url = assignmentId
     ? `/caller/events/${rallyId}`
     : rallyId
       ? `/caller/events/${rallyId}`
       : "/caller";
+
+  const isLaunch = notificationType === "LAUNCH";
 
   const payload = {
     type: "rally-push",
@@ -92,34 +126,29 @@ self.addEventListener("push", (event) => {
     url,
   };
 
-  // Only THROW stays sticky. RALLY_STARTED used to stay on screen and blocked
-  // Pixel from heads-up-ing later WARNING / LAUNCH alerts.
-  const sticky =
-    !preferSilent &&
-    (notificationType === "LAUNCH" ||
-      notificationType === "WARNING_5" ||
-      notificationType === "WARNING_3");
+  // Only THROW stays sticky so earlier banners don't block the next heads-up.
+  const sticky = !preferSilent && isLaunch;
 
   const tag = isCalibration
     ? `calibration-${isLivePing ? "live" : "setup"}-${calibrationIndex}-${receivedAtMs}`
-    : `rally-${rallyId}-${notificationType}-${assignmentId}-${scheduledAt}-${receivedAtMs}`;
+    : `rally-${rallyId}-${notificationType}-${assignmentId}-${receivedAtMs}`;
 
   const notificationOptions = {
     body: preferSilent && isLivePing ? " " : body,
     icon: "/icons/icon-192.png",
     badge: "/icons/icon-192.png",
     tag,
-    renotify: !preferSilent,
+    renotify: true,
     requireInteraction: sticky,
     silent: preferSilent,
     timestamp: receivedAtMs,
     vibrate: preferSilent
       ? []
-      : notificationType === "LAUNCH"
-        ? [500, 150, 500, 150, 500, 150, 500]
+      : isLaunch
+        ? [600, 120, 600, 120, 600, 120, 600]
         : notificationType === "RALLY_STARTED"
-          ? [200, 100, 200]
-          : [350, 120, 350, 120, 350],
+          ? [180, 80, 180]
+          : [400, 100, 400, 100, 400],
     actions: preferSilent
       ? []
       : [
@@ -138,11 +167,12 @@ self.addEventListener("push", (event) => {
     (async () => {
       const clients = await broadcastToClients(payload);
       const hasOpenClient = clients.length > 0;
-
       const skipBanner = isLivePing && preferSilent && hasOpenClient;
 
       if (!preferSilent && !skipBanner) {
         await clearPriorRallyNotifications(assignmentId, rallyId, tag);
+        // Brief pause after clearing helps Pixel treat THROW as a fresh interrupt.
+        if (isLaunch) await sleep(180);
       }
 
       const showPromise = skipBanner
@@ -152,8 +182,6 @@ self.addEventListener("push", (event) => {
             notificationOptions
           );
 
-      // Don't await — keeping the push handler open for 8s risks SW timeout.
-      // Auto-dismiss RALLY_STARTED so it does not suppress later heads-ups on Pixel.
       if (notificationType === "RALLY_STARTED" && !preferSilent) {
         void showPromise.then(() => {
           setTimeout(() => {
@@ -163,7 +191,25 @@ self.addEventListener("push", (event) => {
                 for (const note of notes) note.close();
               })
               .catch(() => {});
-          }, 8000);
+          }, 4000);
+        });
+      }
+
+      // Mid warnings: auto-dismiss quickly so THROW can heads-up.
+      if (
+        !preferSilent &&
+        !isLaunch &&
+        String(notificationType).startsWith("WARNING_")
+      ) {
+        void showPromise.then(() => {
+          setTimeout(() => {
+            self.registration
+              .getNotifications({ tag })
+              .then((notes) => {
+                for (const note of notes) note.close();
+              })
+              .catch(() => {});
+          }, 3500);
         });
       }
 
@@ -171,9 +217,7 @@ self.addEventListener("push", (event) => {
         isLivePing && preferSilent
           ? showPromise.then(async () => {
               if (hasOpenClient) return;
-              const notes = await self.registration.getNotifications({
-                tag: notificationOptions.tag,
-              });
+              const notes = await self.registration.getNotifications({ tag });
               for (const note of notes) note.close();
             })
           : Promise.resolve();
@@ -200,9 +244,10 @@ self.addEventListener("push", (event) => {
           body,
           icon: "/icons/icon-192.png",
           badge: "/icons/icon-192.png",
-          requireInteraction: notificationType === "LAUNCH",
+          requireInteraction: isLaunch,
           renotify: true,
           timestamp: Date.now(),
+          vibrate: isLaunch ? [600, 120, 600] : [300, 100, 300],
           data: { url, notificationType, assignmentId, rallyId },
         })
         .catch(() => {})

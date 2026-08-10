@@ -267,6 +267,7 @@ export interface PushPayload {
   assignmentId?: string;
   scheduledAt?: string;
   targetAt?: string;
+  launchTime?: string;
   calibrationIndex?: number;
   calibrationTotal?: number;
   silent?: boolean;

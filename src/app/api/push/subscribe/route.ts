@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
     return errorResponse("endpoint and keys (p256dh, auth) are required");
   }
 
-  const freshLead = defaultDeliveryLeadMs();
+  const freshLead = defaultDeliveryLeadMs(undefined, platform || userAgent);
 
   const subscription = await prisma.pushSubscription.upsert({
     where: { endpoint },

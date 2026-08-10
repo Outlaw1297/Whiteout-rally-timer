@@ -8,6 +8,7 @@ import {
   DEFAULT_GATHER_SECONDS,
   getNextCaller,
   getNotificationSchedule,
+  resolveLateNotificationPresentation,
   shouldSkipNotification,
 } from "../src/lib/timing";
 import { formatTimeLocal } from "../src/lib/time";
@@ -302,4 +303,44 @@ console.log("PASS adaptive delivery lead");
   }
   console.log("PASS complete after last caller helpers");
 }
+
+{
+  const launch = new Date();
+  launch.setSeconds(launch.getSeconds() + 10);
+  const nowEarly = launch.getTime() - 10_000;
+  const onTime = resolveLateNotificationPresentation(
+    "WARNING_10",
+    launch,
+    nowEarly,
+    { title: "10s — almost throw time", body: "Castle · CALLER" }
+  );
+  if (onTime.escalated || onTime.title !== "10s — almost throw time") {
+    console.error("FAIL on-time warning should not escalate", onTime);
+    process.exit(1);
+  }
+
+  const late = resolveLateNotificationPresentation(
+    "WARNING_10",
+    launch,
+    launch.getTime() - 4_000,
+    { title: "10s — almost throw time", body: "Castle · CALLER" }
+  );
+  if (!late.escalated || !late.title.includes("4s")) {
+    console.error("FAIL late warning should show remaining seconds", late);
+    process.exit(1);
+  }
+
+  const veryLate = resolveLateNotificationPresentation(
+    "WARNING_10",
+    launch,
+    launch.getTime() - 1_000,
+    { title: "10s — almost throw time", body: "Castle · CALLER" }
+  );
+  if (veryLate.type !== "LAUNCH" || !veryLate.title.includes("THROW")) {
+    console.error("FAIL imminent warning should escalate to LAUNCH", veryLate);
+    process.exit(1);
+  }
+  console.log("PASS late warning presentation escalation");
+}
+
 

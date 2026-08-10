@@ -1,7 +1,7 @@
 import { DEFAULT_PUSH_LEAD_MS } from "./timing";
 
 export const MIN_DELIVERY_LEAD_MS = 0;
-export const MAX_DELIVERY_LEAD_MS = 5000;
+export const MAX_DELIVERY_LEAD_MS = 8000;
 const EMA_ALPHA = 0.35;
 
 /**
@@ -38,6 +38,14 @@ export function getEffectivePushLeadMs(
   return Math.max(eventPushLeadMs, deviceMax);
 }
 
-export function defaultDeliveryLeadMs(eventPushLeadMs = DEFAULT_PUSH_LEAD_MS): number {
-  return Math.max(MIN_DELIVERY_LEAD_MS, Math.min(MAX_DELIVERY_LEAD_MS, eventPushLeadMs));
+export function defaultDeliveryLeadMs(
+  eventPushLeadMs = DEFAULT_PUSH_LEAD_MS,
+  platform?: string | null
+): number {
+  const base = Math.max(MIN_DELIVERY_LEAD_MS, Math.min(MAX_DELIVERY_LEAD_MS, eventPushLeadMs));
+  // Pixel/Android Chrome often buffers pushes in Doze — start with more lead.
+  if (platform && /android|pixel/i.test(platform)) {
+    return Math.max(base, 3000);
+  }
+  return base;
 }

@@ -18,6 +18,7 @@ import {
   readMonotonicNow,
 } from "../src/lib/clock-sync";
 import { getEffectivePushLeadMs, nextDeliveryLeadMs } from "../src/lib/delivery-lead";
+import { allCallersHaveCalled, callerHasCalled } from "../src/lib/caller-launch";
 
 function assertEqual(actual: Date, expectedHour: number, expectedMin: number, expectedSec: number, label: string) {
   const h = actual.getHours();
@@ -250,3 +251,55 @@ console.log("PASS adaptive delivery lead");
   }
   console.log("PASS arrival offset stagger order");
 }
+
+{
+  const now = Date.now();
+  if (!callerHasCalled({ status: "LAUNCHED", launchTime: null }, now)) {
+    console.error("FAIL launched caller counts as called");
+    process.exit(1);
+  }
+  if (
+    !callerHasCalled(
+      { status: "WAITING", launchTime: new Date(now - 1000) },
+      now
+    )
+  ) {
+    console.error("FAIL past launch time counts as called");
+    process.exit(1);
+  }
+  if (
+    callerHasCalled(
+      { status: "WAITING", launchTime: new Date(now + 60_000) },
+      now
+    )
+  ) {
+    console.error("FAIL future launch should not count as called");
+    process.exit(1);
+  }
+  if (
+    !allCallersHaveCalled(
+      [
+        { status: "LAUNCHED", launchTime: new Date(now + 60_000) },
+        { status: "WAITING", launchTime: new Date(now - 500) },
+      ],
+      now
+    )
+  ) {
+    console.error("FAIL all callers have called when mixed confirm + past launch");
+    process.exit(1);
+  }
+  if (
+    allCallersHaveCalled(
+      [
+        { status: "WAITING", launchTime: new Date(now - 500) },
+        { status: "WAITING", launchTime: new Date(now + 60_000) },
+      ],
+      now
+    )
+  ) {
+    console.error("FAIL should wait for last caller");
+    process.exit(1);
+  }
+  console.log("PASS complete after last caller helpers");
+}
+

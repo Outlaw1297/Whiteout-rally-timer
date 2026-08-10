@@ -7,9 +7,7 @@ import {
   shouldSkipNotification,
   type NotificationOffsetType,
 } from "@/lib/timing";
-import { skipRemainingEventNotifications } from "@/lib/notifications";
-import { broadcastRallyUpdate } from "./rally-hub";
-import { serializeEvent } from "@/lib/rally-event";
+import { completeRallyAfterLastCaller } from "@/lib/complete-rally";
 
 const POLL_INTERVAL_MS = 100;
 const DUE_GRACE_MS = 100;
@@ -166,28 +164,9 @@ async function processNotificationEvent(eventId: string) {
   });
 
   if (notification.type === "LAUNCH") {
-    const allLaunchSent = await prisma.notificationEvent.count({
-      where: {
-        assignment: { rallyEventId: rallyEvent.id },
-        type: "LAUNCH",
-        status: { not: "SENT" },
-      },
-    });
-
-    const pastArrival =
-      rallyEvent.targetArrivalTime &&
-      rallyEvent.targetArrivalTime.getTime() <= now;
-    if (allLaunchSent === 0 && pastArrival) {
-      await skipRemainingEventNotifications(rallyEvent.id, "rally ended");
-      const completed = await prisma.rallyEvent.update({
-        where: { id: rallyEvent.id },
-        data: { status: "COMPLETED", completedAt: new Date() },
-        include: {
-          assignments: { include: { user: true }, orderBy: { launchTime: "asc" } },
-        },
-      });
-      broadcastRallyUpdate(rallyEvent.id, serializeEvent(completed));
-    }
+    // Complete as soon as every caller has been told to throw — do not wait
+    // for target arrival (troops still marching).
+    await completeRallyAfterLastCaller(rallyEvent.id, "last launch notification sent");
   }
 }
 
@@ -210,23 +189,15 @@ async function tick() {
     await processNotificationEvent(event.id);
   }
 
+  // End ACTIVE rallies once every caller's throw time has passed (or they
+  // confirmed LAUNCHED) — not when target arrival is reached.
   const activeEvents = await prisma.rallyEvent.findMany({
-    where: {
-      status: "ACTIVE",
-      targetArrivalTime: { not: null, lte: new Date(now) },
-    },
+    where: { status: "ACTIVE" },
+    select: { id: true },
   });
 
   for (const event of activeEvents) {
-    await skipRemainingEventNotifications(event.id, "rally ended");
-    const completed = await prisma.rallyEvent.update({
-      where: { id: event.id },
-      data: { status: "COMPLETED", completedAt: new Date() },
-      include: {
-        assignments: { include: { user: true }, orderBy: { launchTime: "asc" } },
-      },
-    });
-    broadcastRallyUpdate(event.id, serializeEvent(completed));
+    await completeRallyAfterLastCaller(event.id);
   }
 }
 

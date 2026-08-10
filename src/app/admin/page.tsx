@@ -237,7 +237,7 @@ export default function AdminDashboard() {
                   )}
                   {event.status === "COMPLETED" && (
                     <p className="text-rally-muted text-xs font-bold mt-2">
-                      Completed — reset to run again
+                      Last caller thrown — reset to run again
                     </p>
                   )}
                 </Link>

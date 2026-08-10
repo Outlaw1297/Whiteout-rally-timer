@@ -35,14 +35,16 @@ export async function sendCalibrationPings(
       await sendPushNotification(
         { endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth },
         {
-          title: mode === "live" ? " " : "Calibrating notifications",
-          body: mode === "live" ? " " : `Timing setup ${i + 1} of ${pingCount}`,
+          // Blank title/body — SW skips OS banners for silent calibration when the
+          // app is open, and immediately closes any required placeholder when not.
+          title: " ",
+          body: " ",
           rallyId: mode === "live" ? "calibration-live" : "calibration",
           notificationType: "CALIBRATION",
           targetAt,
           calibrationIndex: i + 1,
           calibrationTotal: pingCount,
-          silent,
+          silent: true,
           livePing: mode === "live",
         }
       );

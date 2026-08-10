@@ -3,6 +3,9 @@ import { jsonResponse } from "@/lib/api";
 import { getServerTime } from "@/lib/time";
 import { rateLimit, RATE_LIMITS, getClientIp, rateLimitResponse } from "@/lib/rate-limit";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function GET(request: NextRequest) {
   const clientSendHeader = request.headers.get("x-client-send-time");
 

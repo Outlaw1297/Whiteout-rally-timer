@@ -276,6 +276,18 @@ export default function AdminUsersPage() {
         push for each account.
       </p>
 
+      {canCreateDeveloper ? (
+        <p className="text-rally-success text-xs mb-3 p-2 border border-rally-success/40 rounded">
+          You are a <strong>Developer</strong>. Use <strong>Make Dev</strong> on any caller/admin
+          below, or pick Developer when creating an account.
+        </p>
+      ) : (
+        <p className="text-rally-warning text-xs mb-3 p-2 border border-rally-warning/40 rounded">
+          Only Developer accounts can grant the Developer role. Ask an existing developer to
+          promote you, then log out and back in.
+        </p>
+      )}
+
       <RolesNote />
 
       <PushSetupCard onSubscribed={loadUsers} />
@@ -508,18 +520,18 @@ export default function AdminUsersPage() {
                 )}
               </div>
               <div className="flex flex-wrap gap-2 justify-end">
-                {u.role === "CALLER" && (
+                {u.role !== "ADMIN" && u.role !== "DEVELOPER" && (
                   <button
                     onClick={() => changeRole(u.id, "ADMIN", u.displayName)}
-                    className="text-xs text-rally-warning hover:text-rally-accent"
+                    className="text-xs px-2 py-1 border border-rally-warning text-rally-warning rounded hover:bg-rally-warning/10"
                   >
                     Make Admin
                   </button>
                 )}
-                {(u.role === "CALLER" || u.role === "ADMIN") && canCreateDeveloper && (
+                {canCreateDeveloper && u.role !== "DEVELOPER" && (
                   <button
                     onClick={() => changeRole(u.id, "DEVELOPER", u.displayName)}
-                    className="text-xs text-rally-success hover:text-rally-accent"
+                    className="text-xs px-2 py-1 border border-rally-success text-rally-success rounded hover:bg-rally-success/10 font-bold"
                   >
                     Make Dev
                   </button>
@@ -527,7 +539,7 @@ export default function AdminUsersPage() {
                 {u.role !== "CALLER" && u.id !== user.id && (
                   <button
                     onClick={() => changeRole(u.id, "CALLER", u.displayName)}
-                    className="text-xs text-rally-muted hover:text-rally-accent"
+                    className="text-xs px-2 py-1 border border-rally-border text-rally-muted rounded hover:text-rally-accent"
                   >
                     Make Caller
                   </button>
@@ -535,9 +547,9 @@ export default function AdminUsersPage() {
                 {u.role === "DEVELOPER" && u.id !== user.id && canCreateDeveloper && (
                   <button
                     onClick={() => changeRole(u.id, "ADMIN", u.displayName)}
-                    className="text-xs text-rally-warning hover:text-rally-accent"
+                    className="text-xs px-2 py-1 border border-rally-warning text-rally-warning rounded hover:bg-rally-warning/10"
                   >
-                    Make Admin
+                    Demote to Admin
                   </button>
                 )}
                 <button

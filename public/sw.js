@@ -121,7 +121,8 @@ async function showRallyNotification(title, options) {
       icon: "/icons/icon-192.png",
       badge: "/icons/icon-192.png",
       tag: options.tag,
-      renotify: true,
+      renotify: options.renotify !== false && !options.silent,
+      silent: !!options.silent,
       data: options.data,
     });
     return true;
@@ -163,7 +164,7 @@ self.addEventListener("push", (event) => {
   const calibrationTotal = data.calibrationTotal || 0;
   const isCalibration = notificationType === "CALIBRATION";
   const isLivePing = !!data.livePing || rallyId === "calibration-live";
-  const preferSilent = isCalibration || !!data.silent;
+  const preferSilent = isCalibration || !!data.silent || isLivePing;
   const url = assignmentId
     ? `/caller/events/${rallyId}`
     : rallyId
@@ -183,6 +184,8 @@ self.addEventListener("push", (event) => {
     targetAt,
     calibrationIndex,
     calibrationTotal,
+    silent: preferSilent,
+    livePing: isLivePing,
     url,
   };
 
@@ -191,7 +194,7 @@ self.addEventListener("push", (event) => {
    * stacking unique rows. Unique tags (with timestamps) caused Android/Samsung to
    * rate-limit heads-up — later alerts only appeared in the shade / quick panel.
    */
-  const tag = isCalibration
+  const tag = preferSilent
     ? `calibration-${isLivePing ? "live" : "setup"}-${assignmentId || "device"}`
     : assignmentId
       ? `rally-caller-${assignmentId}`
@@ -201,12 +204,18 @@ self.addEventListener("push", (event) => {
     (async () => {
       const clientList = await listWindowClients();
       const inForeground = hasFocusedClient(clientList);
+      const hasOpenClient = clientList.length > 0;
 
-      // Only skip the OS banner for silent live pings while the app is focused.
-      const skipBanner = isLivePing && preferSilent && inForeground;
+      // Silent calibration / live pings must not interrupt the user.
+      // When any app window is open, skip the OS banner and deliver via postMessage.
+      // When backgrounded, Chrome still requires a user-visible notification for
+      // push (userVisibleOnly) — show a silent placeholder, then close it ASAP.
+      const skipBanner = preferSilent && hasOpenClient;
 
+      const silentTitle = " ";
+      const silentBody = " ";
       const notificationOptions = {
-        body: preferSilent && isLivePing ? " " : body,
+        body: preferSilent ? silentBody : body,
         icon: "/icons/icon-192.png",
         badge: "/icons/icon-192.png",
         tag,
@@ -229,22 +238,39 @@ self.addEventListener("push", (event) => {
           assignmentId,
           notificationType,
           url,
+          silent: preferSilent,
         },
       };
 
       // OS notification FIRST — this is what background users see.
       if (!skipBanner) {
         const shown = await showRallyNotification(
-          preferSilent && isLivePing ? " " : title,
+          preferSilent ? silentTitle : title,
           notificationOptions
         );
         if (!shown) {
-          await self.registration.showNotification(title || "Whiteout Rally", {
-            body: body || "Rally notification",
-            icon: "/icons/icon-192.png",
-            tag,
-            renotify: true,
-          });
+          await self.registration.showNotification(
+            preferSilent ? silentTitle : title || "Whiteout Rally",
+            {
+              body: preferSilent ? silentBody : body || "Rally notification",
+              icon: "/icons/icon-192.png",
+              tag,
+              renotify: !preferSilent,
+              silent: preferSilent,
+              data: notificationOptions.data,
+            }
+          );
+        }
+
+        // Immediately dismiss silent calibration placeholders so they never linger
+        // in the shade / make noise on OEMs that ignore the silent flag.
+        if (preferSilent) {
+          try {
+            const notes = await self.registration.getNotifications({ tag });
+            for (const note of notes) note.close();
+          } catch {
+            /* ignore */
+          }
         }
       }
 
@@ -283,15 +309,6 @@ self.addEventListener("push", (event) => {
             })
             .catch(() => {});
         }, 4000);
-      }
-
-      if (isLivePing && preferSilent && !inForeground) {
-        try {
-          const notes = await self.registration.getNotifications({ tag });
-          for (const note of notes) note.close();
-        } catch {
-          /* ignore */
-        }
       }
 
       if (targetAt) {

@@ -4,6 +4,7 @@ import { jsonResponse, errorResponse, isValidUuid } from "@/lib/api";
 import { requireAdmin, canBeRallyCaller } from "@/lib/auth";
 import { serializeEvent } from "@/lib/rally-event";
 import { parseMarchDuration } from "@/lib/timing";
+import { broadcastRallyUpdate } from "@/server/rally-hub";
 
 interface RouteParams {
   params: { id: string };
@@ -108,5 +109,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     updated.status = "READY";
   }
 
-  return jsonResponse(serializeEvent(updated!), 201);
+  const payload = serializeEvent(updated!);
+  broadcastRallyUpdate(id, payload);
+  return jsonResponse(payload, 201);
 }

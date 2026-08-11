@@ -4,6 +4,7 @@ import { jsonResponse, errorResponse } from "@/lib/api";
 import { requireAuth } from "@/lib/auth";
 import { isDeveloperRole } from "@/lib/roles";
 import { getVapidDiagnostics, initWebPush } from "@/lib/push";
+import { isOnline } from "@/lib/presence";
 
 export const dynamic = "force-dynamic";
 
@@ -25,12 +26,72 @@ async function requireDeveloperFresh(request: NextRequest) {
   return { ...session, role: dbUser.role as "DEVELOPER" };
 }
 
+/** Classify a stored notification row for developer stats. */
+function classifyNotification(status: string, error: string | null | undefined): {
+  successfulNotifications: number;
+  failedNotifications: number;
+  missedNotifications: number;
+  pendingNotifications: number;
+} {
+  const empty = {
+    successfulNotifications: 0,
+    failedNotifications: 0,
+    missedNotifications: 0,
+    pendingNotifications: 0,
+  };
+
+  // Legacy bug: marked SENT when nothing was delivered.
+  if (status === "SENT" && (error === "no devices" || error === "no linked account")) {
+    return { ...empty, missedNotifications: 1 };
+  }
+  if (status === "SENT") return { ...empty, successfulNotifications: 1 };
+  if (status === "FAILED") return { ...empty, failedNotifications: 1 };
+  if (status === "SKIPPED" || status === "CANCELLED") {
+    return { ...empty, missedNotifications: 1 };
+  }
+  if (status === "PENDING") return { ...empty, pendingNotifications: 1 };
+  return empty;
+}
+
+function sumStats(
+  items: Array<{
+    successfulNotifications: number;
+    failedNotifications: number;
+    missedNotifications: number;
+    pendingNotifications: number;
+  }>
+) {
+  return items.reduce(
+    (acc, cur) => ({
+      successfulNotifications: acc.successfulNotifications + cur.successfulNotifications,
+      failedNotifications: acc.failedNotifications + cur.failedNotifications,
+      missedNotifications: acc.missedNotifications + cur.missedNotifications,
+      pendingNotifications: acc.pendingNotifications + cur.pendingNotifications,
+    }),
+    {
+      successfulNotifications: 0,
+      failedNotifications: 0,
+      missedNotifications: 0,
+      pendingNotifications: 0,
+    }
+  );
+}
+
 export async function GET(request: NextRequest) {
   const session = await requireDeveloperFresh(request);
   if (session instanceof Response) return session;
 
   await initWebPush();
   const diagnostics = await getVapidDiagnostics();
+
+  // Repair legacy false-SENT rows so DB matches what we display.
+  await prisma.notificationEvent.updateMany({
+    where: {
+      status: "SENT",
+      OR: [{ error: "no devices" }, { error: "no linked account" }],
+    },
+    data: { status: "SKIPPED" },
+  });
 
   const users = await prisma.user.findMany({
     orderBy: { displayName: "asc" },
@@ -44,6 +105,7 @@ export async function GET(request: NextRequest) {
       deliverySampleCount: true,
       lastCalibratedAt: true,
       lastLoginAt: true,
+      lastSeenAt: true,
       pushSubscriptions: {
         where: { active: true },
         orderBy: { updatedAt: "desc" },
@@ -54,6 +116,7 @@ export async function GET(request: NextRequest) {
           deliveryLeadMs: true,
           deliverySampleCount: true,
           lastCalibratedAt: true,
+          lastSeenAt: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -61,29 +124,38 @@ export async function GET(request: NextRequest) {
       assignments: {
         select: {
           notificationEvents: {
-            select: { status: true },
+            select: { status: true, error: true },
           },
         },
       },
     },
   });
 
-  function tally(assignments: Array<{ notificationEvents: Array<{ status: string }> }>) {
-    let successfulNotifications = 0;
-    let failedNotifications = 0;
-    let missedNotifications = 0;
-    for (const a of assignments) {
-      for (const n of a.notificationEvents) {
-        if (n.status === "SENT") successfulNotifications++;
-        else if (n.status === "FAILED") failedNotifications++;
-        else if (n.status === "SKIPPED" || n.status === "CANCELLED") missedNotifications++;
-      }
-    }
-    return { successfulNotifications, failedNotifications, missedNotifications };
+  function tally(
+    assignments: Array<{ notificationEvents: Array<{ status: string; error: string | null }> }>
+  ) {
+    return sumStats(
+      assignments.flatMap((a) =>
+        a.notificationEvents.map((n) => classifyNotification(n.status, n.error))
+      )
+    );
   }
 
+  const now = Date.now();
   const nestedUsers = users.map((u) => {
     const stats = tally(u.assignments);
+    const devices = u.pushSubscriptions.map((sub) => ({
+      id: sub.id,
+      platform: sub.platform || "unknown",
+      userAgent: sub.userAgent,
+      deliveryLeadMs: sub.deliveryLeadMs,
+      deliverySampleCount: sub.deliverySampleCount,
+      lastCalibratedAt: sub.lastCalibratedAt?.toISOString() ?? null,
+      lastSeenAt: sub.lastSeenAt?.toISOString() ?? null,
+      online: isOnline(sub.lastSeenAt, now),
+      createdAt: sub.createdAt.toISOString(),
+      updatedAt: sub.updatedAt.toISOString(),
+    }));
     return {
       id: u.id,
       username: u.username,
@@ -95,21 +167,28 @@ export async function GET(request: NextRequest) {
       deliverySampleCount: u.deliverySampleCount,
       lastCalibratedAt: u.lastCalibratedAt?.toISOString() ?? null,
       lastLoginAt: u.lastLoginAt?.toISOString() ?? null,
+      lastSeenAt: u.lastSeenAt?.toISOString() ?? null,
+      online: isOnline(u.lastSeenAt, now),
       ...stats,
-      devices: u.pushSubscriptions.map((sub) => ({
-        id: sub.id,
-        platform: sub.platform || "unknown",
-        userAgent: sub.userAgent,
-        deliveryLeadMs: sub.deliveryLeadMs,
-        deliverySampleCount: sub.deliverySampleCount,
-        lastCalibratedAt: sub.lastCalibratedAt?.toISOString() ?? null,
-        createdAt: sub.createdAt.toISOString(),
-        updatedAt: sub.updatedAt.toISOString(),
-      })),
+      devices,
     };
   });
 
   const allDevices = nestedUsers.flatMap((u) => u.devices);
+
+  const allEvents = await prisma.notificationEvent.findMany({
+    select: { status: true, error: true },
+  });
+  const notificationSummary = sumStats(
+    allEvents.map((n) => classifyNotification(n.status, n.error))
+  );
+
+  const unlinkedSkipped = await prisma.notificationEvent.count({
+    where: {
+      status: "SKIPPED",
+      assignment: { userId: null },
+    },
+  });
 
   return jsonResponse({
     pushEnabled: diagnostics.configured,
@@ -124,9 +203,13 @@ export async function GET(request: NextRequest) {
     summary: {
       totalUsers: nestedUsers.length,
       totalDevices: allDevices.length,
+      onlineUsers: nestedUsers.filter((u) => u.online).length,
+      onlineDevices: allDevices.filter((d) => d.online).length,
       android: allDevices.filter((s) => s.platform === "Android").length,
       ios: allDevices.filter((s) => s.platform === "iOS").length,
       desktop: allDevices.filter((s) => s.platform === "Desktop").length,
+      notifications: notificationSummary,
+      unlinkedSkipped,
     },
   });
 }

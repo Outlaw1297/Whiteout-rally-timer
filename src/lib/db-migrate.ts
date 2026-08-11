@@ -208,6 +208,13 @@ export async function migrateFeaturePackColumns(): Promise<void> {
       `);
       logger.info("migrated_user_last_login_at");
     }
+    if (!(await columnExists("User", "lastSeenAt"))) {
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE "User"
+        ADD COLUMN IF NOT EXISTS "lastSeenAt" TIMESTAMPTZ(3)
+      `);
+      logger.info("migrated_user_last_seen_at");
+    }
   }
 
   if (await tableExists("PushSubscription")) {
@@ -217,6 +224,13 @@ export async function migrateFeaturePackColumns(): Promise<void> {
         ADD COLUMN IF NOT EXISTS "lastCalibratedAt" TIMESTAMPTZ(3)
       `);
       logger.info("migrated_push_last_calibrated_at");
+    }
+    if (!(await columnExists("PushSubscription", "lastSeenAt"))) {
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE "PushSubscription"
+        ADD COLUMN IF NOT EXISTS "lastSeenAt" TIMESTAMPTZ(3)
+      `);
+      logger.info("migrated_push_last_seen_at");
     }
   }
 }

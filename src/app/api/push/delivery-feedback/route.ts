@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
     const next = nextDeliveryLeadMs(sub.deliveryLeadMs, delayMs, sub.deliverySampleCount);
     await prisma.pushSubscription.update({
       where: { id: sub.id },
-      data: { ...next, lastCalibratedAt: calibratedAt },
+      data: { ...next, lastCalibratedAt: calibratedAt, lastSeenAt: calibratedAt },
     });
     updates.push({
       subscriptionId: sub.id,
@@ -71,6 +71,11 @@ export async function POST(request: NextRequest) {
       lastCalibratedAt: calibratedAt.toISOString(),
     });
   }
+
+  await prisma.user.update({
+    where: { id: session.id },
+    data: { lastSeenAt: calibratedAt },
+  });
 
   const userLead = await syncUserDeliveryLead(session.id);
 

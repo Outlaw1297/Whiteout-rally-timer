@@ -84,3 +84,38 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     message: body.password || body.resetPassword ? "Password updated successfully" : "User updated",
   });
 }
+
+/** Permanently delete a user (admin / developer). Cannot delete yourself or the last developer. */
+export async function DELETE(request: NextRequest, { params }: RouteParams) {
+  const session = await requireAdmin(request);
+  if (session instanceof Response) return session;
+
+  const { id } = params;
+  if (!isValidUuid(id)) return errorResponse("Invalid user ID");
+
+  if (id === session.id) {
+    return errorResponse("You cannot delete your own account", 400);
+  }
+
+  const user = await prisma.user.findUnique({ where: { id } });
+  if (!user) return errorResponse("User not found", 404);
+
+  if (isDeveloperRole(user.role)) {
+    const actorIsDev = await sessionIsDeveloper(session.id, session.role);
+    if (!actorIsDev) {
+      return errorResponse("Only developers can delete developer accounts", 403);
+    }
+    const developerCount = await prisma.user.count({ where: { role: "DEVELOPER" } });
+    if (developerCount <= 1) {
+      return errorResponse("Cannot delete the last developer account", 400);
+    }
+  }
+
+  await prisma.user.delete({ where: { id } });
+
+  return jsonResponse({
+    ok: true,
+    deletedId: id,
+    message: `Deleted ${user.displayName}`,
+  });
+}

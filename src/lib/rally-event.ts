@@ -122,7 +122,7 @@ export function serializeEvent(event: EventWithAssignments) {
 
 export function buildNotificationEventsForAssignment(
   assignment: RallyAssignment,
-  user: User,
+  user: User | null | undefined,
   options: {
     referenceTime?: Date;
     pushLeadMs?: number;
@@ -131,7 +131,8 @@ export function buildNotificationEventsForAssignment(
   } = {}
 ) {
   if (!assignment.launchTime) return [];
-  const warningLeads = parseUserWarningLeads(user);
+  // Unlinked callers still get a default schedule so SKIPPED/missed is recorded.
+  const warningLeads = user ? parseUserWarningLeads(user) : parseUserWarningLeads({});
   return getNotificationSchedule(assignment.launchTime, warningLeads, {
     referenceTime: options.referenceTime ?? new Date(),
     pushLeadMs: options.pushLeadMs,

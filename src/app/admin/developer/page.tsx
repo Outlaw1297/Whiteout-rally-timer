@@ -9,6 +9,7 @@ import {
   Radio,
   Send,
   Smartphone,
+  Trash2,
   X,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -24,7 +25,16 @@ interface DeviceInfo {
   deliveryLeadMs: number;
   deliverySampleCount: number;
   lastCalibratedAt: string | null;
+  lastSeenAt?: string | null;
+  online?: boolean;
   updatedAt: string;
+}
+
+interface NotificationStats {
+  successfulNotifications: number;
+  failedNotifications: number;
+  missedNotifications: number;
+  pendingNotifications: number;
 }
 
 interface UserWithDevices {
@@ -38,9 +48,12 @@ interface UserWithDevices {
   deliverySampleCount: number;
   lastCalibratedAt: string | null;
   lastLoginAt: string | null;
+  lastSeenAt?: string | null;
+  online?: boolean;
   successfulNotifications: number;
   missedNotifications: number;
   failedNotifications: number;
+  pendingNotifications?: number;
   devices: DeviceInfo[];
 }
 
@@ -85,6 +98,9 @@ export default function DeveloperPage() {
   const [clock, setClock] = useState<ClockInfo | null>(null);
   const [pushEnabled, setPushEnabled] = useState(false);
   const [vapidSource, setVapidSource] = useState<string | null>(null);
+  const [notificationSummary, setNotificationSummary] = useState<NotificationStats | null>(
+    null
+  );
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
   const [testing, setTesting] = useState<string | null>(null);
@@ -121,6 +137,7 @@ export default function DeveloperPage() {
       setUsers(devData.users || []);
       setPushEnabled(!!devData.pushEnabled);
       setVapidSource(devData.vapidSource || null);
+      setNotificationSummary(devData.summary?.notifications || null);
 
       if (timeRes.ok) {
         const timeData = await timeRes.json();
@@ -185,6 +202,27 @@ export default function DeveloperPage() {
         setError("Test request failed");
       } finally {
         setTesting(null);
+      }
+    },
+    [load]
+  );
+
+  const deleteDevice = useCallback(
+    async (deviceId: string, platform: string) => {
+      if (!confirm(`Remove ${platform} device from the list?`)) return;
+      setError("");
+      setStatusMsg("");
+      try {
+        const res = await fetch(`/api/admin/push/devices/${deviceId}`, { method: "DELETE" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setError(data.error || "Failed to delete device");
+          return;
+        }
+        setStatusMsg(data.message || "Device removed");
+        load();
+      } catch {
+        setError("Failed to delete device");
       }
     },
     [load]
@@ -333,6 +371,34 @@ export default function DeveloperPage() {
         </Panel>
       )}
 
+      {notificationSummary && (
+        <Panel className="mb-4">
+          <SectionLabel>Rally notification totals</SectionLabel>
+          <p className="text-[11px] text-rally-muted mt-1 mb-2">
+            Scheduled rally alerts only (not Developer Test pushes). Sent = delivered to at least
+            one device.
+          </p>
+          <p className="text-xs flex flex-wrap gap-x-3 gap-y-1">
+            <span className="text-rally-success inline-flex items-center gap-1">
+              <Check className="h-3.5 w-3.5" aria-hidden />
+              {notificationSummary.successfulNotifications} sent
+            </span>
+            <span className="text-rally-danger inline-flex items-center gap-1">
+              <X className="h-3.5 w-3.5" aria-hidden />
+              {notificationSummary.failedNotifications} failed
+            </span>
+            <span className="text-rally-warning inline-flex items-center gap-1">
+              <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
+              {notificationSummary.missedNotifications} missed/skipped
+            </span>
+            <span className="text-rally-muted inline-flex items-center gap-1">
+              <Clock className="h-3.5 w-3.5" aria-hidden />
+              {notificationSummary.pendingNotifications} pending
+            </span>
+          </p>
+        </Panel>
+      )}
+
       <div className="mb-4">
         <input
           type="search"
@@ -353,11 +419,14 @@ export default function DeveloperPage() {
             <Panel key={u.id} className="!p-3 text-sm">
               <div className="flex justify-between gap-2 items-start">
                 <div className="min-w-0">
-                  <p className="font-bold text-rally-snow">
+                  <p className="font-bold text-rally-snow flex flex-wrap items-center gap-1.5">
                     {u.displayName}{" "}
                     <span className="text-rally-muted text-xs font-normal">@{u.username}</span>
+                    <StatusBadge tone={u.online ? "live" : "neutral"} pulse={!!u.online}>
+                      {u.online ? "Online" : "Offline"}
+                    </StatusBadge>
                     {!u.active && (
-                      <StatusBadge tone="danger" className="ml-2">
+                      <StatusBadge tone="danger">
                         disabled
                       </StatusBadge>
                     )}
@@ -384,9 +453,13 @@ export default function DeveloperPage() {
               </div>
 
               <p className="text-rally-muted text-[11px] mt-1">
-                Login {formatWhen(u.lastLoginAt)} · Calibrated {formatWhen(u.lastCalibratedAt)}
+                Login {formatWhen(u.lastLoginAt)} · Seen {formatWhen(u.lastSeenAt)} · Calibrated{" "}
+                {formatWhen(u.lastCalibratedAt)}
               </p>
-              <p className="text-[11px] mt-1 flex flex-wrap gap-x-2">
+              <p className="text-[10px] text-rally-muted mt-2 uppercase tracking-wide">
+                Linked rally alerts
+              </p>
+              <p className="text-[11px] mt-0.5 flex flex-wrap gap-x-2">
                 <span className="text-rally-success inline-flex items-center gap-1">
                   <Check className="h-3 w-3" aria-hidden />
                   {u.successfulNotifications} sent
@@ -399,6 +472,12 @@ export default function DeveloperPage() {
                   <AlertTriangle className="h-3 w-3" aria-hidden />
                   {u.missedNotifications} missed/skipped
                 </span>
+                {(u.pendingNotifications ?? 0) > 0 && (
+                  <span className="text-rally-muted inline-flex items-center gap-1">
+                    <Clock className="h-3 w-3" aria-hidden />
+                    {u.pendingNotifications} pending
+                  </span>
+                )}
               </p>
 
               {u.devices.length === 0 ? (
@@ -418,23 +497,37 @@ export default function DeveloperPage() {
                     >
                       <div className="flex justify-between gap-2 items-start">
                         <div className="min-w-0">
-                          <span className="font-mono text-rally-ice">{d.platform}</span>
-                          <span className="font-mono text-rally-muted ml-2">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="font-mono text-rally-ice">{d.platform}</span>
+                            <StatusBadge tone={d.online ? "live" : "neutral"} pulse={!!d.online}>
+                              {d.online ? "Online" : "Offline"}
+                            </StatusBadge>
+                          </div>
+                          <span className="font-mono text-rally-muted">
                             lead {d.deliveryLeadMs}ms · {d.deliverySampleCount} samples
                           </span>
                         </div>
-                        <button
-                          type="button"
-                          disabled={!pushEnabled || testing === d.id}
-                          onClick={() => sendTest({ subscriptionId: d.id })}
-                          className="btn-primary !min-h-[28px] !py-0.5 !px-2 text-[11px] shrink-0"
-                        >
-                          {testing === d.id ? "…" : "Test"}
-                        </button>
+                        <div className="flex gap-1 shrink-0">
+                          <button
+                            type="button"
+                            disabled={!pushEnabled || testing === d.id}
+                            onClick={() => sendTest({ subscriptionId: d.id })}
+                            className="btn-primary !min-h-[28px] !py-0.5 !px-2 text-[11px]"
+                          >
+                            {testing === d.id ? "…" : "Test"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteDevice(d.id, d.platform)}
+                            className="btn-ghost !min-h-[28px] !py-0.5 !px-2 text-[11px] text-rally-danger"
+                            title="Remove device"
+                          >
+                            <Trash2 className="h-3 w-3" aria-hidden />
+                          </button>
+                        </div>
                       </div>
                       <p className="text-rally-muted text-[11px] mt-1">
-                        Calibrated {formatWhen(d.lastCalibratedAt)} · Updated{" "}
-                        {formatWhen(d.updatedAt)}
+                        Seen {formatWhen(d.lastSeenAt)} · Calibrated {formatWhen(d.lastCalibratedAt)}
                       </p>
                       {d.userAgent && (
                         <p

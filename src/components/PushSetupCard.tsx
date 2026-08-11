@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Bell, BellOff, Check, AlertTriangle } from "lucide-react";
 import { NotificationButton } from "@/components/NotificationButton";
 import { PushNotificationsProvider, usePushNotificationsContext } from "@/components/PushNotificationsProvider";
+import { Panel, SectionLabel } from "@/components/ui/AppShell";
 
 interface PushStatus {
   vapidConfigured: boolean;
@@ -78,12 +80,15 @@ function PushSetupCardInner({ onSubscribed }: { onSubscribed?: () => void }) {
   const otherDevices = (status?.deviceCount ?? 0) > 0 && !deviceOk;
 
   return (
-    <section className="p-4 mb-4 bg-rally-surface border border-rally-border rounded-lg">
-      <h2 className="text-rally-muted text-xs mb-2">YOUR DEVICE NOTIFICATIONS</h2>
+    <Panel className="mb-4">
+      <div className="flex items-center gap-2 mb-2">
+        <Bell className="h-4 w-4 text-rally-ice shrink-0" aria-hidden />
+        <SectionLabel>Your Device Notifications</SectionLabel>
+      </div>
 
       {!status?.vapidConfigured ? (
         <div className="text-rally-danger text-sm mb-3 space-y-1">
-          <p className="font-bold">Push not working on server</p>
+          <p className="font-semibold">Push not working on server</p>
           {status?.vapidError && <p className="text-xs">{status.vapidError}</p>}
           <p className="text-xs text-rally-muted mt-2">
             Keys are auto-generated on first run — redeploy if this persists.
@@ -91,14 +96,17 @@ function PushSetupCardInner({ onSubscribed }: { onSubscribed?: () => void }) {
         </div>
       ) : (
         <p className="text-rally-muted text-xs mb-3">
-          After a redeploy this page verifies whether <span className="font-bold">this browser</span>{" "}
+          After a redeploy this page verifies whether <span className="font-semibold text-rally-snow">this browser</span>{" "}
           is still registered and repairs it when possible.
         </p>
       )}
 
       {deviceOk ? (
         <div className="mb-3 p-3 bg-rally-success/10 border border-rally-success/40 rounded-lg text-sm">
-          <p className="text-rally-success font-bold">✓ This device is registered</p>
+          <p className="text-rally-success font-semibold inline-flex items-center gap-1.5">
+            <Check className="h-4 w-4" aria-hidden />
+            This device is registered
+          </p>
           <p className="text-rally-muted text-xs mt-1">
             {status?.deviceCount ?? 1} device{(status?.deviceCount ?? 1) !== 1 ? "s" : ""} on your
             account
@@ -109,7 +117,10 @@ function PushSetupCardInner({ onSubscribed }: { onSubscribed?: () => void }) {
         </div>
       ) : otherDevices || pushStatus === "stale" ? (
         <div className="mb-3 p-3 bg-rally-warning/10 border border-rally-warning/40 rounded-lg text-sm text-rally-warning">
-          <p className="font-bold">This browser is not registered for alerts</p>
+          <p className="font-semibold inline-flex items-center gap-1.5">
+            <BellOff className="h-4 w-4" aria-hidden />
+            This browser is not registered for alerts
+          </p>
           <p className="text-xs mt-1 text-rally-muted">
             {otherDevices
               ? `Your account still has ${status?.deviceCount} saved device${
@@ -119,7 +130,8 @@ function PushSetupCardInner({ onSubscribed }: { onSubscribed?: () => void }) {
           </p>
         </div>
       ) : (
-        <div className="mb-3 p-3 bg-rally-warning/10 border border-rally-warning/40 rounded-lg text-sm text-rally-warning">
+        <div className="mb-3 p-3 bg-rally-warning/10 border border-rally-warning/40 rounded-lg text-sm text-rally-warning inline-flex items-center gap-1.5">
+          <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
           No devices registered for your account yet.
         </div>
       )}
@@ -136,7 +148,7 @@ function PushSetupCardInner({ onSubscribed }: { onSubscribed?: () => void }) {
           Linked caller slots will show this device after you link your account below.
         </p>
       )}
-    </section>
+    </Panel>
   );
 }
 

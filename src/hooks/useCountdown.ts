@@ -27,7 +27,7 @@ export function useCountdown(
       setRemainingMs(remaining);
 
       if (remaining <= 0) {
-        setDisplay("🚨 RALLY NOW");
+        setDisplay("LAUNCH NOW");
         setIsNow(true);
       } else {
         setDisplay(formatCountdown(remaining));

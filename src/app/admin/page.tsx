@@ -3,13 +3,16 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Plus, Pin, PinOff, RotateCcw, Trash2, Zap } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { formatGather } from "@/lib/display";
 import { PushSetupCard } from "@/components/PushSetupCard";
 import { RolesNote } from "@/components/RolesNote";
 import { TemplateSwitcher } from "@/components/TemplateSwitcher";
-import { HomeButton } from "@/components/HomeButton";
+import { AdminNav } from "@/components/AdminNav";
 import { NotificationPreferences } from "@/components/NotificationPreferences";
+import { AppShell, Panel, SectionLabel } from "@/components/ui/AppShell";
+import { StatusBadge, statusToneForEvent } from "@/components/ui/StatusBadge";
 import type { SerializedEvent } from "@/hooks/useEventSocket";
 
 export default function AdminDashboard() {
@@ -119,58 +122,25 @@ export default function AdminDashboard() {
   }
 
   return (
-    <main className="min-h-screen px-4 py-6 max-w-lg mx-auto">
+    <AppShell wide className="page-enter">
       <TemplateSwitcher onChanged={loadEvents} />
 
-      <header className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-bold text-rally-accent">ADMIN</h1>
-          <p className="text-rally-muted text-sm">
-            {user.displayName}
-            {user.role === "DEVELOPER" ? (
-              <span className="text-rally-success text-xs font-bold ml-2">DEVELOPER</span>
-            ) : null}
-          </p>
-        </div>
-        <div className="flex gap-2 flex-wrap justify-end">
-          <HomeButton />
-          <Link href="/admin/users" className="text-rally-muted text-sm hover:text-rally-accent">
-            Users
-          </Link>
-          {user.role === "DEVELOPER" && (
-            <Link
-              href="/admin/developer"
-              className="text-rally-accent text-sm font-bold hover:underline"
-              title="Device diagnostics (replaces Test Bench)"
-            >
-              Developer
-            </Link>
-          )}
-          <button onClick={logout} className="text-rally-muted text-sm hover:text-rally-danger">
-            Logout
-          </button>
-        </div>
-        {user.role === "DEVELOPER" && (
-          <p className="w-full text-right text-rally-muted text-[11px] mt-1">
-            Former Test Bench →{" "}
-            <Link href="/admin/developer" className="text-rally-accent font-bold">
-              Developer diagnostics
-            </Link>
-          </p>
-        )}
-      </header>
+      <AdminNav displayName={user.displayName} role={user.role} onLogout={logout} />
 
       <RolesNote compact />
 
-      <PushSetupCard />
-
-      <NotificationPreferences />
-
       <button
         onClick={() => setShowCreate(!showCreate)}
-        className="w-full py-4 mb-4 bg-rally-accent text-white font-bold rounded-lg"
+        className={showCreate ? "btn-secondary w-full mb-4" : "btn-primary w-full mb-4"}
       >
-        {showCreate ? "CANCEL" : "+ NEW RALLY TEMPLATE"}
+        {showCreate ? (
+          "Cancel"
+        ) : (
+          <>
+            <Plus className="h-4 w-4" aria-hidden />
+            New Rally Template
+          </>
+        )}
       </button>
 
       {showCreate && (
@@ -184,37 +154,37 @@ export default function AdminDashboard() {
       )}
 
       {selectable.length > 0 && (
-        <section className="p-3 mb-4 bg-rally-surface border border-rally-border rounded-lg space-y-2">
-          <p className="text-rally-muted text-xs font-bold">START MULTIPLE TEMPLATES</p>
+        <Panel className="mb-4 space-y-3">
+          <SectionLabel>Start Multiple Templates</SectionLabel>
           <p className="text-rally-muted text-xs">
             Check templates below, then start them together. Optional stagger delays each GO.
           </p>
           <div className="flex items-center gap-2">
-            <label className="text-rally-muted text-xs shrink-0">Stagger (s)</label>
+            <label className="label-field shrink-0">Stagger (s)</label>
             <input
               type="number"
               min={0}
               max={600}
               value={staggerSeconds}
               onChange={(e) => setStaggerSeconds(e.target.value)}
-              className="w-20 px-2 py-1 bg-rally-bg border border-rally-border rounded font-mono text-sm"
+              className="input-field w-20 !min-h-[40px] !py-2 font-mono text-sm"
             />
             <button
               type="button"
               onClick={startSelected}
               disabled={startingMany || selected.size === 0}
-              className="flex-1 py-2 bg-rally-success text-white text-sm font-bold rounded disabled:opacity-50"
+              className="btn-success flex-1 !min-h-[40px] !py-2 text-sm"
             >
               {startingMany
-                ? "STARTING..."
-                : `START ${selected.size || ""} SELECTED`.trim()}
+                ? "Starting..."
+                : `Start ${selected.size || ""} Selected`.trim()}
             </button>
           </div>
           {batchError && <p className="text-rally-danger text-xs">{batchError}</p>}
-        </section>
+        </Panel>
       )}
 
-      <section className="flex flex-col gap-4">
+      <section className="flex flex-col gap-3">
         {events.length === 0 && (
           <p className="text-rally-muted text-center py-8">No rally templates yet</p>
         )}
@@ -225,39 +195,44 @@ export default function AdminDashboard() {
               event.status === "COMPLETED") &&
             event.assignments.length > 0;
           return (
-            <div
-              key={event.id}
-              className="p-4 bg-rally-surface border border-rally-border rounded-lg"
-            >
+            <Panel key={event.id}>
               <div className="flex justify-between items-start gap-2">
                 {canSelect && (
                   <input
                     type="checkbox"
                     checked={selected.has(event.id)}
                     onChange={() => toggleSelect(event.id)}
-                    className="mt-1.5"
+                    className="mt-1.5 accent-rally-ice"
                     aria-label={`Select ${event.name}`}
                   />
                 )}
                 <Link href={`/admin/events/${event.id}`} className="flex-1 min-w-0">
-                  <h2 className="font-bold text-lg">
-                    {event.pinned ? "★ " : ""}
-                    {event.name}
-                  </h2>
-                  <span className="text-xs text-rally-muted">{event.status}</span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="font-bold text-lg text-rally-snow">{event.name}</h2>
+                    {event.pinned && (
+                      <Pin className="h-3.5 w-3.5 text-rally-warning shrink-0" aria-hidden />
+                    )}
+                    <StatusBadge tone={statusToneForEvent(event.status)}>
+                      {event.status}
+                    </StatusBadge>
+                  </div>
                   <p className="text-rally-muted text-sm mt-1">
                     Rally time: {formatGather(event.gatherDurationSeconds)} ·{" "}
                     {event.assignments.length} caller
                     {event.assignments.length !== 1 ? "s" : ""}
                   </p>
                   {event.status === "READY" && (
-                    <p className="text-rally-warning text-xs font-bold mt-2">Ready — tap to GO</p>
+                    <p className="text-rally-warning text-xs font-semibold mt-2">
+                      Ready — tap to GO
+                    </p>
                   )}
                   {event.status === "ACTIVE" && (
-                    <p className="text-rally-success text-xs font-bold mt-2">● LIVE</p>
+                    <StatusBadge tone="live" pulse className="mt-2">
+                      Live
+                    </StatusBadge>
                   )}
                   {event.status === "COMPLETED" && (
-                    <p className="text-rally-muted text-xs font-bold mt-2">
+                    <p className="text-rally-muted text-xs mt-2">
                       Last caller thrown — reset to run again
                     </p>
                   )}
@@ -265,31 +240,49 @@ export default function AdminDashboard() {
                 <div className="flex flex-col gap-1 shrink-0">
                   <button
                     onClick={() => togglePin(event.id, !!event.pinned)}
-                    className="text-rally-warning text-xs font-bold px-2 py-1 border border-rally-border rounded"
+                    className="btn-ghost !min-h-[32px] !py-1 !px-2 text-xs text-rally-warning gap-1"
                   >
-                    {event.pinned ? "Unpin" : "Pin"}
+                    {event.pinned ? (
+                      <>
+                        <PinOff className="h-3 w-3" aria-hidden />
+                        Unpin
+                      </>
+                    ) : (
+                      <>
+                        <Pin className="h-3 w-3" aria-hidden />
+                        Pin
+                      </>
+                    )}
                   </button>
                   {(event.status === "ACTIVE" || event.status === "COMPLETED") && (
                     <button
                       onClick={() => resetEvent(event.id)}
-                      className="text-rally-warning text-xs font-bold px-2 py-1 border border-rally-warning rounded"
+                      className="btn-ghost !min-h-[32px] !py-1 !px-2 text-xs text-rally-warning gap-1"
                     >
+                      <RotateCcw className="h-3 w-3" aria-hidden />
                       Reset
                     </button>
                   )}
                   <button
                     onClick={() => deleteEvent(event.id, event.status)}
-                    className="text-rally-danger text-xs font-bold px-2 py-1 border border-rally-danger rounded"
+                    className="btn-ghost !min-h-[32px] !py-1 !px-2 text-xs text-rally-danger gap-1"
                   >
+                    <Trash2 className="h-3 w-3" aria-hidden />
                     Delete
                   </button>
                 </div>
               </div>
-            </div>
+            </Panel>
           );
         })}
       </section>
-    </main>
+
+      <div className="mt-8 space-y-4">
+        <SectionLabel>Notifications</SectionLabel>
+        <PushSetupCard />
+        <NotificationPreferences />
+      </div>
+    </AppShell>
   );
 }
 
@@ -343,48 +336,44 @@ function CreateTemplateForm({ onCreated }: { onCreated: (id: string) => void }) 
   };
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="p-4 mb-4 bg-rally-surface border border-rally-border rounded-lg flex flex-col gap-3"
-    >
-      <button
-        type="button"
-        onClick={handleTestMode}
-        className="text-rally-warning text-sm font-bold text-left"
-      >
-        ⚡ Quick test template (10s rally time)
-      </button>
+    <form onSubmit={handleSubmit} className="mb-4 flex flex-col gap-3">
+      <Panel className="flex flex-col gap-3">
+        <button
+          type="button"
+          onClick={handleTestMode}
+          className="btn-ghost !justify-start text-rally-warning text-sm font-semibold gap-2"
+        >
+          <Zap className="h-4 w-4" aria-hidden />
+          Quick test template (10s rally time)
+        </button>
 
-      <input
-        placeholder="Rally Name (e.g. Bear Trap)"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        className="px-3 py-2 bg-rally-bg border border-rally-border rounded text-rally-text"
-        required
-      />
-      <div>
-        <label className="text-rally-muted text-xs">RALLY TIME (M:SS)</label>
         <input
-          value={gather}
-          onChange={(e) => setGather(e.target.value)}
-          className="w-full px-3 py-2 bg-rally-bg border border-rally-border rounded text-rally-text"
+          placeholder="Rally Name (e.g. Bear Trap)"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="input-field"
+          required
         />
-      </div>
+        <div>
+          <label className="label-field">Rally Time (M:SS)</label>
+          <input
+            value={gather}
+            onChange={(e) => setGather(e.target.value)}
+            className="input-field font-mono"
+          />
+        </div>
 
-      <p className="text-rally-muted text-xs">
-        Add callers and march times on the next screen. Press GO when ready — launch times
-        are calculated from that moment.
-      </p>
+        <p className="text-rally-muted text-xs">
+          Add callers and march times on the next screen. Press GO when ready — launch times
+          are calculated from that moment.
+        </p>
 
-      {error && <p className="text-rally-danger text-sm">{error}</p>}
+        {error && <p className="text-rally-danger text-sm">{error}</p>}
 
-      <button
-        type="submit"
-        disabled={loading}
-        className="py-3 bg-rally-success text-white font-bold rounded-lg disabled:opacity-50"
-      >
-        {loading ? "CREATING..." : "CREATE TEMPLATE"}
-      </button>
+        <button type="submit" disabled={loading} className="btn-success">
+          {loading ? "Creating..." : "Create Template"}
+        </button>
+      </Panel>
     </form>
   );
 }

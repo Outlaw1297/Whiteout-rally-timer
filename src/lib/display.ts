@@ -22,21 +22,21 @@ export function formatMarch(seconds: number): string {
 export function statusLabel(status: string): string {
   switch (status) {
     case "LAUNCHED":
-      return "✓ LAUNCHED";
+      return "Launched";
     case "WAITING":
-      return "WAITING";
+      return "Waiting";
     case "MISSED":
-      return "MISSED";
+      return "Missed";
     case "ACTIVE":
-      return "ACTIVE";
+      return "Active";
     case "READY":
-      return "READY";
+      return "Ready";
     case "DRAFT":
-      return "DRAFT";
+      return "Draft";
     case "COMPLETED":
-      return "COMPLETED";
+      return "Completed";
     case "CANCELLED":
-      return "CANCELLED";
+      return "Cancelled";
     default:
       return status;
   }

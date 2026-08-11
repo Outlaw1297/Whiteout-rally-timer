@@ -1,11 +1,11 @@
 {
   "name": "Whiteout Rally Timer",
-  "short_name": "Rally Timer",
-  "description": "Server-authoritative rally timer for Whiteout Survival",
+  "short_name": "Whiteout Rally",
+  "description": "Arctic rally command center — coordinated multi-caller launch timers",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0a0e17",
-  "theme_color": "#0a0e17",
+  "background_color": "#061018",
+  "theme_color": "#061018",
   "orientation": "portrait",
   "icons": [
     {

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { Settings, Crosshair } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useServerClock } from "@/hooks/useServerClock";
 import { useCountdown } from "@/hooks/useCountdown";
@@ -9,6 +10,8 @@ import { useEventSocket, type SerializedEvent } from "@/hooks/useEventSocket";
 import { NotificationButton } from "@/components/NotificationButton";
 import { PushNotificationsProvider } from "@/components/PushNotificationsProvider";
 import { StatusBanner } from "@/components/StatusBanner";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { Panel, SectionLabel } from "@/components/ui/AppShell";
 import { formatArrivalTime, formatGather } from "@/lib/display";
 import { parseMarchDuration } from "@/lib/timing";
 
@@ -119,17 +122,25 @@ export function CallerRallyView({
   const canEditMarch = event.status === "DRAFT" || event.status === "READY";
 
   return (
-    <div className="flex flex-col flex-1">
-      <header className="mt-2 mb-6 text-center">
-        <p className="text-rally-muted text-xs">⚔️</p>
-        <h1 className="text-2xl font-bold">{event.name}</h1>
-        <p className="text-rally-muted text-sm">{user.displayName.toUpperCase()}</p>
-        <p className="text-rally-muted text-xs mt-1">
-          {event.status === "ACTIVE"
-            ? "● LIVE"
-            : waitingForGo
-              ? "Waiting for GO"
-              : event.status}
+    <div className="flex flex-col flex-1 page-enter">
+      <header className="mt-1 mb-5 text-center">
+        <div className="flex items-center justify-center gap-2 mb-2">
+          <Crosshair className="h-4 w-4 text-rally-ice" aria-hidden />
+          {event.status === "ACTIVE" ? (
+            <StatusBadge tone="live" pulse>
+              ● Live
+            </StatusBadge>
+          ) : waitingForGo ? (
+            <StatusBadge tone="warning">Waiting for GO</StatusBadge>
+          ) : (
+            <StatusBadge tone="neutral">{event.status}</StatusBadge>
+          )}
+        </div>
+        <h1 className="text-2xl sm:text-3xl font-bold text-rally-snow tracking-tight">
+          {event.name}
+        </h1>
+        <p className="text-rally-muted text-sm mt-1 tracking-wide uppercase">
+          {user.displayName}
         </p>
       </header>
 
@@ -142,112 +153,124 @@ export function CallerRallyView({
         }}
       />
 
-      <section
-        className={`p-8 mb-6 rounded-xl text-center ${
-          isNow
-            ? "bg-rally-danger/30 border-2 border-rally-danger animate-pulse"
-            : "bg-rally-surface border border-rally-border"
-        }`}
-      >
-        <p className="text-rally-muted text-xs mb-1">YOUR RALLY</p>
-        <p className="text-2xl font-mono font-bold mb-4">
+      <Panel launch={isNow && !waitingForGo} className="mb-5 text-center !p-6 sm:!p-8">
+        <SectionLabel>Your rally</SectionLabel>
+        <p className="timer-display text-3xl sm:text-4xl text-rally-snow mt-2 mb-5">
           {formatArrivalTime(assignment.launchTime)}
         </p>
-        <p className="text-rally-muted text-xs mb-2">THROW RALLY IN</p>
-        <p
-          className={`text-5xl font-mono font-bold ${
-            isNow ? "text-rally-danger" : "text-rally-accent"
-          }`}
-        >
-          {waitingForGo ? "WAITING" : isNow ? "🚨 THROW RALLY NOW" : countdown}
-        </p>
-      </section>
+        <SectionLabel>
+          {isNow && !waitingForGo ? "Action" : "Throw rally in"}
+        </SectionLabel>
+        {waitingForGo ? (
+          <p className="timer-display text-4xl sm:text-5xl text-rally-muted mt-2">WAITING</p>
+        ) : isNow ? (
+          <p className="mt-3 text-4xl sm:text-5xl font-black tracking-tight text-rally-launch uppercase leading-none">
+            Launch Now
+          </p>
+        ) : (
+          <p className="timer-display text-5xl sm:text-6xl text-rally-ice mt-2 leading-none">
+            {countdown}
+          </p>
+        )}
+        {!waitingForGo && assignment.launchTime && (
+          <p className="text-rally-muted text-xs font-mono mt-4">
+            Launch at {formatArrivalTime(assignment.launchTime)}
+          </p>
+        )}
+      </Panel>
 
-      <section className="grid grid-cols-2 gap-4 mb-6 text-center">
-        <div className="p-3 bg-rally-surface border border-rally-border rounded-lg">
-          <p className="text-rally-muted text-xs">YOUR MARCH</p>
+      <section className="grid grid-cols-2 gap-3 mb-5">
+        <div className="rounded-xl border border-rally-border bg-rally-surface p-3 text-center">
+          <SectionLabel>Your march</SectionLabel>
           {canEditMarch ? (
-            <div className="mt-1 space-y-2">
+            <div className="mt-2 space-y-2">
               <input
                 value={marchDraft}
                 onChange={(e) => setMarchDraft(e.target.value)}
                 placeholder="M:SS"
-                className="w-full px-2 py-1 bg-rally-bg border border-rally-border rounded font-mono text-lg text-center"
+                className="input-field text-center timer-display text-lg !py-2 !min-h-[40px]"
                 aria-label="Your march time"
               />
               <button
                 type="button"
                 onClick={saveMarch}
                 disabled={marchSaving}
-                className="w-full py-1.5 bg-rally-accent text-white text-xs font-bold rounded disabled:opacity-50"
+                className="btn-primary w-full !py-2 !min-h-[40px] text-xs"
               >
-                {marchSaving ? "SAVING…" : "SAVE MARCH"}
+                {marchSaving ? "Saving…" : "Save march"}
               </button>
-              <p className="text-rally-muted text-[10px]">
+              <p className="text-rally-muted text-[10px] leading-snug">
                 Set your march to the target. Admin can still change it.
               </p>
             </div>
           ) : (
-            <p className="text-xl font-mono font-bold">{assignment.marchFormatted}</p>
+            <p className="timer-display text-xl text-rally-snow mt-2">
+              {assignment.marchFormatted}
+            </p>
           )}
         </div>
-        <div className="p-3 bg-rally-surface border border-rally-border rounded-lg">
-          <p className="text-rally-muted text-xs">RALLY TIME</p>
-          <p className="text-xl font-mono font-bold">
+        <div className="rounded-xl border border-rally-border bg-rally-surface p-3 text-center">
+          <SectionLabel>Rally time</SectionLabel>
+          <p className="timer-display text-xl text-rally-snow mt-2">
             {formatGather(event.gatherDurationSeconds)}
           </p>
         </div>
-        <div className="col-span-2 p-3 bg-rally-surface border border-rally-border rounded-lg">
-          <p className="text-rally-muted text-xs">EXPECTED ARRIVAL</p>
-          <p className="text-xl font-mono font-bold">
+        <div className="col-span-2 rounded-xl border border-rally-border bg-rally-surface p-3 text-center">
+          <SectionLabel>Expected arrival</SectionLabel>
+          <p className="timer-display text-xl text-rally-snow mt-2">
             {formatArrivalTime(assignment.expectedArrivalTime)}
           </p>
         </div>
-        <div className="col-span-2 p-3 bg-rally-surface border border-rally-border rounded-lg">
-          <p className="text-rally-muted text-xs">TARGET ARRIVAL</p>
-          <p className="text-xl font-mono font-bold">
+        <div className="col-span-2 rounded-xl border border-rally-border bg-rally-surface p-3 text-center">
+          <SectionLabel>Target arrival</SectionLabel>
+          <p className="timer-display text-xl text-rally-ice mt-2">
             {formatArrivalTime(event.targetArrivalTime)}
           </p>
         </div>
       </section>
 
-      <div className="mb-6">
+      <div className="mb-5">
         <PushNotificationsProvider>
           <NotificationButton />
         </PushNotificationsProvider>
       </div>
 
       {showSettingsLink && (
-        <p className="text-center mb-6">
-          <Link href="/caller/settings" className="text-rally-muted text-xs hover:text-rally-accent">
-            Notification settings & other rallies →
+        <p className="text-center mb-5">
+          <Link href="/caller/settings" className="nav-link gap-1.5 text-xs">
+            <Settings className="h-3.5 w-3.5" aria-hidden />
+            Notification settings & other rallies
           </Link>
         </p>
       )}
 
       <section className="mt-auto">
         {waitingForGo ? (
-          <div className="p-4 bg-rally-surface border border-rally-border rounded-lg text-center">
+          <Panel className="text-center">
             <p className="text-rally-muted text-sm">
               Launch time appears when an admin presses GO.
             </p>
-          </div>
+          </Panel>
         ) : confirmed ? (
-          <div className="p-4 bg-rally-success/20 border border-rally-success rounded-lg text-center">
-            <p className="text-rally-success font-bold text-lg">✓ LAUNCHED</p>
-            <p className="text-rally-muted text-sm mt-1">
+          <Panel className="text-center !border-rally-success/40 !bg-rally-success/10">
+            <p className="text-rally-success font-bold text-lg tracking-wide">✓ Launched</p>
+            <p className="text-rally-muted text-sm mt-1 font-mono">
               Launch: {formatArrivalTime(assignment.launchTime)}
             </p>
-            <p className="text-rally-muted text-sm">
+            <p className="text-rally-muted text-sm font-mono">
               Expected arrival: {formatArrivalTime(assignment.expectedArrivalTime)}
             </p>
-          </div>
+          </Panel>
         ) : (
           <button
             onClick={confirmLaunch}
-            className="w-full py-5 bg-rally-success text-white font-bold text-xl rounded-lg"
+            className={`w-full py-5 rounded-xl font-bold text-xl tracking-wide ${
+              isNow
+                ? "bg-rally-launch text-white motion-safe:animate-launch-pulse shadow-focus"
+                : "btn-success !text-xl !py-5"
+            }`}
           >
-            RALLY LAUNCHED
+            {isNow ? "Confirm — Rally Launched" : "Rally Launched"}
           </button>
         )}
       </section>

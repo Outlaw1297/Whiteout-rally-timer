@@ -2,15 +2,130 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --rally-bg: #061018;
+  --rally-surface: #0c1824;
+  --rally-surface-2: #122033;
+  --rally-border: #1e3348;
+  --rally-ice: #5ec8f0;
+  --rally-snow: #f0f7fc;
+  --rally-text: #e8f1f8;
+  --rally-muted: #8aa0b5;
+  --rally-success: #3dcea0;
+  --rally-warning: #e8b84a;
+  --rally-danger: #f07178;
+  --rally-launch: #ff4d5a;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  color-scheme: dark;
+}
+
 * {
   -webkit-tap-highlight-color: transparent;
 }
 
+html {
+  background: var(--rally-bg);
+}
+
 body {
   overscroll-behavior: none;
+  background:
+    radial-gradient(1200px 500px at 50% -10%, rgba(94, 200, 240, 0.07), transparent 55%),
+    linear-gradient(180deg, #07141f 0%, var(--rally-bg) 42%, #040b12 100%);
+  background-attachment: fixed;
+  color: var(--rally-text);
+  font-feature-settings: "tnum" 1, "ss01" 1;
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* Subtle arctic grid — very low contrast, no distraction */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image:
+    linear-gradient(rgba(240, 247, 252, 0.7) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(240, 247, 252, 0.7) 1px, transparent 1px);
+  background-size: 48px 48px;
+  z-index: 0;
+}
+
+body > * {
+  position: relative;
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold tracking-wide transition-colors disabled:opacity-50 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rally-ice/60 focus-visible:ring-offset-2 focus-visible:ring-offset-rally-bg min-h-[44px];
+  }
+
+  .btn-primary {
+    @apply btn bg-rally-ice text-rally-bg hover:bg-rally-ice-dim;
+  }
+
+  .btn-success {
+    @apply btn bg-rally-success text-rally-bg hover:brightness-110;
+  }
+
+  .btn-danger {
+    @apply btn bg-rally-launch text-white hover:brightness-110;
+  }
+
+  .btn-secondary {
+    @apply btn bg-rally-surface-2 text-rally-snow border border-rally-border hover:border-rally-ice/50;
+  }
+
+  .btn-ghost {
+    @apply btn bg-transparent text-rally-muted hover:text-rally-ice px-2 py-2 min-h-[40px];
+  }
+
+  .input-field {
+    @apply w-full rounded-lg border border-rally-border bg-rally-bg px-3 py-3 text-rally-text placeholder:text-rally-muted/70 focus:border-rally-ice focus:outline-none focus:ring-2 focus:ring-rally-ice/30 min-h-[44px];
+  }
+
+  .label-field {
+    @apply mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-rally-muted;
+  }
+
+  .timer-display {
+    @apply font-mono font-bold tabular-nums tracking-tight;
+  }
+
+  .nav-link {
+    @apply text-sm text-rally-muted hover:text-rally-ice transition-colors min-h-[40px] inline-flex items-center;
+  }
+
+  .nav-link-active {
+    @apply text-rally-ice font-semibold;
+  }
+
+  .page-enter {
+    @apply motion-safe:animate-soft-fade;
+  }
 }
 
 input[type="time"]::-webkit-calendar-picker-indicator,
 input[type="date"]::-webkit-calendar-picker-indicator {
-  filter: invert(1);
+  filter: invert(1) opacity(0.7);
+}
+
+/* Avoid accidental horizontal scroll on mobile */
+html,
+body {
+  overflow-x: hidden;
 }

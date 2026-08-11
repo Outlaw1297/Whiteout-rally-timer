@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { ArrowLeft, LogOut } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { CallerRallyView } from "@/components/CallerRallyView";
-import { HomeButton } from "@/components/HomeButton";
+import { AppShell, AppHeader } from "@/components/ui/AppShell";
 
 export default function CallerEventPage() {
   const params = useParams();
@@ -23,20 +24,23 @@ export default function CallerEventPage() {
   }
 
   return (
-    <main className="min-h-screen px-4 py-6 max-w-lg mx-auto flex flex-col">
-      <div className="flex items-center justify-between gap-3">
-        <Link href="/caller" className="text-rally-muted text-sm hover:text-rally-accent">
-          ← Home
-        </Link>
-        <div className="flex items-center gap-3">
-          <HomeButton />
-          <button onClick={logout} className="text-rally-muted text-sm hover:text-rally-danger">
+    <AppShell className="flex flex-col page-enter">
+      <AppHeader
+        left={
+          <Link href="/caller" className="nav-link text-sm gap-1">
+            <ArrowLeft className="h-4 w-4" aria-hidden />
+            Home
+          </Link>
+        }
+        right={
+          <button type="button" onClick={logout} className="btn-ghost text-xs gap-1">
+            <LogOut className="h-4 w-4" aria-hidden />
             Logout
           </button>
-        </div>
-      </div>
+        }
+      />
 
       <CallerRallyView eventId={eventId} showSettingsLink />
-    </main>
+    </AppShell>
   );
 }

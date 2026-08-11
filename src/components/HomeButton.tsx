@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { Home } from "lucide-react";
 import { homePathForRole } from "@/lib/roles";
 
 /**
@@ -12,7 +13,7 @@ import { homePathForRole } from "@/lib/roles";
  */
 export function HomeButton({ className = "" }: { className?: string }) {
   const [href, setHref] = useState("/");
-  const [label, setLabel] = useState("⌂ Live rallies");
+  const [label, setLabel] = useState("Live rallies");
 
   useEffect(() => {
     let cancelled = false;
@@ -24,13 +25,13 @@ export function HomeButton({ className = "" }: { className?: string }) {
         if (cancelled) return;
         if (data.user?.role === "CALLER") {
           setHref("/caller");
-          setLabel("⌂ Home");
+          setLabel("Home");
         } else if (data.user?.role === "ADMIN" || data.user?.role === "DEVELOPER") {
           setHref(homePathForRole(data.user.role));
-          setLabel("⌂ Home");
+          setLabel("Home");
         } else {
           setHref("/");
-          setLabel("⌂ Live rallies");
+          setLabel("Live rallies");
         }
       } catch {
         /* keep public home */
@@ -44,9 +45,10 @@ export function HomeButton({ className = "" }: { className?: string }) {
   return (
     <Link
       href={href}
-      className={`inline-flex items-center gap-1 text-rally-accent text-sm font-bold hover:underline ${className}`}
+      className={`nav-link gap-1.5 font-semibold text-rally-ice ${className}`}
       title="Home"
     >
+      <Home className="h-4 w-4" aria-hidden />
       {label}
     </Link>
   );

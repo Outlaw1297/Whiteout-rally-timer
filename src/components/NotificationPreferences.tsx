@@ -45,29 +45,32 @@ export function NotificationPreferences() {
 
       <div className="mb-3 space-y-1 mt-2">
         <p className="label-field">Always Sent</p>
-        <label className="flex items-center gap-2 text-rally-text">
-          <input type="checkbox" checked disabled className="accent-rally-ice" />
+        <label className="flex items-center gap-3 text-sm text-rally-text min-h-[44px]">
+          <input type="checkbox" checked disabled className="h-4 w-4 accent-rally-ice" />
           Rally Timer Started
         </label>
-        <label className="flex items-center gap-2 text-rally-text">
-          <input type="checkbox" checked disabled className="accent-rally-ice" />
+        <label className="flex items-center gap-3 text-sm text-rally-text min-h-[44px]">
+          <input type="checkbox" checked disabled className="h-4 w-4 accent-rally-ice" />
           Throw Rally Now
         </label>
       </div>
 
       <div className="pt-3 border-t border-rally-border space-y-1">
         <p className="label-field mb-1">Optional Warnings</p>
-        <p className="text-rally-muted text-xs mb-2">
+        <p className="text-rally-muted text-sm mb-2">
           Choose how early you want countdown alerts before your throw.
         </p>
         {allowed.map((seconds) => (
-          <label key={seconds} className="flex items-center gap-2 mb-1 cursor-pointer">
+          <label
+            key={seconds}
+            className="flex items-center gap-3 mb-0.5 cursor-pointer text-sm text-rally-snow min-h-[44px]"
+          >
             <input
               type="checkbox"
               checked={leads.includes(seconds)}
               disabled={saving}
               onChange={() => toggleLead(seconds)}
-              className="accent-rally-ice"
+              className="h-4 w-4 accent-rally-ice"
             />
             {formatLead(seconds)}
           </label>

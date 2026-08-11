@@ -36,6 +36,7 @@ import {
   type MarchAssignment,
 } from "@/lib/march-groups";
 import { HitOrderPreview } from "@/components/HitOrderPreview";
+import { RallyTimeline } from "@/components/RallyTimeline";
 import { isAdminRole } from "@/lib/roles";
 
 interface NotificationMonitor {
@@ -110,7 +111,7 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
 
   const nextCaller = useNextCaller(event?.assignments, correctedNow, event?.status === "ACTIVE");
   const nextLaunchMs = nextCaller?.launchTime ? new Date(nextCaller.launchTime).getTime() : null;
-  const { display: nextCountdown } = useCountdown(nextLaunchMs, correctedNow);
+  const { display: nextCountdown, isNow: nextIsNow } = useCountdown(nextLaunchMs, correctedNow);
 
   const flash = (ok: string | null, err: string | null = null) => {
     setStatusMsg(ok);
@@ -566,13 +567,42 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
       </Panel>
 
       {nextCaller && isActive && (
-        <Panel launch className="mb-4 text-center">
-          <SectionLabel>Next Caller</SectionLabel>
-          <p className="text-2xl font-bold text-rally-snow mt-1">
-            {nextCaller.displayName.toUpperCase()}
+        <Panel launch={nextIsNow} accent={!nextIsNow} className="mb-4 text-center !p-5">
+          <SectionLabel>Next Up</SectionLabel>
+          <p className="text-2xl font-bold text-rally-snow mt-1 tracking-wide uppercase">
+            {nextCaller.displayName}
           </p>
-          <p className="timer-display text-4xl text-rally-launch mt-2">{nextCountdown}</p>
+          {nextIsNow ? (
+            <p className="mt-2 text-4xl font-black uppercase tracking-tight text-rally-launch">
+              Launch Now
+            </p>
+          ) : (
+            <p className="timer-display text-4xl text-rally-ice mt-2">{nextCountdown}</p>
+          )}
         </Panel>
+      )}
+
+      {isActive && launchSlots.length > 0 && (
+        <RallyTimeline
+          slots={launchSlots.map((slot) => {
+            const launchMs = slot.launchTime ? new Date(slot.launchTime).getTime() : null;
+            const now = correctedNow();
+            const isNow =
+              launchMs !== null && launchMs <= now && slot.status !== "LAUNCHED";
+            return {
+              id: slot.assignmentIds.join("-"),
+              displayNames: slot.displayNames,
+              marchFormatted: slot.marchFormatted,
+              launchTime: slot.launchTime,
+              status: slot.status,
+              highlight: slot.assignmentIds.some((id) =>
+                nextCaller?.assignmentIds.includes(id)
+              ),
+              isNow,
+            };
+          })}
+          targetArrivalTime={event.targetArrivalTime}
+        />
       )}
 
       {isActive && (

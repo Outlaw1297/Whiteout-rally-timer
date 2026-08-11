@@ -122,16 +122,12 @@ export default function AdminDashboard() {
   }
 
   return (
-    <AppShell className="page-enter">
+    <AppShell wide className="page-enter">
       <TemplateSwitcher onChanged={loadEvents} />
 
       <AdminNav displayName={user.displayName} role={user.role} onLogout={logout} />
 
       <RolesNote compact />
-
-      <PushSetupCard />
-
-      <NotificationPreferences />
 
       <button
         onClick={() => setShowCreate(!showCreate)}
@@ -280,6 +276,12 @@ export default function AdminDashboard() {
           );
         })}
       </section>
+
+      <div className="mt-8 space-y-4">
+        <SectionLabel>Notifications</SectionLabel>
+        <PushSetupCard />
+        <NotificationPreferences />
+      </div>
     </AppShell>
   );
 }

@@ -129,14 +129,11 @@ export function TemplateSwitcher({ currentEventId, onChanged }: TemplateSwitcher
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="fixed right-0 top-1/3 z-40 writing-mode-vertical px-2 py-4 bg-rally-surface border border-r-0 border-rally-border rounded-l-xl text-rally-ice text-xs font-semibold shadow-lg hover:bg-rally-surface-2 transition-colors"
-        style={{ writingMode: "vertical-rl", textOrientation: "mixed" }}
+        className="fixed right-3 bottom-[max(1.25rem,env(safe-area-inset-bottom))] z-40 inline-flex items-center gap-2 rounded-full border border-rally-ice/40 bg-rally-surface px-4 py-3 text-sm font-semibold text-rally-ice shadow-panel hover:bg-rally-surface-2 transition-colors min-h-[48px]"
         aria-label="Open templates"
       >
-        <span className="inline-flex items-center gap-1">
-          <LayoutGrid className="h-3.5 w-3.5" aria-hidden />
-          Templates
-        </span>
+        <LayoutGrid className="h-4 w-4" aria-hidden />
+        Templates
       </button>
 
       {open && (

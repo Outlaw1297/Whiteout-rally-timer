@@ -17,7 +17,7 @@ async function getPushLeadForUser(userId: string, eventPushLeadMs: number) {
 
 async function syncNotificationEventsForAssignment(
   assignment: RallyAssignment,
-  user: User,
+  user: User | null,
   event: Pick<RallyEvent, "pushLeadMs" | "startedAt">,
   options: {
     preserveTerminal?: boolean;
@@ -92,7 +92,7 @@ async function syncNotificationEventsForAssignment(
 
 export async function createNotificationEventsForAssignment(
   assignment: RallyAssignment,
-  user: User,
+  user: User | null,
   event: Pick<RallyEvent, "pushLeadMs" | "startedAt">,
   options?: {
     preserveTerminal?: boolean;
@@ -220,9 +220,11 @@ export async function activateEventNotifications(
   };
 
   for (const assignment of event.assignments) {
-    if (!assignment.user || !assignment.launchTime) continue;
+    if (!assignment.launchTime) continue;
 
-    const pushLeadMs = await getPushLeadForUser(assignment.user.id, event.pushLeadMs);
+    const pushLeadMs = assignment.user
+      ? await getPushLeadForUser(assignment.user.id, event.pushLeadMs)
+      : event.pushLeadMs;
 
     await createNotificationEventsForAssignment(
       assignment,

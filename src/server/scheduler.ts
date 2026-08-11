@@ -199,6 +199,26 @@ async function processNotificationEvent(eventId: string) {
     where: { userId: user.id, active: true },
   });
 
+  // Linked account but no active push devices — not a successful send.
+  if (subscriptions.length === 0) {
+    await prisma.notificationEvent.update({
+      where: { id: eventId },
+      data: {
+        sentAt,
+        latencyMs,
+        status: "SKIPPED",
+        error: "no devices",
+      },
+    });
+    logger.info("notification_skipped_no_devices", {
+      caller: callerName,
+      rally: rallyEvent.name,
+      type: notification.type,
+      scheduledAt: notification.scheduledAt.toISOString(),
+    });
+    return;
+  }
+
   let successCount = 0;
   let failCount = 0;
   let lastError: string | null = null;
@@ -237,7 +257,7 @@ async function processNotificationEvent(eventId: string) {
     });
   }
 
-  const success = successCount > 0 || subscriptions.length === 0;
+  const success = successCount > 0;
 
   await prisma.notificationEvent.update({
     where: { id: eventId },
@@ -245,7 +265,7 @@ async function processNotificationEvent(eventId: string) {
       sentAt,
       latencyMs,
       status: success ? "SENT" : "FAILED",
-      error: failCount > 0 ? lastError : subscriptions.length === 0 ? "no devices" : null,
+      error: success ? null : lastError,
     },
   });
 

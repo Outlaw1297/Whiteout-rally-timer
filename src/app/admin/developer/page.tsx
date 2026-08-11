@@ -27,6 +27,13 @@ interface DeviceInfo {
   updatedAt: string;
 }
 
+interface NotificationStats {
+  successfulNotifications: number;
+  failedNotifications: number;
+  missedNotifications: number;
+  pendingNotifications: number;
+}
+
 interface UserWithDevices {
   id: string;
   username: string;
@@ -41,6 +48,7 @@ interface UserWithDevices {
   successfulNotifications: number;
   missedNotifications: number;
   failedNotifications: number;
+  pendingNotifications?: number;
   devices: DeviceInfo[];
 }
 
@@ -85,6 +93,9 @@ export default function DeveloperPage() {
   const [clock, setClock] = useState<ClockInfo | null>(null);
   const [pushEnabled, setPushEnabled] = useState(false);
   const [vapidSource, setVapidSource] = useState<string | null>(null);
+  const [notificationSummary, setNotificationSummary] = useState<NotificationStats | null>(
+    null
+  );
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
   const [testing, setTesting] = useState<string | null>(null);
@@ -121,6 +132,7 @@ export default function DeveloperPage() {
       setUsers(devData.users || []);
       setPushEnabled(!!devData.pushEnabled);
       setVapidSource(devData.vapidSource || null);
+      setNotificationSummary(devData.summary?.notifications || null);
 
       if (timeRes.ok) {
         const timeData = await timeRes.json();
@@ -333,6 +345,34 @@ export default function DeveloperPage() {
         </Panel>
       )}
 
+      {notificationSummary && (
+        <Panel className="mb-4">
+          <SectionLabel>Rally notification totals</SectionLabel>
+          <p className="text-[11px] text-rally-muted mt-1 mb-2">
+            Scheduled rally alerts only (not Developer Test pushes). Sent = delivered to at least
+            one device.
+          </p>
+          <p className="text-xs flex flex-wrap gap-x-3 gap-y-1">
+            <span className="text-rally-success inline-flex items-center gap-1">
+              <Check className="h-3.5 w-3.5" aria-hidden />
+              {notificationSummary.successfulNotifications} sent
+            </span>
+            <span className="text-rally-danger inline-flex items-center gap-1">
+              <X className="h-3.5 w-3.5" aria-hidden />
+              {notificationSummary.failedNotifications} failed
+            </span>
+            <span className="text-rally-warning inline-flex items-center gap-1">
+              <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
+              {notificationSummary.missedNotifications} missed/skipped
+            </span>
+            <span className="text-rally-muted inline-flex items-center gap-1">
+              <Clock className="h-3.5 w-3.5" aria-hidden />
+              {notificationSummary.pendingNotifications} pending
+            </span>
+          </p>
+        </Panel>
+      )}
+
       <div className="mb-4">
         <input
           type="search"
@@ -386,7 +426,10 @@ export default function DeveloperPage() {
               <p className="text-rally-muted text-[11px] mt-1">
                 Login {formatWhen(u.lastLoginAt)} · Calibrated {formatWhen(u.lastCalibratedAt)}
               </p>
-              <p className="text-[11px] mt-1 flex flex-wrap gap-x-2">
+              <p className="text-[10px] text-rally-muted mt-2 uppercase tracking-wide">
+                Linked rally alerts
+              </p>
+              <p className="text-[11px] mt-0.5 flex flex-wrap gap-x-2">
                 <span className="text-rally-success inline-flex items-center gap-1">
                   <Check className="h-3 w-3" aria-hidden />
                   {u.successfulNotifications} sent
@@ -399,6 +442,12 @@ export default function DeveloperPage() {
                   <AlertTriangle className="h-3 w-3" aria-hidden />
                   {u.missedNotifications} missed/skipped
                 </span>
+                {(u.pendingNotifications ?? 0) > 0 && (
+                  <span className="text-rally-muted inline-flex items-center gap-1">
+                    <Clock className="h-3 w-3" aria-hidden />
+                    {u.pendingNotifications} pending
+                  </span>
+                )}
               </p>
 
               {u.devices.length === 0 ? (

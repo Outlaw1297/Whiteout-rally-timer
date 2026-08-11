@@ -1,8 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { sendPushNotification } from "@/lib/push";
 import { defaultDeliveryLeadMs } from "@/lib/delivery-lead";
-import { shouldSkipSilentPush } from "@/lib/push-text";
-import { isAdminRole } from "./roles";
 
 export const CALIBRATION_PING_COUNT = 3;
 export const CALIBRATION_PING_SPACING_MS = 700;
@@ -28,83 +26,39 @@ export async function sendCalibrationPings(
     return { error: "No active push subscription" as const, status: 404 as const };
   }
 
-  // Apple/WebKit ignores `silent` and renders whitespace title/body as an empty
-  // banner ("from Whiteout Rally" with no text). Never send blank silent pings there.
-  const androidTargets = silent
-    ? subscriptions.filter((sub) => !shouldSkipSilentPush(sub))
-    : subscriptions;
-  const appleTargets =
-    silent && mode === "setup"
-      ? subscriptions.filter((sub) => shouldSkipSilentPush(sub))
-      : silent
-        ? []
-        : [];
-
-  if (androidTargets.length === 0 && appleTargets.length === 0) {
-    return {
-      total: 0,
-      pings: [] as Array<{ index: number; targetAt: string }>,
-      mode,
-      skippedApple: true,
-      status: 200 as const,
-    };
-  }
-
   const pings: Array<{ index: number; targetAt: string }> = [];
-  // Apple gets a single visible setup ping (WebKit cannot do silent push).
-  const applePingCount = appleTargets.length > 0 ? 1 : 0;
-  const effectiveCount = Math.max(pingCount, applePingCount);
 
-  for (let i = 0; i < effectiveCount; i++) {
+  for (let i = 0; i < pingCount; i++) {
     const targetAt = new Date(Date.now() + 300).toISOString();
 
-    if (i < pingCount) {
-      for (const sub of androidTargets) {
-        await sendPushNotification(
-          { endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth },
-          {
-            title: " ",
-            body: " ",
-            rallyId: mode === "live" ? "calibration-live" : "calibration",
-            notificationType: "CALIBRATION",
-            targetAt,
-            calibrationIndex: i + 1,
-            calibrationTotal: pingCount,
-            silent: true,
-            livePing: mode === "live",
-          }
-        );
-      }
-    }
-
-    if (i === 0) {
-      for (const sub of appleTargets) {
-        await sendPushNotification(
-          { endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth },
-          {
-            title: "Timing check",
-            body: "Calibrating alert delay for this iPhone. You can dismiss this.",
-            rallyId: "calibration",
-            notificationType: "CALIBRATION",
-            targetAt,
-            calibrationIndex: 1,
-            calibrationTotal: 1,
-            silent: false,
-            livePing: false,
-          }
-        );
-      }
+    for (const sub of subscriptions) {
+      await sendPushNotification(
+        { endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth },
+        {
+          // Blank title/body — SW skips OS banners for silent calibration when the
+          // app is open, and immediately closes any required placeholder when not.
+          title: " ",
+          body: " ",
+          rallyId: mode === "live" ? "calibration-live" : "calibration",
+          notificationType: "CALIBRATION",
+          targetAt,
+          calibrationIndex: i + 1,
+          calibrationTotal: pingCount,
+          silent: true,
+          livePing: mode === "live",
+        }
+      );
     }
 
     pings.push({ index: i + 1, targetAt });
 
-    if (i < effectiveCount - 1) {
+    if (i < pingCount - 1) {
       await sleep(CALIBRATION_PING_SPACING_MS);
     }
   }
 
   return {
-    total: Math.max(pingCount, applePingCount),
+    total: pingCount,
     pings,
     mode,
     status: 200 as const,
@@ -135,6 +89,8 @@ export async function getCalibrationStatus(userId: string) {
     isCalibrated: totalSamples >= CALIBRATION_PING_COUNT,
   };
 }
+
+import { isAdminRole } from "./roles";
 
 /** True when the user has no ACTIVE rallies (safe for background timing pings). */
 export async function userHasActiveRally(userId: string, role: string): Promise<boolean> {

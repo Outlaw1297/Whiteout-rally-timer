@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { jsonResponse } from "@/lib/api";
 import { requireAdmin } from "@/lib/auth";
 import { getVapidDiagnostics, initWebPush } from "@/lib/push";
+import { platformFamily, resolveDevicePlatform } from "@/lib/device-platform";
 
 export async function GET(request: NextRequest) {
   const session = await requireAdmin(request);
@@ -45,19 +46,25 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  return jsonResponse({
-    pushEnabled: diagnostics.configured,
-    vapidSource: diagnostics.source,
-    autoManaged: diagnostics.autoManaged,
-    devices: subscriptions.map((sub) => ({
+  const devices = subscriptions.map((sub) => {
+    const platform = resolveDevicePlatform(sub.platform, sub.userAgent);
+    return {
       id: sub.id,
-      platform: sub.platform || "unknown",
+      platform,
+      platformFamily: platformFamily(platform),
       userAgent: sub.userAgent,
       deliveryLeadMs: sub.deliveryLeadMs,
       deliverySampleCount: sub.deliverySampleCount,
       updatedAt: sub.updatedAt.toISOString(),
       user: sub.user,
-    })),
+    };
+  });
+
+  return jsonResponse({
+    pushEnabled: diagnostics.configured,
+    vapidSource: diagnostics.source,
+    autoManaged: diagnostics.autoManaged,
+    devices,
     users: users.map((u) => ({
       id: u.id,
       username: u.username,
@@ -67,13 +74,11 @@ export async function GET(request: NextRequest) {
       deviceCount: u._count.pushSubscriptions,
     })),
     summary: {
-      totalDevices: subscriptions.length,
-      android: subscriptions.filter((s) => s.platform === "Android").length,
-      ios: subscriptions.filter((s) => s.platform === "iOS").length,
-      desktop: subscriptions.filter((s) => s.platform === "Desktop").length,
-      unknown: subscriptions.filter(
-        (s) => !s.platform || !["Android", "iOS", "Desktop"].includes(s.platform)
-      ).length,
+      totalDevices: devices.length,
+      android: devices.filter((s) => s.platformFamily === "Android").length,
+      ios: devices.filter((s) => s.platformFamily === "iOS").length,
+      desktop: devices.filter((s) => s.platformFamily === "Desktop").length,
+      unknown: devices.filter((s) => s.platformFamily === "Unknown").length,
     },
   });
 }

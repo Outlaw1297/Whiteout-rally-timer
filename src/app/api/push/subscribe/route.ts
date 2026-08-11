@@ -6,6 +6,7 @@ import { rateLimit, RATE_LIMITS, getClientIp, rateLimitResponse } from "@/lib/ra
 import { logger } from "@/lib/logger";
 import { getVapidPublicKey, getVapidDiagnostics, initWebPush } from "@/lib/push";
 import { defaultDeliveryLeadMs } from "@/lib/delivery-lead";
+import { detectPlatformFromUA } from "@/lib/device-platform";
 
 export async function GET() {
   const publicKey = await getVapidPublicKey();
@@ -40,13 +41,26 @@ export async function POST(request: NextRequest) {
     return errorResponse("Invalid JSON body");
   }
 
-  const { endpoint, keys, userAgent, platform } = body;
+  const { endpoint, keys, userAgent, platform: clientPlatform } = body;
 
   if (!endpoint || !keys?.p256dh || !keys?.auth) {
     return errorResponse("endpoint and keys (p256dh, auth) are required");
   }
 
-  const freshLead = defaultDeliveryLeadMs(undefined, platform || userAgent);
+  // Prefer the browser-reported UA; fall back to the HTTP header. Always derive
+  // platform on the server — client labels can be stale/wrong (e.g. Linux before Android).
+  const resolvedUa =
+    (typeof userAgent === "string" && userAgent.trim()) ||
+    request.headers.get("user-agent") ||
+    null;
+  const fromUa = resolvedUa ? detectPlatformFromUA(resolvedUa) : null;
+  const platform =
+    (fromUa && fromUa !== "Unknown" ? fromUa : null) ||
+    (typeof clientPlatform === "string" && clientPlatform.trim()) ||
+    fromUa ||
+    null;
+
+  const freshLead = defaultDeliveryLeadMs(undefined, platform || resolvedUa);
 
   const subscription = await prisma.pushSubscription.upsert({
     where: { endpoint },
@@ -55,8 +69,8 @@ export async function POST(request: NextRequest) {
       endpoint,
       p256dh: keys.p256dh,
       auth: keys.auth,
-      userAgent: userAgent || null,
-      platform: platform || null,
+      userAgent: resolvedUa,
+      platform,
       active: true,
       deliveryLeadMs: freshLead,
       deliverySampleCount: 0,
@@ -65,8 +79,8 @@ export async function POST(request: NextRequest) {
       userId: session.id,
       p256dh: keys.p256dh,
       auth: keys.auth,
-      userAgent: userAgent || null,
-      platform: platform || null,
+      userAgent: resolvedUa,
+      platform,
       active: true,
       deliveryLeadMs: freshLead,
       deliverySampleCount: 0,

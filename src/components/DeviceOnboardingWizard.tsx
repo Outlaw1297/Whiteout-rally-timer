@@ -40,6 +40,7 @@ type StepId =
   | "welcome"
   | "install"
   | "notifications"
+  | "previews"
   | "heads-up"
   | "battery"
   | "test"
@@ -385,6 +386,7 @@ function WizardBody() {
   const [standalone, setStandalone] = useState(false);
   const [mobile, setMobile] = useState(false);
   const [android, setAndroid] = useState(false);
+  const [ios, setIos] = useState(false);
   const [notifsEnabled, setNotifsEnabled] = useState(false);
   const [tested, setTested] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
@@ -394,6 +396,7 @@ function WizardBody() {
     setStandalone(isStandalonePWA());
     setMobile(isMobileDevice());
     setAndroid(isAndroidDevice());
+    setIos(isIOSDevice());
   }, []);
 
   const steps = useMemo(() => {
@@ -418,6 +421,14 @@ function WizardBody() {
       title: "Allow notifications",
       subtitle: "Required for throw alerts on this phone.",
     });
+
+    if (ios) {
+      list.push({
+        id: "previews",
+        title: "Show Previews → Always",
+        subtitle: "Otherwise lock-screen alerts hide the throw text.",
+      });
+    }
 
     if (android) {
       list.push({
@@ -449,7 +460,7 @@ function WizardBody() {
     });
 
     return list;
-  }, [mobile, standalone, installKind, android]);
+  }, [mobile, standalone, installKind, android, ios]);
 
   const step = steps[Math.min(stepIndex, steps.length - 1)];
 
@@ -570,6 +581,33 @@ function WizardBody() {
           </PushNotificationsProvider>
         )}
 
+        {step.id === "previews" && (
+          <div className="space-y-4">
+            <p className="text-sm text-rally-muted leading-relaxed">
+              If lock-screen alerts only say “from Whiteout Rally” with no throw text, iPhone is
+              hiding notification content. Set Show Previews to{" "}
+              <span className="font-semibold text-rally-snow">Always</span>.
+            </p>
+            <Shot
+              src="/onboarding/ios-show-previews.jpg"
+              alt="iOS Settings Show Previews set to Always"
+              caption="Settings → Notifications → Show Previews → Always"
+            />
+            <ol className="list-decimal list-inside space-y-2 text-sm text-rally-snow">
+              <li>Open Settings → Notifications</li>
+              <li>Tap Show Previews near the top</li>
+              <li>
+                Choose <span className="font-semibold text-rally-ice">Always</span> (not When
+                Unlocked)
+              </li>
+            </ol>
+            <Tip>
+              “When Unlocked” is the iPhone default — it hides the body until you unlock, which
+              looks like a blank rally alert.
+            </Tip>
+          </div>
+        )}
+
         {step.id === "heads-up" && <HeadsUpStepBody oem={oem} />}
 
         {step.id === "battery" && (
@@ -606,13 +644,22 @@ function WizardBody() {
 
         {step.id === "tips" && (
           <div className="space-y-3">
-            {[
-              "Keep Rally Timer installed — don't rely on a random Chrome tab.",
-              "Before a war: open Rally Timer once, confirm notifications show Enabled.",
-              "If banners stop: open /fix-notifications for your phone's pop-up steps.",
-              "Admins: link each caller slot to an account that enabled alerts on their phone.",
-              "High delivery lead is learned automatically after a few alerts — leave it alone.",
-            ].map((tip) => (
+            {(ios
+              ? [
+                  "iPhone: Settings → Notifications → Show Previews → Always (or lock-screen alerts hide the throw text).",
+                  "Keep Rally Timer installed from Safari — don't rely on a normal browser tab.",
+                  "Before a war: open Rally Timer once, confirm notifications show Enabled.",
+                  "Admins: link each caller slot to an account that enabled alerts on their phone.",
+                  "High delivery lead is learned automatically after a few alerts — leave it alone.",
+                ]
+              : [
+                  "Keep Rally Timer installed — don't rely on a random Chrome tab.",
+                  "Before a war: open Rally Timer once, confirm notifications show Enabled.",
+                  "If banners stop: open /fix-notifications for your phone's pop-up steps.",
+                  "Admins: link each caller slot to an account that enabled alerts on their phone.",
+                  "High delivery lead is learned automatically after a few alerts — leave it alone.",
+                ]
+            ).map((tip) => (
               <div
                 key={tip}
                 className="flex gap-2.5 rounded-lg border border-rally-border bg-rally-bg px-3 py-2.5"

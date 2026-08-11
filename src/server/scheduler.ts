@@ -9,7 +9,6 @@ import {
   type NotificationOffsetType,
 } from "@/lib/timing";
 import { completeRallyAfterLastCaller } from "@/lib/complete-rally";
-import { sanitizeNotificationText } from "@/lib/push-text";
 
 const POLL_INTERVAL_MS = 100;
 const DUE_GRACE_MS = 100;
@@ -226,12 +225,11 @@ async function processNotificationEvent(eventId: string) {
   const expiredIds: string[] = [];
 
   await mapPool(subscriptions, MAX_PARALLEL_DEVICES, async (sub) => {
-    const text = sanitizeNotificationText(presented.title, presented.body);
     const result = await sendPushNotification(
       { endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth },
       {
-        title: text.title,
-        body: text.body,
+        title: presented.title,
+        body: presented.body,
         rallyId: rallyEvent.id,
         notificationType: presented.type,
         assignmentId: assignment.id,

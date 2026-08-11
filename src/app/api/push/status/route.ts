@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { jsonResponse } from "@/lib/api";
 import { requireAuth } from "@/lib/auth";
 import { getVapidPublicKey, getVapidDiagnostics, initWebPush } from "@/lib/push";
+import { resolveDevicePlatform } from "@/lib/device-platform";
 
 export async function GET(request: NextRequest) {
   const session = await requireAuth(request);
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
     publicKey: await getVapidPublicKey(),
     devices: subscriptions.map((sub) => ({
       id: sub.id,
-      platform: sub.platform || "unknown",
+      platform: resolveDevicePlatform(sub.platform, sub.userAgent),
       deliveryLeadMs: sub.deliveryLeadMs,
       deliverySampleCount: sub.deliverySampleCount,
       userAgent: sub.userAgent,

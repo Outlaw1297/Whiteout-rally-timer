@@ -132,6 +132,11 @@ function IosSafariInstallSteps({ compact = false }: { compact?: boolean }) {
           <li>Must be <span className="font-bold text-rally-text">Safari</span> — Chrome/Instagram/Facebook will not work</li>
           <li>iOS 16.4 or newer needed for rally push alerts</li>
           <li>“Add to Home Screen” is often below the first row of apps — keep scrolling</li>
+          <li>
+            After enabling alerts: Settings → Notifications →{" "}
+            <span className="font-bold text-rally-text">Show Previews → Always</span> — otherwise
+            lock-screen banners hide the throw text
+          </li>
         </ul>
       </div>
     </div>

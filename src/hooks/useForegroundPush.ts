@@ -22,8 +22,14 @@ function tryPageNotification(message: ForegroundPushMessage) {
   if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
 
   try {
-    const notification = new Notification(message.title, {
-      body: message.body,
+    const textTitle = String(message.title || "Whiteout Rally").trim() || "Whiteout Rally";
+    const textBody =
+      String(message.body || "Rally notification")
+        .replace(/\n+/g, " · ")
+        .replace(/\s+/g, " ")
+        .trim() || "Rally notification";
+    const notification = new Notification(textTitle, {
+      body: textBody,
       icon: "/icons/icon-192.png",
       tag: `rally-fg-${message.rallyId}-${message.notificationType}-${message.assignmentId}-${message.scheduledAt}`,
     });

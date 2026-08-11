@@ -21,6 +21,12 @@ import {
 import { getEffectivePushLeadMs, nextDeliveryLeadMs } from "../src/lib/delivery-lead";
 import { allCallersHaveCalled, callerHasCalled } from "../src/lib/caller-launch";
 import { shouldDeferRallyCompletion } from "../src/lib/complete-rally";
+import {
+  sanitizeNotificationText,
+  isBlankNotificationText,
+  shouldSkipSilentPush,
+  isAppleWebPushEndpoint,
+} from "../src/lib/push-text";
 import { getHitOrderPreview, getThrowOrderPreview } from "../src/lib/march-groups";
 
 function assertEqual(actual: Date, expectedHour: number, expectedMin: number, expectedSec: number, label: string) {
@@ -449,4 +455,44 @@ console.log("PASS adaptive delivery lead");
   console.log("PASS THROW survives rally completion skip filter");
 }
 
-
+{
+  const s = sanitizeNotificationText(
+    "✅ Test Notification",
+    "Justin,\nrally notifications are working."
+  );
+  if (s.title !== "Test Notification") {
+    console.error("FAIL sanitize should strip leading emoji from title", s);
+    process.exit(1);
+  }
+  if (!s.body.includes(" · ") || s.body.includes("\n")) {
+    console.error("FAIL sanitize should flatten newlines in body", s);
+    process.exit(1);
+  }
+  if (!isBlankNotificationText("   ") || isBlankNotificationText("hi")) {
+    console.error("FAIL blank text helper");
+    process.exit(1);
+  }
+  if (!isAppleWebPushEndpoint("https://web.push.apple.com/abc")) {
+    console.error("FAIL apple endpoint detect");
+    process.exit(1);
+  }
+  if (
+    !shouldSkipSilentPush({
+      endpoint: "https://web.push.apple.com/x",
+      platform: "iOS",
+    })
+  ) {
+    console.error("FAIL should skip silent on apple");
+    process.exit(1);
+  }
+  if (
+    shouldSkipSilentPush({
+      endpoint: "https://fcm.googleapis.com/fcm/send/x",
+      platform: "Android",
+    })
+  ) {
+    console.error("FAIL should not skip silent on android FCM");
+    process.exit(1);
+  }
+  console.log("PASS iOS push text / silent-skip helpers");
+}

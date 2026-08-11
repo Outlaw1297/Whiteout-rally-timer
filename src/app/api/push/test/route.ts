@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { jsonResponse, errorResponse } from "@/lib/api";
 import { requireAuth } from "@/lib/auth";
 import { sendPushNotification, isExpiredSubscription } from "@/lib/push";
+import { sanitizeNotificationText } from "@/lib/push-text";
 
 export async function POST(request: NextRequest) {
   const session = await requireAuth(request);
@@ -19,13 +20,20 @@ export async function POST(request: NextRequest) {
   let successCount = 0;
   let lastError: string | null = null;
   const targetAt = new Date().toISOString();
+  // Avoid emoji in title — some iOS builds render an empty banner when the title
+  // is emoji-prefixed and drop the body.
+  const text = sanitizeNotificationText(
+    "Test Notification",
+    `${session.displayName}, rally notifications are working on this device.`
+  );
+
   for (const sub of subscriptions) {
     const result = await sendPushNotification(
       { endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth },
       {
-        title: "✅ Test Notification",
-        body: `${session.displayName}, rally notifications are working.`,
-        rallyId: "test",
+        title: text.title,
+        body: text.body,
+        rallyId: `test-${Date.now()}`,
         notificationType: "TEST",
         targetAt,
       }

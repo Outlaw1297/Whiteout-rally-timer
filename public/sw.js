@@ -16,61 +16,13 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function isAppleClient() {
-  try {
-    return /iPhone|iPad|iPod|Macintosh/i.test(self.navigator.userAgent || "");
-  } catch {
-    return false;
-  }
-}
-
-function isBlankText(value) {
-  return !String(value || "").trim();
-}
-
-/** WebKit only reliably renders title + body — flatten newlines, never blank. */
-function sanitizeForDisplay(title, body) {
-  const cleanTitle = String(title || "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/^[^A-Za-z0-9▶]+/, "")
-    .trim();
-  const cleanBody = String(body || "")
-    .replace(/\r\n/g, "\n")
-    .replace(/\n+/g, " · ")
-    .replace(/\s+/g, " ")
-    .trim();
-  return {
-    title: cleanTitle || "Whiteout Rally",
-    body: cleanBody || "Rally notification",
-  };
-}
-
 async function listWindowClients() {
-  try {
-    const windows = await self.clients.matchAll({
-      type: "window",
-      includeUncontrolled: true,
-    });
-    if (windows.length > 0) return windows;
-  } catch {
-    /* fall through */
-  }
-  // iOS occasionally returns [] for typed matchAll while the PWA is open.
-  try {
-    return await self.clients.matchAll({ includeUncontrolled: true });
-  } catch {
-    return [];
-  }
+  return self.clients.matchAll({ type: "window", includeUncontrolled: true });
 }
 
 function broadcastToClients(clientList, payload) {
   for (const client of clientList) {
-    try {
-      client.postMessage(payload);
-    } catch {
-      /* ignore */
-    }
+    client.postMessage(payload);
   }
 }
 
@@ -118,10 +70,7 @@ function presentForLatency(data, receivedAtMs) {
     const secondsLeft = (launchMs - receivedAtMs) / 1000;
     if (secondsLeft <= 3) {
       notificationType = "LAUNCH";
-      title = "THROW RALLY NOW";
-      if (isBlankText(body)) {
-        body = "Throw window is now.";
-      }
+      title = "🚨 THROW RALLY NOW";
     } else {
       const match = /^WARNING_(\d+)$/.exec(notificationType);
       const ideal = match ? Number(match[1]) : 10;
@@ -136,55 +85,39 @@ function presentForLatency(data, receivedAtMs) {
 }
 
 /**
- * Show a notification. On Apple/WebKit, only pass title/body/tag/data — richer
- * options are ignored and have been linked to blank banners.
+ * Chrome on Android can reject richer notification options. Always try to show
+ * something — background delivery depends on this succeeding (userVisibleOnly).
+ * Prefer a simple options set first — Samsung heads-up is more reliable without
+ * action buttons / exotic vibrate patterns.
  */
-async function showRallyNotification(title, options, { apple = false } = {}) {
-  const text = sanitizeForDisplay(title, options.body);
-  const appleOptions = {
-    body: text.body,
-    tag: options.tag,
-    data: options.data,
-  };
-
-  if (apple) {
-    try {
-      await self.registration.showNotification(text.title, appleOptions);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  const fullOptions = { ...options, body: text.body };
-
+async function showRallyNotification(title, options) {
   // Pass 1: heads-up friendly (no actions)
   try {
-    const { actions: _a, ...noActions } = fullOptions;
-    await self.registration.showNotification(text.title, noActions);
+    const { actions: _a, ...noActions } = options;
+    await self.registration.showNotification(title, noActions);
     return true;
   } catch {
     /* try with actions / full set */
   }
 
   try {
-    await self.registration.showNotification(text.title, fullOptions);
+    await self.registration.showNotification(title, options);
     return true;
   } catch {
     /* try stripped */
   }
 
   try {
-    const { actions: _a, vibrate: _v, timestamp: _t, ...rest } = fullOptions;
-    await self.registration.showNotification(text.title, rest);
+    const { actions: _a, vibrate: _v, timestamp: _t, ...rest } = options;
+    await self.registration.showNotification(title, rest);
     return true;
   } catch {
     /* try minimal */
   }
 
   try {
-    await self.registration.showNotification(text.title, {
-      body: text.body,
+    await self.registration.showNotification(title, {
+      body: options.body || "Rally notification",
       icon: "/icons/icon-192.png",
       badge: "/icons/icon-192.png",
       tag: options.tag,
@@ -204,6 +137,7 @@ self.addEventListener("push", (event) => {
     event.waitUntil(
       self.registration.showNotification("Whiteout Rally", {
         body: "Rally update",
+        icon: "/icons/icon-192.png",
       })
     );
     return;
@@ -218,6 +152,8 @@ self.addEventListener("push", (event) => {
 
   const receivedAtMs = Date.now();
   const presented = presentForLatency(data, receivedAtMs);
+  const title = presented.title;
+  const body = presented.body;
   const notificationType = presented.notificationType;
 
   const rallyId = data.rallyId || "";
@@ -228,9 +164,7 @@ self.addEventListener("push", (event) => {
   const calibrationTotal = data.calibrationTotal || 0;
   const isCalibration = notificationType === "CALIBRATION";
   const isLivePing = !!data.livePing || rallyId === "calibration-live";
-  // Only treat as silent when explicitly flagged — Apple setup calibration sends
-  // visible CALIBRATION pings with silent:false so the body is not blanked.
-  const preferSilent = !!data.silent || isLivePing;
+  const preferSilent = isCalibration || !!data.silent || isLivePing;
   const url = assignmentId
     ? `/caller/events/${rallyId}`
     : rallyId
@@ -238,13 +172,11 @@ self.addEventListener("push", (event) => {
       : "/caller";
 
   const isLaunch = notificationType === "LAUNCH";
-  const apple = isAppleClient();
-  const display = sanitizeForDisplay(presented.title, presented.body);
 
   const payload = {
     type: "rally-push",
-    title: display.title,
-    body: display.body,
+    title,
+    body,
     rallyId,
     notificationType,
     assignmentId,
@@ -277,19 +209,23 @@ self.addEventListener("push", (event) => {
       // Silent calibration / live pings must not interrupt the user.
       // When any app window is open, skip the OS banner and deliver via postMessage.
       // When backgrounded, Chrome still requires a user-visible notification for
-      // push (userVisibleOnly) — show a placeholder, then close it ASAP.
-      // On Apple, never show a whitespace placeholder (WebKit ignores `silent`).
-      const skipBanner = preferSilent && (hasOpenClient || apple);
+      // push (userVisibleOnly) — show a silent placeholder, then close it ASAP.
+      const skipBanner = preferSilent && hasOpenClient;
 
+      const silentTitle = " ";
+      const silentBody = " ";
       const notificationOptions = {
-        body: preferSilent ? "Syncing timing…" : display.body,
+        body: preferSilent ? silentBody : body,
         icon: "/icons/icon-192.png",
         badge: "/icons/icon-192.png",
         tag,
         renotify: !preferSilent,
+        // Keep THROW sticky when possible; Android mostly ignores this, but it
+        // does not hurt heads-up when Pop-up is enabled.
         requireInteraction: !preferSilent && isLaunch,
         silent: preferSilent,
         timestamp: receivedAtMs,
+        // Short patterns — long multi-pulse vibrates are less reliable on One UI.
         vibrate: preferSilent ? [] : isLaunch ? [400, 120, 400] : [220, 100, 220],
         actions: preferSilent
           ? []
@@ -308,19 +244,26 @@ self.addEventListener("push", (event) => {
 
       // OS notification FIRST — this is what background users see.
       if (!skipBanner) {
-        const showTitle = preferSilent ? "Rally Timer" : display.title;
-        const shown = await showRallyNotification(showTitle, notificationOptions, {
-          apple,
-        });
+        const shown = await showRallyNotification(
+          preferSilent ? silentTitle : title,
+          notificationOptions
+        );
         if (!shown) {
-          await self.registration.showNotification(showTitle || "Whiteout Rally", {
-            body: preferSilent ? "Syncing timing…" : display.body || "Rally notification",
-            tag,
-            data: notificationOptions.data,
-          });
+          await self.registration.showNotification(
+            preferSilent ? silentTitle : title || "Whiteout Rally",
+            {
+              body: preferSilent ? silentBody : body || "Rally notification",
+              icon: "/icons/icon-192.png",
+              tag,
+              renotify: !preferSilent,
+              silent: preferSilent,
+              data: notificationOptions.data,
+            }
+          );
         }
 
-        // Immediately dismiss silent calibration placeholders so they never linger.
+        // Immediately dismiss silent calibration placeholders so they never linger
+        // in the shade / make noise on OEMs that ignore the silent flag.
         if (preferSilent) {
           try {
             const notes = await self.registration.getNotifications({ tag });
@@ -331,7 +274,7 @@ self.addEventListener("push", (event) => {
         }
       }
 
-      // Then notify open pages (in-app banner / calibration progress).
+      // Then notify open pages (in-app banner when foreground).
       broadcastToClients(clientList, payload);
 
       // Delayed, caller-scoped cleanup only (stable tags already replace in place).

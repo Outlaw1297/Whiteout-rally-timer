@@ -188,6 +188,13 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
     return () => clearInterval(interval);
   }, [event?.status, loadEvent]);
 
+  // Templates: poll so caller march edits appear quickly even if a WS frame is missed.
+  useEffect(() => {
+    if (event?.status !== "READY" && event?.status !== "DRAFT") return;
+    const interval = setInterval(loadEvent, 3000);
+    return () => clearInterval(interval);
+  }, [event?.status, loadEvent]);
+
   useEffect(() => {
     if (event?.status !== "COMPLETED") return;
     loadEvent();

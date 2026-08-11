@@ -6,6 +6,7 @@ import { isAdminRole } from "@/lib/roles";
 import { serializeEvent } from "@/lib/rally-event";
 import { parseMarchDuration } from "@/lib/timing";
 import { createNotificationEventsForAssignment } from "@/lib/notifications";
+import { broadcastRallyUpdate } from "@/server/rally-hub";
 
 interface RouteParams {
   params: { id: string; assignmentId: string };
@@ -155,7 +156,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     include: eventInclude,
   });
 
-  return jsonResponse(serializeEvent(updated!));
+  const payload = serializeEvent(updated!);
+  broadcastRallyUpdate(id, payload);
+  return jsonResponse(payload);
 }
 
 export async function DELETE(_request: NextRequest, { params }: RouteParams) {
@@ -177,5 +180,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
     include: eventInclude,
   });
 
-  return jsonResponse(serializeEvent(updated!));
+  const payload = serializeEvent(updated!);
+  broadcastRallyUpdate(id, payload);
+  return jsonResponse(payload);
 }

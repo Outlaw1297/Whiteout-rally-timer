@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { prisma } from "@/lib/prisma";
 import { jsonResponse, errorResponse } from "@/lib/api";
 import { requireAuth } from "@/lib/auth";
 import { rateLimit, RATE_LIMITS, getClientIp, rateLimitResponse } from "@/lib/rate-limit";
@@ -32,6 +33,14 @@ export async function POST(request: NextRequest) {
 
   const mode = body.mode === "live" ? "live" : "setup";
   const silent = body.silent !== false;
+
+  // Any live-ping attempt means the app is open — mark presence even if we skip sending.
+  if (mode === "live") {
+    await prisma.user.update({
+      where: { id: session.id },
+      data: { lastSeenAt: new Date() },
+    });
+  }
 
   const limitKey =
     mode === "live" ? `push-calibrate-live:${session.id}` : `push-calibrate:${ip}`;

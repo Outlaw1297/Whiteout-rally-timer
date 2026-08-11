@@ -9,6 +9,7 @@ import {
   KeyRound,
   Shield,
   ShieldCheck,
+  Trash2,
   User,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -28,10 +29,12 @@ interface UserRow {
   role: string;
   active: boolean;
   activeDevices: number;
+  online?: boolean;
   deliveryLeadMs: number | null;
   deliverySampleCount: number;
   lastCalibratedAt: string | null;
   lastLoginAt: string | null;
+  lastSeenAt?: string | null;
 }
 
 type SortKey = "displayName" | "username" | "role" | "devices" | "calibrated" | "login";
@@ -79,6 +82,26 @@ export default function AdminUsersPage() {
     fetch("/api/admin/users")
       .then((r) => r.json())
       .then((data) => setUsers(data.users || []));
+  };
+
+  const deleteUser = async (id: string, name: string) => {
+    if (
+      !confirm(
+        `Permanently delete ${name}? Their devices and rally links will be removed. This cannot be undone.`
+      )
+    ) {
+      return;
+    }
+    setErrorMsg("");
+    setStatusMsg("");
+    const res = await fetch(`/api/admin/users/${id}`, { method: "DELETE" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setErrorMsg(data.error || "Failed to delete user");
+      return;
+    }
+    setStatusMsg(data.message || `Deleted ${name}`);
+    loadUsers();
   };
 
   useEffect(() => {
@@ -517,9 +540,16 @@ export default function AdminUsersPage() {
                     </>
                   ) : null}
                 </p>
-                <p className="text-rally-muted text-[11px] mt-1">
-                  Calibrated: {formatWhen(u.lastCalibratedAt)} · Login:{" "}
-                  {formatWhen(u.lastLoginAt)}
+                <p className="text-rally-muted text-[11px] mt-1 flex flex-wrap items-center gap-1.5">
+                  <StatusBadge tone={u.online ? "live" : "neutral"} pulse={!!u.online}>
+                    {u.online ? "Online" : "Offline"}
+                  </StatusBadge>
+                  <span>
+                    Seen {formatWhen(u.lastSeenAt)} · Login {formatWhen(u.lastLoginAt)}
+                  </span>
+                </p>
+                <p className="text-rally-muted text-[11px] mt-0.5">
+                  Calibrated: {formatWhen(u.lastCalibratedAt)}
                 </p>
                 {u.activeDevices === 0 && u.role === "CALLER" && (
                   <p className="text-rally-warning text-xs mt-1">
@@ -586,6 +616,16 @@ export default function AdminUsersPage() {
                     }`}
                   >
                     {u.active ? "Disable" : "Enable"}
+                  </button>
+                )}
+                {u.id !== user.id && (
+                  <button
+                    onClick={() => deleteUser(u.id, u.displayName)}
+                    className="btn-ghost !min-h-[32px] !py-1 !px-2 text-xs text-rally-danger gap-1"
+                    title="Delete user"
+                  >
+                    <Trash2 className="h-3 w-3" aria-hidden />
+                    Delete
                   </button>
                 )}
               </div>

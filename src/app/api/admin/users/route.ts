@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { jsonResponse, errorResponse } from "@/lib/api";
 import { requireAdmin, hashPassword, generateTempPassword, validatePassword } from "@/lib/auth";
 import { isDeveloperRole, type AppRole } from "@/lib/roles";
+import { isOnline } from "@/lib/presence";
 
 export async function GET(request: NextRequest) {
   const session = await requireAdmin(request);
@@ -20,18 +21,22 @@ export async function GET(request: NextRequest) {
       deliverySampleCount: true,
       lastCalibratedAt: true,
       lastLoginAt: true,
+      lastSeenAt: true,
       createdAt: true,
       _count: { select: { pushSubscriptions: { where: { active: true } } } },
     },
   });
 
+  const now = Date.now();
   return jsonResponse({
     users: users.map((u) => ({
       ...u,
       activeDevices: u._count.pushSubscriptions,
+      online: isOnline(u.lastSeenAt, now),
       createdAt: u.createdAt.toISOString(),
       lastCalibratedAt: u.lastCalibratedAt?.toISOString() ?? null,
       lastLoginAt: u.lastLoginAt?.toISOString() ?? null,
+      lastSeenAt: u.lastSeenAt?.toISOString() ?? null,
     })),
   });
 }

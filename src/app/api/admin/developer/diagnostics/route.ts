@@ -4,6 +4,7 @@ import { jsonResponse, errorResponse } from "@/lib/api";
 import { requireAuth } from "@/lib/auth";
 import { isDeveloperRole } from "@/lib/roles";
 import { getVapidDiagnostics, initWebPush } from "@/lib/push";
+import { isOnline } from "@/lib/presence";
 
 export const dynamic = "force-dynamic";
 
@@ -104,6 +105,7 @@ export async function GET(request: NextRequest) {
       deliverySampleCount: true,
       lastCalibratedAt: true,
       lastLoginAt: true,
+      lastSeenAt: true,
       pushSubscriptions: {
         where: { active: true },
         orderBy: { updatedAt: "desc" },
@@ -114,6 +116,7 @@ export async function GET(request: NextRequest) {
           deliveryLeadMs: true,
           deliverySampleCount: true,
           lastCalibratedAt: true,
+          lastSeenAt: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -138,8 +141,21 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  const now = Date.now();
   const nestedUsers = users.map((u) => {
     const stats = tally(u.assignments);
+    const devices = u.pushSubscriptions.map((sub) => ({
+      id: sub.id,
+      platform: sub.platform || "unknown",
+      userAgent: sub.userAgent,
+      deliveryLeadMs: sub.deliveryLeadMs,
+      deliverySampleCount: sub.deliverySampleCount,
+      lastCalibratedAt: sub.lastCalibratedAt?.toISOString() ?? null,
+      lastSeenAt: sub.lastSeenAt?.toISOString() ?? null,
+      online: isOnline(sub.lastSeenAt, now),
+      createdAt: sub.createdAt.toISOString(),
+      updatedAt: sub.updatedAt.toISOString(),
+    }));
     return {
       id: u.id,
       username: u.username,
@@ -151,17 +167,10 @@ export async function GET(request: NextRequest) {
       deliverySampleCount: u.deliverySampleCount,
       lastCalibratedAt: u.lastCalibratedAt?.toISOString() ?? null,
       lastLoginAt: u.lastLoginAt?.toISOString() ?? null,
+      lastSeenAt: u.lastSeenAt?.toISOString() ?? null,
+      online: isOnline(u.lastSeenAt, now),
       ...stats,
-      devices: u.pushSubscriptions.map((sub) => ({
-        id: sub.id,
-        platform: sub.platform || "unknown",
-        userAgent: sub.userAgent,
-        deliveryLeadMs: sub.deliveryLeadMs,
-        deliverySampleCount: sub.deliverySampleCount,
-        lastCalibratedAt: sub.lastCalibratedAt?.toISOString() ?? null,
-        createdAt: sub.createdAt.toISOString(),
-        updatedAt: sub.updatedAt.toISOString(),
-      })),
+      devices,
     };
   });
 
@@ -194,6 +203,8 @@ export async function GET(request: NextRequest) {
     summary: {
       totalUsers: nestedUsers.length,
       totalDevices: allDevices.length,
+      onlineUsers: nestedUsers.filter((u) => u.online).length,
+      onlineDevices: allDevices.filter((d) => d.online).length,
       android: allDevices.filter((s) => s.platform === "Android").length,
       ios: allDevices.filter((s) => s.platform === "iOS").length,
       desktop: allDevices.filter((s) => s.platform === "Desktop").length,

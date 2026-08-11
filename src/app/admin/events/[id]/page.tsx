@@ -86,7 +86,14 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const [event, setEvent] = useState<EventDetail | null>(null);
   const [callers, setCallers] = useState<
-    Array<{ id: string; displayName: string; username: string; role: string }>
+    Array<{
+      id: string;
+      displayName: string;
+      username: string;
+      role: string;
+      online?: boolean;
+      lastSeenAt?: string | null;
+    }>
   >([]);
   const [callerName, setCallerName] = useState("");
   const [linkUserId, setLinkUserId] = useState("");
@@ -165,22 +172,34 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
     if (!loading && user && !isAdminRole(user.role)) router.push("/caller");
   }, [user, loading, router]);
 
+  const loadCallers = useCallback(() => {
+    fetch("/api/admin/users")
+      .then((r) => r.json())
+      .then((data) =>
+        setCallers(
+          (data.users || []).filter(
+            (u: { role: string; active: boolean }) =>
+              u.active &&
+              (u.role === "CALLER" || u.role === "ADMIN" || u.role === "DEVELOPER")
+          )
+        )
+      );
+  }, []);
+
   useEffect(() => {
     if (user && isAdminRole(user.role)) {
       loadEvent();
-      fetch("/api/admin/users")
-        .then((r) => r.json())
-        .then((data) =>
-          setCallers(
-            (data.users || []).filter(
-              (u: { role: string; active: boolean }) =>
-                u.active &&
-                (u.role === "CALLER" || u.role === "ADMIN" || u.role === "DEVELOPER")
-            )
-          )
-        );
+      loadCallers();
     }
-  }, [user, loadEvent]);
+  }, [user, loadEvent, loadCallers]);
+
+  // Keep linked-account online badges fresh while editing a template.
+  useEffect(() => {
+    if (!user || !isAdminRole(user.role)) return;
+    if (event?.status !== "READY" && event?.status !== "DRAFT") return;
+    const interval = setInterval(loadCallers, 15_000);
+    return () => clearInterval(interval);
+  }, [user, event?.status, loadCallers]);
 
   useEffect(() => {
     if (event?.status !== "ACTIVE") return;
@@ -215,6 +234,18 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
     () => callers.filter((c) => !linkedUserIds.has(c.id)),
     [callers, linkedUserIds]
   );
+
+  const callerById = useMemo(() => {
+    const map = new Map(callers.map((c) => [c.id, c]));
+    return map;
+  }, [callers]);
+
+  const presenceForUser = (userId: string | null | undefined) => {
+    if (!userId) return null;
+    const linked = callerById.get(userId);
+    if (!linked) return null;
+    return { online: !!linked.online, name: linked.displayName };
+  };
 
   const addCaller = async () => {
     if (!callerName.trim() || !addMarch) return;
@@ -653,6 +684,7 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                 userId: caller.userId || "",
                 name: caller.displayName,
               };
+              const linkedPresence = presenceForUser(draft.userId || caller.userId);
               return (
                 <Panel key={caller.id} className="space-y-2">
                   <div className="flex justify-between items-start gap-3">
@@ -668,9 +700,19 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                         className="input-field !min-h-[40px] !py-2 font-semibold text-sm"
                         aria-label={`Caller name for ${caller.displayName}`}
                       />
-                      <p className="text-rally-muted text-xs font-mono mt-1">
-                        March {caller.marchFormatted} {formatOffsetLabel(offset)}
-                      </p>
+                      <div className="flex flex-wrap items-center gap-2 mt-1">
+                        <p className="text-rally-muted text-xs font-mono">
+                          March {caller.marchFormatted} {formatOffsetLabel(offset)}
+                        </p>
+                        {linkedPresence && (
+                          <StatusBadge
+                            tone={linkedPresence.online ? "live" : "neutral"}
+                            pulse={linkedPresence.online}
+                          >
+                            {linkedPresence.online ? "Online" : "Offline"}
+                          </StatusBadge>
+                        )}
+                      </div>
                       {sameMarch.length > 0 && (
                         <p className="text-rally-warning text-xs mt-0.5">
                           Same march/offset as {sameMarch.map((a) => a.displayName).join(", ")} —
@@ -738,7 +780,14 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                     >
                       <option value="">None (name only)</option>
                       {user && (
-                        <option value={user.id}>Me ({user.displayName})</option>
+                        <option value={user.id}>
+                          Me ({user.displayName})
+                          {callerById.has(user.id)
+                            ? callerById.get(user.id)?.online
+                              ? " · online"
+                              : " · offline"
+                            : ""}
+                        </option>
                       )}
                       {callers.map((c) => (
                         <option key={c.id} value={c.id}>
@@ -748,10 +797,23 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                             : c.role === "DEVELOPER"
                               ? " — developer"
                               : ""}
+                          {c.online ? " · online" : " · offline"}
                         </option>
                       ))}
                     </select>
                   </label>
+                  {(() => {
+                    const presence = presenceForUser(draft.userId);
+                    if (!presence) return null;
+                    return (
+                      <div className="flex items-center gap-2 -mt-1">
+                        <StatusBadge tone={presence.online ? "live" : "neutral"} pulse={presence.online}>
+                          {presence.online ? "Online" : "Offline"}
+                        </StatusBadge>
+                        <span className="text-rally-muted text-[11px]">{presence.name}</span>
+                      </div>
+                    );
+                  })()}
 
                   <button
                     type="button"
@@ -782,11 +844,16 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                     onClick={() => quickAddCaller(c)}
                     className="btn-secondary !justify-between !min-h-[40px] text-sm disabled:opacity-50"
                   >
-                    <span>
-                      {c.displayName}{" "}
-                      <span className="text-rally-muted text-xs">@{c.username}</span>
+                    <span className="inline-flex items-center gap-2 min-w-0">
+                      <span className="truncate">
+                        {c.displayName}{" "}
+                        <span className="text-rally-muted text-xs">@{c.username}</span>
+                      </span>
+                      <StatusBadge tone={c.online ? "live" : "neutral"} pulse={!!c.online}>
+                        {c.online ? "Online" : "Offline"}
+                      </StatusBadge>
                     </span>
-                    <span className="text-rally-ice text-xs font-semibold inline-flex items-center gap-1">
+                    <span className="text-rally-ice text-xs font-semibold inline-flex items-center gap-1 shrink-0">
                       <Plus className="h-3 w-3" aria-hidden />
                       {quickAddingId === c.id ? "…" : "Add"}
                     </span>
@@ -842,7 +909,14 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
             >
               <option value="">Link push account (optional)</option>
               {user && (
-                <option value={user.id}>Me ({user.displayName})</option>
+                <option value={user.id}>
+                  Me ({user.displayName})
+                  {callerById.has(user.id)
+                    ? callerById.get(user.id)?.online
+                      ? " · online"
+                      : " · offline"
+                    : ""}
+                </option>
               )}
               {callers.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -852,9 +926,22 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                     : c.role === "DEVELOPER"
                       ? " — developer"
                       : ""}
+                  {c.online ? " · online" : " · offline"}
                 </option>
               ))}
             </select>
+            {(() => {
+              const presence = presenceForUser(linkUserId);
+              if (!presence) return null;
+              return (
+                <div className="flex items-center gap-2">
+                  <StatusBadge tone={presence.online ? "live" : "neutral"} pulse={presence.online}>
+                    {presence.online ? "Online" : "Offline"}
+                  </StatusBadge>
+                  <span className="text-rally-muted text-[11px]">{presence.name}</span>
+                </div>
+              );
+            })()}
             <p className="text-rally-muted text-xs">
               Link a caller, admin, or developer account to send push notifications for that
               slot.
@@ -978,10 +1065,20 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
             Each caller must be linked to an account, and that account must enable notifications
             on their device. Use the section above to register this phone first.
           </p>
-          {event.notificationMonitor.map((m) => (
+          {event.notificationMonitor.map((m) => {
+            const assignment = event.assignments.find((a) => a.id === m.assignmentId);
+            const presence = presenceForUser(assignment?.userId);
+            return (
             <Panel key={m.assignmentId} className="mb-2 !p-3 text-sm">
               <div className="flex justify-between items-start gap-2">
-                <span className="font-bold text-rally-snow">{m.callerName}</span>
+                <span className="font-bold text-rally-snow inline-flex items-center gap-2 flex-wrap">
+                  {m.callerName}
+                  {presence && (
+                    <StatusBadge tone={presence.online ? "live" : "neutral"} pulse={presence.online}>
+                      {presence.online ? "Online" : "Offline"}
+                    </StatusBadge>
+                  )}
+                </span>
                 <StatusBadge
                   tone={
                     !m.hasPushAccount
@@ -1045,7 +1142,8 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                 </div>
               )}
             </Panel>
-          ))}
+            );
+          })}
         </section>
       )}
     </AppShell>

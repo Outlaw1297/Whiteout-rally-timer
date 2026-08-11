@@ -26,21 +26,30 @@
 
 html {
   background: var(--rally-bg);
+  /* Single scrollport on the document. Avoid overflow rules on body. */
+  overflow-x: clip;
+  overflow-y: auto;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
-  overscroll-behavior: none;
-  background:
-    radial-gradient(1200px 500px at 50% -10%, rgba(94, 200, 240, 0.07), transparent 55%),
-    linear-gradient(180deg, #07141f 0%, var(--rally-bg) 42%, #040b12 100%);
-  background-attachment: fixed;
+  margin: 0;
+  min-height: 100dvh;
   color: var(--rally-text);
   font-feature-settings: "tnum" 1, "ss01" 1;
   padding-left: env(safe-area-inset-left, 0px);
   padding-right: env(safe-area-inset-right, 0px);
+  /* Scrollable document background — fixed attachment breaks touch scroll on iOS */
+  background-color: var(--rally-bg);
+  background-image:
+    radial-gradient(1200px 500px at 50% -10%, rgba(94, 200, 240, 0.07), transparent 55%),
+    linear-gradient(180deg, #07141f 0%, var(--rally-bg) 42%, #040b12 100%);
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  touch-action: pan-y;
 }
 
-/* Subtle arctic grid — very low contrast, no distraction */
+/* Subtle arctic grid — paint only, never intercept touches */
 body::before {
   content: "";
   position: fixed;
@@ -51,12 +60,7 @@ body::before {
     linear-gradient(rgba(240, 247, 252, 0.7) 1px, transparent 1px),
     linear-gradient(90deg, rgba(240, 247, 252, 0.7) 1px, transparent 1px);
   background-size: 48px 48px;
-  z-index: 0;
-}
-
-body > * {
-  position: relative;
-  z-index: 1;
+  z-index: -1;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -122,10 +126,4 @@ body > * {
 input[type="time"]::-webkit-calendar-picker-indicator,
 input[type="date"]::-webkit-calendar-picker-indicator {
   filter: invert(1) opacity(0.7);
-}
-
-/* Avoid accidental horizontal scroll on mobile */
-html,
-body {
-  overflow-x: hidden;
 }

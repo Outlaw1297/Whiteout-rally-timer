@@ -25,11 +25,15 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon.png", type: "image/png", sizes: "32x32" },
       { url: "/icons/favicon-16.png", sizes: "16x16", type: "image/png" },
       { url: "/icons/favicon-32.png", sizes: "32x32", type: "image/png" },
       { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
     ],
-    apple: "/icons/apple-touch-icon.png",
+    apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+    shortcut: "/favicon.ico",
   },
 };
 
@@ -46,8 +50,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={inter.variable}>
       <head>
-        <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
-        <link rel="icon" href="/icons/favicon-32.png" sizes="32x32" />
+        {/* Cache-bust so browsers/PWAs pick up the arctic brand mark after deploy */}
+        <link rel="icon" href="/favicon.ico?v=arctic2" sizes="any" />
+        <link rel="icon" type="image/png" href="/favicon.png?v=arctic2" sizes="32x32" />
+        <link rel="icon" type="image/png" href="/icons/icon-192.png?v=arctic2" sizes="192x192" />
+        <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png?v=arctic2" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
       </head>
       <body className={`${inter.className} bg-rally-bg text-rally-text min-h-[100dvh] antialiased`}>

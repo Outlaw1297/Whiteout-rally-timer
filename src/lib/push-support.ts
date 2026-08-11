@@ -5,6 +5,8 @@
  * PushManager is often missing from window but available on registration.pushManager.
  */
 
+import { detectPlatformFromUA } from "./device-platform";
+
 export type PushEnvironment =
   | "ready"
   | "unsupported"
@@ -134,13 +136,9 @@ export async function assessPushEnvironment(): Promise<PushEnvironment> {
 }
 
 export function detectPlatform(): string {
-  const ua = navigator.userAgent;
-  if (isIOSDevice()) return "iOS";
-  if (/Android/i.test(ua)) return "Android";
-  if (/Edg\//i.test(ua)) return "Edge";
-  if (/Chrome\//i.test(ua) && !/Edg\//i.test(ua)) return "Chrome";
-  if (/Firefox\//i.test(ua)) return "Firefox";
-  return "Desktop";
+  if (typeof navigator === "undefined") return "Unknown";
+  // Shared UA parser (Android before Linux — Android UAs contain "Linux").
+  return detectPlatformFromUA(navigator.userAgent);
 }
 
 export function isDesktopEdge(): boolean {

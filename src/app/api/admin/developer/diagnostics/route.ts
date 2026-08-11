@@ -5,6 +5,7 @@ import { requireAuth } from "@/lib/auth";
 import { isDeveloperRole } from "@/lib/roles";
 import { getVapidDiagnostics, initWebPush } from "@/lib/push";
 import { isOnline } from "@/lib/presence";
+import { platformFamily, resolveDevicePlatform } from "@/lib/device-platform";
 
 export const dynamic = "force-dynamic";
 
@@ -144,18 +145,22 @@ export async function GET(request: NextRequest) {
   const now = Date.now();
   const nestedUsers = users.map((u) => {
     const stats = tally(u.assignments);
-    const devices = u.pushSubscriptions.map((sub) => ({
-      id: sub.id,
-      platform: sub.platform || "unknown",
-      userAgent: sub.userAgent,
-      deliveryLeadMs: sub.deliveryLeadMs,
-      deliverySampleCount: sub.deliverySampleCount,
-      lastCalibratedAt: sub.lastCalibratedAt?.toISOString() ?? null,
-      lastSeenAt: sub.lastSeenAt?.toISOString() ?? null,
-      online: isOnline(sub.lastSeenAt, now),
-      createdAt: sub.createdAt.toISOString(),
-      updatedAt: sub.updatedAt.toISOString(),
-    }));
+    const devices = u.pushSubscriptions.map((sub) => {
+      const platform = resolveDevicePlatform(sub.platform, sub.userAgent);
+      return {
+        id: sub.id,
+        platform,
+        platformFamily: platformFamily(platform),
+        userAgent: sub.userAgent,
+        deliveryLeadMs: sub.deliveryLeadMs,
+        deliverySampleCount: sub.deliverySampleCount,
+        lastCalibratedAt: sub.lastCalibratedAt?.toISOString() ?? null,
+        lastSeenAt: sub.lastSeenAt?.toISOString() ?? null,
+        online: isOnline(sub.lastSeenAt, now),
+        createdAt: sub.createdAt.toISOString(),
+        updatedAt: sub.updatedAt.toISOString(),
+      };
+    });
     return {
       id: u.id,
       username: u.username,
@@ -205,9 +210,9 @@ export async function GET(request: NextRequest) {
       totalDevices: allDevices.length,
       onlineUsers: nestedUsers.filter((u) => u.online).length,
       onlineDevices: allDevices.filter((d) => d.online).length,
-      android: allDevices.filter((s) => s.platform === "Android").length,
-      ios: allDevices.filter((s) => s.platform === "iOS").length,
-      desktop: allDevices.filter((s) => s.platform === "Desktop").length,
+      android: allDevices.filter((s) => s.platformFamily === "Android").length,
+      ios: allDevices.filter((s) => s.platformFamily === "iOS").length,
+      desktop: allDevices.filter((s) => s.platformFamily === "Desktop").length,
       notifications: notificationSummary,
       unlinkedSkipped,
     },

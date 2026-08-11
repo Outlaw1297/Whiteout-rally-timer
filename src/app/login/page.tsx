@@ -7,6 +7,9 @@ import { ArrowLeft } from "lucide-react";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { AppShell } from "@/components/ui/AppShell";
 
+import { homePathForRole } from "@/lib/roles";
+import { shouldOfferDeviceOnboarding } from "@/lib/device-onboarding";
+
 export default function LoginPage() {
   const router = useRouter();
   const [username, setUsername] = useState("");
@@ -32,7 +35,12 @@ export default function LoginPage() {
       return;
     }
 
-    router.push(data.user.role === "ADMIN" || data.user.role === "DEVELOPER" ? "/admin" : "/caller");
+    const home = homePathForRole(data.user.role);
+    if (shouldOfferDeviceOnboarding(data.user.id)) {
+      router.push(`/onboarding?next=${encodeURIComponent(home)}`);
+      return;
+    }
+    router.push(home);
   };
 
   return (

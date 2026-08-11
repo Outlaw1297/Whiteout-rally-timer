@@ -13,6 +13,7 @@ import { ChangePasswordForm } from "@/components/ChangePasswordForm";
 import { AppShell, AppHeader, Panel, SectionLabel } from "@/components/ui/AppShell";
 import { StatusBadge, statusToneForAssignment, statusToneForEvent } from "@/components/ui/StatusBadge";
 import { formatArrivalTime, formatGather } from "@/lib/display";
+import { restartDeviceOnboarding } from "@/lib/device-onboarding";
 import type { SerializedEvent } from "@/hooks/useEventSocket";
 
 export default function CallerSettingsPage() {
@@ -73,10 +74,20 @@ export default function CallerSettingsPage() {
         <PushNotificationsProvider>
           <NotificationButton />
         </PushNotificationsProvider>
-        <p className="text-center mt-3">
+        <p className="text-center mt-3 space-y-2">
           <Link href="/fix-notifications" className="nav-link text-xs justify-center">
             Android: alerts only in top bar? Enable Pop on screen →
           </Link>
+          <button
+            type="button"
+            className="nav-link text-xs justify-center w-full"
+            onClick={() => {
+              restartDeviceOnboarding(user.id);
+              router.push("/onboarding?next=/caller/settings");
+            }}
+          >
+            Replay device setup guide →
+          </button>
         </p>
       </Panel>
 

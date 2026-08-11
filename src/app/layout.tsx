@@ -7,6 +7,7 @@ import { SilentLivePing } from "@/components/SilentLivePing";
 import { GlobalSyncedClock } from "@/components/GlobalSyncedClock";
 import { PwaInstallRequired } from "@/components/PwaInstallRequired";
 import { BackgroundPushNotice } from "@/components/BackgroundPushNotice";
+import { DeviceOnboardingGate } from "@/components/DeviceOnboardingGate";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -64,6 +65,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <GlobalSyncedClock />
         <PwaInstallRequired />
         <BackgroundPushNotice />
+        <DeviceOnboardingGate />
         {children}
       </body>
     </html>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { AlertTriangle, Battery, Bell } from "lucide-react";
 import {
   hasAckedAndroidPushFix,
@@ -15,6 +16,7 @@ import { isAndroidDevice, isStandalonePWA } from "@/lib/push-support";
  * remind them — "works in foreground only" is almost always Unrestricted battery.
  */
 export function BackgroundPushNotice() {
+  const pathname = usePathname();
   const [show, setShow] = useState(false);
 
   useEffect(() => {
@@ -34,6 +36,9 @@ export function BackgroundPushNotice() {
   }, []);
 
   if (!show) return null;
+  if (pathname === "/onboarding" || pathname === "/install" || pathname === "/fix-notifications") {
+    return null;
+  }
 
   return (
     <div className="mx-auto max-w-lg px-4 pt-2">

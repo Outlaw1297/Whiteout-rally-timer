@@ -264,8 +264,8 @@ export function PwaInstallRequired() {
     setRemindLater(true);
   };
 
-  // Dedicated /install page already shows the full guide — don't stack a modal on it.
-  if (pathname === "/install") return null;
+  // Dedicated setup pages already cover install — don't stack a modal on them.
+  if (pathname === "/install" || pathname === "/onboarding") return null;
   if (kind === "none" || isStandalonePWA()) return null;
   if (remindLater) {
     return (

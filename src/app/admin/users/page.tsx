@@ -352,7 +352,14 @@ export default function AdminUsersPage() {
             (iPhone must use Safari → Share → Add to Home Screen)
           </li>
           <li>Caller opens the installed app and logs in at /login</li>
-          <li>Caller taps Enable Rally Notifications</li>
+          <li>
+            First login walks them through{" "}
+            <Link href="/onboarding" className="text-rally-ice font-semibold">
+              /onboarding
+            </Link>{" "}
+            (install, allow alerts, pop-up, battery) with screenshots
+          </li>
+          <li>Caller taps Enable Rally Notifications if they skipped setup</li>
           <li>
             Android callers must set Chrome battery to Unrestricted — send{" "}
             <Link href="/fix-notifications" className="text-rally-ice font-semibold">
@@ -361,6 +368,12 @@ export default function AdminUsersPage() {
           </li>
           <li>In your rally template, link that caller slot to their account</li>
         </ol>
+        <p className="mt-3 text-xs text-rally-muted">
+          Replay this device&apos;s setup walkthrough:{" "}
+          <Link href="/onboarding?next=/admin/users" className="text-rally-ice font-semibold">
+            Open device setup →
+          </Link>
+        </p>
       </Panel>
 
       {tempPassword && (

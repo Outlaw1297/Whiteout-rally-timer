@@ -17,12 +17,30 @@ function sleep(ms) {
 }
 
 async function listWindowClients() {
-  return self.clients.matchAll({ type: "window", includeUncontrolled: true });
+  try {
+    const windows = await self.clients.matchAll({
+      type: "window",
+      includeUncontrolled: true,
+    });
+    if (windows.length > 0) return windows;
+  } catch {
+    /* fall through */
+  }
+  // iOS occasionally returns [] for typed matchAll while the PWA is open.
+  try {
+    return await self.clients.matchAll({ includeUncontrolled: true });
+  } catch {
+    return [];
+  }
 }
 
 function broadcastToClients(clientList, payload) {
   for (const client of clientList) {
-    client.postMessage(payload);
+    try {
+      client.postMessage(payload);
+    } catch {
+      /* ignore */
+    }
   }
 }
 

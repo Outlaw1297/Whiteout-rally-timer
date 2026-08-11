@@ -2,8 +2,6 @@
 
 Server-authoritative **multi-caller rally coordination** for Whiteout Survival. One shared target arrival time; each caller gets their own launch time based on march duration and gather time.
 
-**Live:** https://whiteout-rally-timer.onrender.com/
-
 ## Core Equation
 
 ```

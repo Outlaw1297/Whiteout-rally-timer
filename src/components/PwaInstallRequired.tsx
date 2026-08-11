@@ -283,12 +283,12 @@ export function PwaInstallRequired() {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/75 p-3 sm:p-4"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/75 p-3 sm:p-4 overflow-y-auto overscroll-contain"
       role="dialog"
       aria-modal="true"
       aria-labelledby="pwa-install-title"
     >
-      <div className="w-full max-w-md max-h-[92vh] overflow-y-auto bg-rally-surface border border-rally-ice/40 rounded-xl p-5 shadow-2xl">
+      <div className="w-full max-w-md max-h-[min(92vh,100%)] overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] bg-rally-surface border border-rally-ice/40 rounded-xl p-5 shadow-2xl my-auto">
         <p className="text-rally-warning text-[10px] font-bold tracking-widest mb-1">
           REQUIRED · ~15 SECONDS
         </p>

@@ -13,6 +13,18 @@ const nextConfig = {
       source: "/manifest.json",
       headers: [{ key: "Cache-Control", value: "public, max-age=0, must-revalidate" }],
     },
+    {
+      source: "/favicon.ico",
+      headers: [{ key: "Cache-Control", value: "public, max-age=0, must-revalidate" }],
+    },
+    {
+      source: "/favicon.png",
+      headers: [{ key: "Cache-Control", value: "public, max-age=0, must-revalidate" }],
+    },
+    {
+      source: "/icons/(.*)",
+      headers: [{ key: "Cache-Control", value: "public, max-age=0, must-revalidate" }],
+    },
   ],
 };
 

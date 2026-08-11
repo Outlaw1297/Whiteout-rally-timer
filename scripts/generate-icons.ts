@@ -1,72 +1,70 @@
-import { writeFileSync, mkdirSync } from "fs";
+/**
+ * Generates brand icons for tab favicons + PWA.
+ * IMPORTANT: Render/Docker run this on every deploy — it must output the
+ * arctic mountain/timer/snowflake mark, never a solid placeholder circle.
+ */
+import { mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
-import { deflateSync } from "zlib";
+import sharp from "sharp";
 
-function crc32(buf: Buffer): number {
-  let crc = 0xffffffff;
-  for (let i = 0; i < buf.length; i++) {
-    crc ^= buf[i];
-    for (let j = 0; j < 8; j++) {
-      crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
-    }
-  }
-  return (crc ^ 0xffffffff) >>> 0;
-}
+const root = process.cwd();
+const outDir = join(root, "public", "icons");
+const publicDir = join(root, "public");
 
-function createChunk(type: string, data: Buffer): Buffer {
-  const length = Buffer.alloc(4);
-  length.writeUInt32BE(data.length, 0);
-  const typeBuffer = Buffer.from(type, "ascii");
-  const crcData = Buffer.concat([typeBuffer, data]);
-  const crc = Buffer.alloc(4);
-  crc.writeUInt32BE(crc32(crcData), 0);
-  return Buffer.concat([length, typeBuffer, data, crc]);
-}
-
-function createSolidPng(size: number, r: number, g: number, b: number): Buffer {
-  const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
-
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(size, 0);
-  ihdr.writeUInt32BE(size, 4);
-  ihdr[8] = 8;
-  ihdr[9] = 2;
-  ihdr[10] = 0;
-  ihdr[11] = 0;
-  ihdr[12] = 0;
-
-  const rowSize = 1 + size * 3;
-  const raw = Buffer.alloc(rowSize * size);
-  for (let y = 0; y < size; y++) {
-    const rowStart = y * rowSize;
-    raw[rowStart] = 0;
-    for (let x = 0; x < size; x++) {
-      const px = rowStart + 1 + x * 3;
-      const cx = x - size / 2;
-      const cy = y - size / 2;
-      const dist = Math.sqrt(cx * cx + cy * cy);
-      const inCircle = dist < size * 0.35;
-      raw[px] = inCircle ? 59 : 10;
-      raw[px + 1] = inCircle ? 130 : 14;
-      raw[px + 2] = inCircle ? 246 : 23;
-    }
-  }
-
-  const compressed = deflateSync(raw);
-  const iend = Buffer.alloc(0);
-
-  return Buffer.concat([
-    signature,
-    createChunk("IHDR", ihdr),
-    createChunk("IDAT", compressed),
-    createChunk("IEND", iend),
-  ]);
-}
-
-const outDir = join(process.cwd(), "public", "icons");
 mkdirSync(outDir, { recursive: true });
 
-writeFileSync(join(outDir, "icon-192.png"), createSolidPng(192, 59, 130, 246));
-writeFileSync(join(outDir, "icon-512.png"), createSolidPng(512, 59, 130, 246));
+const svgPath = join(outDir, "icon.svg");
+const svg = readFileSync(svgPath);
 
-console.log("Icons generated in public/icons/");
+async function writePng(size: number, filePath: string) {
+  await sharp(svg)
+    .resize(size, size, { fit: "fill" })
+    .png({ compressionLevel: 9, adaptiveFiltering: true })
+    .toFile(filePath);
+}
+
+/** Minimal ICO with one 32×32 PNG image (modern browsers accept PNG-in-ICO). */
+function pngToIco(png: Buffer): Buffer {
+  const header = Buffer.alloc(6);
+  header.writeUInt16LE(0, 0); // reserved
+  header.writeUInt16LE(1, 2); // icon type
+  header.writeUInt16LE(1, 4); // count
+
+  const entry = Buffer.alloc(16);
+  entry[0] = 32; // width
+  entry[1] = 32; // height
+  entry[2] = 0; // colors
+  entry[3] = 0; // reserved
+  entry.writeUInt16LE(1, 4); // planes
+  entry.writeUInt16LE(32, 6); // bit count
+  entry.writeUInt32LE(png.length, 8);
+  entry.writeUInt32LE(6 + 16, 12); // offset to image data
+
+  return Buffer.concat([header, entry, png]);
+}
+
+async function main() {
+  await writePng(16, join(outDir, "favicon-16.png"));
+  await writePng(32, join(outDir, "favicon-32.png"));
+  await writePng(180, join(outDir, "apple-touch-icon.png"));
+  await writePng(192, join(outDir, "icon-192.png"));
+  await writePng(512, join(outDir, "icon-512.png"));
+
+  // Root favicon for browsers that request /favicon.ico by default
+  const faviconPng = await sharp(svg)
+    .resize(32, 32, { fit: "fill" })
+    .png()
+    .toBuffer();
+  writeFileSync(join(publicDir, "favicon.ico"), pngToIco(faviconPng));
+  await sharp(svg)
+    .resize(32, 32, { fit: "fill" })
+    .png()
+    .toFile(join(publicDir, "favicon.png"));
+
+  console.log("Brand icons generated in public/icons/ + public/favicon.ico");
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

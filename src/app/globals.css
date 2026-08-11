@@ -26,10 +26,14 @@
 
 html {
   background: var(--rally-bg);
+  /* Keep vertical scrolling on the root only — do not also set overflow on body
+     (overflow-x:hidden on both html+body creates nested scrollports and breaks wheel scroll). */
+  overflow-x: hidden;
+  overflow-y: scroll;
 }
 
 body {
-  overscroll-behavior: none;
+  overscroll-behavior-y: none;
   background:
     radial-gradient(1200px 500px at 50% -10%, rgba(94, 200, 240, 0.07), transparent 55%),
     linear-gradient(180deg, #07141f 0%, var(--rally-bg) 42%, #040b12 100%);
@@ -38,6 +42,8 @@ body {
   font-feature-settings: "tnum" 1, "ss01" 1;
   padding-left: env(safe-area-inset-left, 0px);
   padding-right: env(safe-area-inset-right, 0px);
+  /* Decorative layer sits behind content without trapping scroll */
+  isolation: isolate;
 }
 
 /* Subtle arctic grid — very low contrast, no distraction */
@@ -51,12 +57,7 @@ body::before {
     linear-gradient(rgba(240, 247, 252, 0.7) 1px, transparent 1px),
     linear-gradient(90deg, rgba(240, 247, 252, 0.7) 1px, transparent 1px);
   background-size: 48px 48px;
-  z-index: 0;
-}
-
-body > * {
-  position: relative;
-  z-index: 1;
+  z-index: -1;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -124,8 +125,3 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   filter: invert(1) opacity(0.7);
 }
 
-/* Avoid accidental horizontal scroll on mobile */
-html,
-body {
-  overflow-x: hidden;
-}

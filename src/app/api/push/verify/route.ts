@@ -33,11 +33,22 @@ export async function POST(request: NextRequest) {
     },
   });
 
-  if (!subscription || subscription.userId !== session.id) {
+  if (!subscription) {
     return jsonResponse({
       registered: false,
       active: false,
       reason: "not_found",
+    });
+  }
+
+  if (subscription.userId !== session.id) {
+    // This browser's one push channel is currently owned by a different
+    // account on this device — don't report "not registered", or callers
+    // will silently re-subscribe and steal it back on every page load.
+    return jsonResponse({
+      registered: false,
+      active: false,
+      reason: subscription.active ? "owned_by_other" : "not_found",
     });
   }
 

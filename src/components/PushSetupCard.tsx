@@ -115,6 +115,17 @@ function PushSetupCardInner({ onSubscribed }: { onSubscribed?: () => void }) {
               : ""}
           </p>
         </div>
+      ) : pushStatus === "device-in-use" ? (
+        <div className="mb-3 p-3 bg-rally-warning/10 border border-rally-warning/40 rounded-lg text-sm text-rally-warning">
+          <p className="font-semibold inline-flex items-center gap-1.5">
+            <BellOff className="h-4 w-4" aria-hidden />
+            This device is set up for a different account
+          </p>
+          <p className="text-xs mt-1 text-rally-muted">
+            Another account is currently receiving alerts on this browser. Tap Enable below to
+            switch this device to your account.
+          </p>
+        </div>
       ) : otherDevices || pushStatus === "stale" ? (
         <div className="mb-3 p-3 bg-rally-warning/10 border border-rally-warning/40 rounded-lg text-sm text-rally-warning">
           <p className="font-semibold inline-flex items-center gap-1.5">

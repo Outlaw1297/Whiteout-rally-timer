@@ -10,6 +10,7 @@ import { detectPlatformFromUA } from "@/lib/device-platform";
 import { normalizeDeviceId } from "@/lib/device-id";
 import { retireDuplicatePushSubscriptions } from "@/lib/push-devices";
 import { writeActivityLog } from "@/lib/write-activity-log";
+import { pushEndpointHost } from "@/lib/activity-log";
 
 export async function GET() {
   const publicKey = await getVapidPublicKey();
@@ -70,6 +71,43 @@ export async function POST(request: NextRequest) {
     existing &&
     existing.userId === session.id &&
     ((deviceId && existing.deviceId === deviceId) || existing.endpoint === endpoint);
+
+  if (existing && existing.userId !== session.id && existing.active) {
+    // A browser has exactly one live push endpoint, so a second account
+    // registering it here is a deliberate device handoff, not a duplicate.
+    // The previous owner's DB row now points at this account and will show
+    // as unregistered next time they check — log it both ways so it's
+    // visible in server logs and on the developer activity page.
+    logger.warn("push_endpoint_owner_changed", {
+      endpoint,
+      previousUserId: existing.userId,
+      newUserId: session.id,
+      deviceId,
+    });
+
+    const previousOwner = await prisma.user.findUnique({
+      where: { id: existing.userId },
+      select: { displayName: true, username: true },
+    });
+
+    await writeActivityLog({
+      kind: "DEVICE_HANDOFF",
+      success: true,
+      userId: session.id,
+      username: session.username,
+      displayName: session.displayName,
+      deviceId,
+      platform,
+      message: `${session.displayName} took over this device's alerts from ${
+        previousOwner?.displayName || "another account"
+      } — that account stopped receiving pushes here`,
+      meta: {
+        previousUserId: existing.userId,
+        previousUsername: previousOwner?.username ?? null,
+        endpointHost: pushEndpointHost(endpoint),
+      },
+    });
+  }
 
   const freshLead = defaultDeliveryLeadMs(
     sameDevice ? existing.deliveryLeadMs : undefined,

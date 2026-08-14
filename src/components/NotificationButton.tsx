@@ -162,6 +162,28 @@ export function NotificationButton({ onStatusChange }: { onStatusChange?: () => 
     );
   }
 
+  if (status === "device-in-use") {
+    return (
+      <div className="flex flex-col items-center gap-3 w-full">
+        <p className="text-rally-warning text-sm text-center font-bold">
+          This device is set up for a different account
+        </p>
+        <p className="text-rally-muted text-xs text-center">
+          A browser can only send alerts to one account at a time. Enabling here switches rally
+          alerts on this device to this account — the other account will stop receiving them.
+        </p>
+        <button
+          onClick={handleEnable}
+          disabled={loading || isCalibrating}
+          className="btn-primary w-full !text-lg"
+        >
+          {loading ? "Switching..." : "Switch this device to this account"}
+        </button>
+        {error && <p className="text-rally-danger text-xs text-center">{error}</p>}
+      </div>
+    );
+  }
+
   if (status === "stale") {
     return (
       <div className="flex flex-col items-center gap-3 w-full">

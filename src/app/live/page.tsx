@@ -14,12 +14,15 @@ export default function PublicLivePage() {
     let cancelled = false;
     const load = () => {
       fetch("/api/events/live")
-        .then((r) => r.json())
+        .then((r) => {
+          if (!r.ok) throw new Error("live poll failed");
+          return r.json();
+        })
         .then((data) => {
-          if (!cancelled) setEvents(data.events || []);
+          if (!cancelled && Array.isArray(data.events)) setEvents(data.events);
         })
         .catch(() => {
-          if (!cancelled) setEvents([]);
+          // Keep the last successful list so a failed poll does not empty the board.
         });
     };
     load();

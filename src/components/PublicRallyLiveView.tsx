@@ -236,7 +236,10 @@ function PublicRallyLiveBody({
         )}
       </section>
 
-      {!authLoading && user && (
+      {!authLoading &&
+        user &&
+        (isAdminRole(user.role) ||
+          event.assignments.some((a) => a.userId === user.id)) && (
         <p className="text-center text-sm">
           <Link
             href={

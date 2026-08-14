@@ -510,7 +510,9 @@ export default function DeveloperPage() {
                 <div className="flex flex-wrap items-center gap-1.5">
                   <StatusBadge
                     tone={
-                      row.kind === "PUSH_SKIPPED" || row.kind === "LOGIN_FAILED"
+                      row.kind === "PUSH_SKIPPED" ||
+                      row.kind === "LOGIN_FAILED" ||
+                      row.kind === "DEVICE_HANDOFF"
                         ? "warning"
                         : row.success
                           ? "success"

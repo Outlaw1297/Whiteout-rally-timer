@@ -7,6 +7,7 @@ export const ACTIVITY_KINDS = [
   "DEVICE_REGISTER",
   "DEVICE_RETIRE",
   "DEVICE_UNBIND",
+  "DEVICE_HANDOFF",
   "PUSH_TEST",
   "PUSH_SENT",
   "PUSH_FAILED",
@@ -19,7 +20,7 @@ export type ActivityGroup = "auth" | "device" | "notification";
 
 const KINDS_BY_GROUP: Record<ActivityGroup, readonly ActivityKind[]> = {
   auth: ["LOGIN", "LOGIN_FAILED", "LOGOUT"],
-  device: ["DEVICE_REGISTER", "DEVICE_RETIRE", "DEVICE_UNBIND"],
+  device: ["DEVICE_REGISTER", "DEVICE_RETIRE", "DEVICE_UNBIND", "DEVICE_HANDOFF"],
   notification: ["PUSH_TEST", "PUSH_SENT", "PUSH_FAILED", "PUSH_SKIPPED"],
 };
 
@@ -85,6 +86,8 @@ export function activityKindLabel(kind: string): string {
       return "Device retired";
     case "DEVICE_UNBIND":
       return "Device unbound";
+    case "DEVICE_HANDOFF":
+      return "Device switched accounts";
     case "PUSH_TEST":
       return "Test push";
     case "PUSH_SENT":

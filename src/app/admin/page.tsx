@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Pin, PinOff, RotateCcw, Trash2, Zap } from "lucide-react";
@@ -11,6 +11,8 @@ import { RolesNote } from "@/components/RolesNote";
 import { TemplateSwitcher } from "@/components/TemplateSwitcher";
 import { AdminNav } from "@/components/AdminNav";
 import { NotificationPreferences } from "@/components/NotificationPreferences";
+import { OwnMarchEditor } from "@/components/OwnMarchEditor";
+import { pickPrimaryCallerEvent } from "@/components/CallerRallyView";
 import { AppShell, Panel, SectionLabel } from "@/components/ui/AppShell";
 import { StatusBadge, statusToneForEvent } from "@/components/ui/StatusBadge";
 import type { SerializedEvent } from "@/hooks/useEventSocket";
@@ -41,6 +43,11 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (user?.role === "ADMIN" || user?.role === "DEVELOPER") loadEvents();
   }, [user]);
+
+  const linkedPrimary = useMemo(() => {
+    if (!user) return null;
+    return pickPrimaryCallerEvent(events, user.id, Date.now());
+  }, [events, user]);
 
   const deleteEvent = async (id: string, status: string) => {
     const msg =
@@ -128,6 +135,13 @@ export default function AdminDashboard() {
       <AdminNav displayName={user.displayName} role={user.role} onLogout={logout} />
 
       <RolesNote compact />
+
+      {linkedPrimary && (
+        <OwnMarchEditor
+          eventId={linkedPrimary.id}
+          adminEventHref={`/admin/events/${linkedPrimary.id}`}
+        />
+      )}
 
       <button
         onClick={() => setShowCreate(!showCreate)}

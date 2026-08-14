@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Settings, Crosshair } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -31,6 +31,7 @@ export function CallerRallyView({
   const [marchSaving, setMarchSaving] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
+  const marchDirtyRef = useRef(false);
 
   const { correctedNow } = useServerClock({
     activeRally: true,
@@ -40,6 +41,16 @@ export function CallerRallyView({
   const assignment = event?.assignments.find((a) => a.userId === user?.id) ?? null;
   const launchMs = assignment?.launchTime ? new Date(assignment.launchTime).getTime() : null;
   const { display: countdown, isNow } = useCountdown(launchMs, correctedNow);
+
+  const applyServerMarch = useCallback(
+    (data: SerializedEvent) => {
+      const mine = data.assignments?.find((a) => a.userId === user?.id);
+      if (mine?.marchFormatted && !marchDirtyRef.current) {
+        setMarchDraft(mine.marchFormatted);
+      }
+    },
+    [user?.id]
+  );
 
   const loadEvent = useCallback(() => {
     fetch(`/api/events/${eventId}`)
@@ -53,14 +64,17 @@ export function CallerRallyView({
         setEvent(data);
         const mine = data.assignments?.find((a: { userId: string }) => a.userId === user?.id);
         if (mine?.status === "LAUNCHED") setConfirmed(true);
-        if (mine?.marchFormatted) setMarchDraft(mine.marchFormatted);
+        applyServerMarch(data);
       })
       .catch(() => setError("Could not load rally"));
-  }, [eventId, user?.id]);
+  }, [eventId, user?.id, applyServerMarch]);
 
   useEventSocket({
     eventId,
-    onEventUpdate: (e) => setEvent(e),
+    onEventUpdate: (e) => {
+      setEvent(e);
+      applyServerMarch(e);
+    },
   });
 
   useEffect(() => {
@@ -101,6 +115,7 @@ export function CallerRallyView({
         setStatusMsg(null);
         return;
       }
+      marchDirtyRef.current = false;
       setStatusMsg("March time saved");
       setStatusError(null);
       loadEvent();
@@ -186,7 +201,10 @@ export function CallerRallyView({
             <div className="mt-2 space-y-2">
               <input
                 value={marchDraft}
-                onChange={(e) => setMarchDraft(e.target.value)}
+                onChange={(e) => {
+                  marchDirtyRef.current = true;
+                  setMarchDraft(e.target.value);
+                }}
                 placeholder="M:SS"
                 className="input-field text-center timer-display text-lg !py-2 !min-h-[40px]"
                 aria-label="Your march time"

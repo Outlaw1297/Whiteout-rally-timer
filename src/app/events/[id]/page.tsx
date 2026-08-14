@@ -9,10 +9,9 @@ import { useEventSocket } from "@/hooks/useEventSocket";
 import { useNextCaller } from "@/hooks/useNextCaller";
 import { CallerCountdownRow } from "@/components/CallerCountdownRow";
 import { MarchDuplicateNotice } from "@/components/MarchDuplicateNotice";
-import { HomeButton } from "@/components/HomeButton";
 import { HitOrderPreview } from "@/components/HitOrderPreview";
 import { RallyTimeline } from "@/components/RallyTimeline";
-import { BrandLogo } from "@/components/brand/BrandLogo";
+import { PublicTopNav } from "@/components/PublicTopNav";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { AppShell, Panel, SectionLabel } from "@/components/ui/AppShell";
 import { formatArrivalTime, formatGather } from "@/lib/display";
@@ -75,9 +74,8 @@ export default function PublicEventPage({ params }: { params: { id: string } }) 
 
   return (
     <AppShell className="page-enter" wide>
-      <div className="flex items-center justify-between gap-3 mb-4 max-w-lg mx-auto w-full md:max-w-none">
-        <BrandLogo size="sm" />
-        <HomeButton />
+      <div className="max-w-lg mx-auto w-full md:max-w-none">
+        <PublicTopNav />
       </div>
 
       <div className="max-w-lg mx-auto md:max-w-none">

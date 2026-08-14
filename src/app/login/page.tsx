@@ -1,11 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
-import { BrandLogo } from "@/components/brand/BrandLogo";
 import { AppShell } from "@/components/ui/AppShell";
+import { PublicTopNav } from "@/components/PublicTopNav";
 
 import { homePathForRole } from "@/lib/roles";
 import { shouldOfferDeviceOnboarding } from "@/lib/device-onboarding";
@@ -44,11 +42,10 @@ export default function LoginPage() {
   };
 
   return (
-    <AppShell className="flex flex-col items-center justify-center page-enter !max-w-md">
-      <header className="mb-8 text-center w-full">
-        <div className="flex justify-center mb-4">
-          <BrandLogo size="lg" />
-        </div>
+    <AppShell className="flex flex-col page-enter !max-w-md">
+      <PublicTopNav />
+
+      <header className="mb-6 text-center w-full">
         <p className="text-rally-muted text-sm">Coordinate multi-caller rallies</p>
         <p className="text-rally-muted text-xs mt-2 max-w-xs mx-auto leading-relaxed">
           Admins run rallies; callers receive their launch times. On phones, install the app
@@ -60,10 +57,6 @@ export default function LoginPage() {
         onSubmit={handleSubmit}
         className="w-full flex flex-col gap-4 rounded-xl border border-rally-border bg-rally-surface p-5"
       >
-        <Link href="/" className="nav-link gap-1.5 text-xs -mt-1">
-          <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
-          Back to schedule
-        </Link>
         <div>
           <label className="label-field" htmlFor="username">
             Username

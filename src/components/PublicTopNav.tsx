@@ -1,41 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ExternalLink, Home, LogIn, ArrowRight } from "lucide-react";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { useAuth } from "@/hooks/useAuth";
 import { isAdminRole } from "@/lib/roles";
-import { pickPublicLiveHref } from "@/lib/public-live-view";
+import { PUBLIC_LIVE_HREF, isPublicLiveNavActive } from "@/lib/public-live-view";
 
 /**
  * Guest/public header: Home · Public live view · Login.
- * Used on the schedule, login, and per-rally live pages.
+ * Used on the schedule, login, live board, and per-rally pages.
  */
 export function PublicTopNav() {
   const pathname = usePathname() || "/";
   const { user, loading } = useAuth();
-  const [liveHref, setLiveHref] = useState(() => pickPublicLiveHref(pathname, []));
-
-  useEffect(() => {
-    if (pathname.startsWith("/events/")) {
-      setLiveHref(pickPublicLiveHref(pathname, []));
-      return;
-    }
-    let cancelled = false;
-    fetch("/api/events")
-      .then((r) => r.json())
-      .then((data) => {
-        if (!cancelled) setLiveHref(pickPublicLiveHref(pathname, data.events || []));
-      })
-      .catch(() => {
-        if (!cancelled) setLiveHref("/");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [pathname]);
 
   const accountHref = user
     ? isAdminRole(user.role)
@@ -51,10 +30,10 @@ export function PublicTopNav() {
   }> = [
     { href: "/", label: "Home", icon: Home, active: pathname === "/" },
     {
-      href: liveHref,
+      href: PUBLIC_LIVE_HREF,
       label: "Public live view",
       icon: ExternalLink,
-      active: pathname.startsWith("/events/"),
+      active: isPublicLiveNavActive(pathname),
     },
   ];
 

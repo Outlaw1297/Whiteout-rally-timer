@@ -20,6 +20,8 @@ import { isDeveloperRole, roleLabel } from "@/lib/roles";
 
 interface DeviceInfo {
   id: string;
+  deviceId?: string | null;
+  deviceLabel?: string | null;
   platform: string;
   userAgent: string | null;
   deliveryLeadMs: number;
@@ -54,6 +56,7 @@ interface UserWithDevices {
   missedNotifications: number;
   failedNotifications: number;
   pendingNotifications?: number;
+  staleDeviceCount?: number;
   devices: DeviceInfo[];
 }
 
@@ -489,6 +492,7 @@ export default function DeveloperPage() {
                   <p className="text-rally-muted text-[10px] font-semibold tracking-wide flex items-center gap-1">
                     <Smartphone className="h-3 w-3" aria-hidden />
                     Devices ({u.devices.length})
+                    {(u.staleDeviceCount ?? 0) > 0 ? ` · ${u.staleDeviceCount} duplicate endpoints ignored` : ""}
                   </p>
                   {u.devices.map((d) => (
                     <div
@@ -499,6 +503,11 @@ export default function DeveloperPage() {
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-1.5">
                             <span className="font-mono text-rally-ice">{d.platform}</span>
+                            {d.deviceLabel && (
+                              <span className="font-mono text-rally-muted text-[10px]">
+                                id {d.deviceLabel}
+                              </span>
+                            )}
                             <StatusBadge tone={d.online ? "live" : "neutral"} pulse={!!d.online}>
                               {d.online ? "Online" : "Offline"}
                             </StatusBadge>

@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
+import { getOrCreateDeviceId } from "@/lib/client-device-id";
 
 const LIVE_PING_INTERVAL_MS = 2 * 60_000;
 const PRESENCE_INTERVAL_MS = 60_000;
@@ -41,7 +42,10 @@ export function useSilentLivePing(enabled = true) {
         await fetch("/api/push/presence", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(endpoint ? { endpoint } : {}),
+          body: JSON.stringify({
+            ...(endpoint ? { endpoint } : {}),
+            deviceId: getOrCreateDeviceId(),
+          }),
           credentials: "include",
         });
       } catch {

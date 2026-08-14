@@ -5,6 +5,8 @@ import { getSessionFromRequest } from "@/lib/session";
 import { nextDeliveryLeadMs } from "@/lib/delivery-lead";
 import { syncUserDeliveryLead } from "@/lib/sync-user-delivery-lead";
 import { logger } from "@/lib/logger";
+import { normalizeDeviceId } from "@/lib/device-id";
+import { listCanonicalPushSubscriptions } from "@/lib/push-devices";
 
 export async function POST(request: NextRequest) {
   const session = await getSessionFromRequest(request);
@@ -17,6 +19,7 @@ export async function POST(request: NextRequest) {
     notificationType?: string;
     rallyId?: string;
     endpoint?: string;
+    deviceId?: string;
   };
 
   try {
@@ -41,13 +44,21 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const subscriptions = await prisma.pushSubscription.findMany({
+  const deviceId = normalizeDeviceId(body.deviceId);
+  let subscriptions = await prisma.pushSubscription.findMany({
     where: {
       userId: session.id,
       active: true,
       ...(body.endpoint ? { endpoint: body.endpoint } : {}),
+      ...(deviceId && !body.endpoint ? { deviceId } : {}),
     },
   });
+
+  if (subscriptions.length === 0 && !body.endpoint && !deviceId) {
+    subscriptions = await listCanonicalPushSubscriptions(session.id);
+  } else if (subscriptions.length > 1) {
+    subscriptions = subscriptions.slice(0, 1);
+  }
 
   if (subscriptions.length === 0) {
     return errorResponse("No active push subscription", 404);

@@ -14,6 +14,7 @@ import {
 import { parseUserWarningLeads } from "./notification-prefs";
 import { getServerTime } from "./time";
 import { resolveDevicePlatform } from "./device-platform";
+import { selectCanonicalSubscriptions } from "./device-id";
 
 export type AssignmentWithUser = RallyAssignment & { user: User | null };
 export type EventWithAssignments = RallyEvent & {
@@ -151,7 +152,7 @@ export function serializeNotificationMonitor(
   assignment: AssignmentWithNotifications,
   eventName: string
 ) {
-  const devices = (assignment.user?.pushSubscriptions ?? [])
+  const devices = selectCanonicalSubscriptions(assignment.user?.pushSubscriptions ?? [])
     .filter((s) => s.active)
     .map((s) => ({
       platform: resolveDevicePlatform(s.platform, s.userAgent),

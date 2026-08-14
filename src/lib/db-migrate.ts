@@ -232,6 +232,37 @@ export async function migrateFeaturePackColumns(): Promise<void> {
       `);
       logger.info("migrated_push_last_seen_at");
     }
+    if (!(await columnExists("PushSubscription", "deviceId"))) {
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE "PushSubscription"
+        ADD COLUMN IF NOT EXISTS "deviceId" TEXT
+      `);
+      await prisma.$executeRawUnsafe(`
+        CREATE INDEX IF NOT EXISTS "PushSubscription_userId_deviceId_idx"
+        ON "PushSubscription" ("userId", "deviceId")
+      `);
+      logger.info("migrated_push_device_id");
+    }
+
+    // Same phone often mints many endpoints (iOS re-subscribe). Keep the newest
+    // active row per user + deviceId (or user-agent when deviceId is missing).
+    const pruned = await prisma.$executeRawUnsafe(`
+      WITH ranked AS (
+        SELECT
+          id,
+          ROW_NUMBER() OVER (
+            PARTITION BY "userId", COALESCE("deviceId", COALESCE("userAgent", ''))
+            ORDER BY COALESCE("lastSeenAt", "updatedAt") DESC, "updatedAt" DESC
+          ) AS rn
+        FROM "PushSubscription"
+        WHERE active = true
+      )
+      UPDATE "PushSubscription" ps
+      SET active = false
+      FROM ranked r
+      WHERE ps.id = r.id AND r.rn > 1 AND ps.active = true
+    `);
+    logger.info("pruned_duplicate_push_subscriptions", { pruned });
   }
 }
 

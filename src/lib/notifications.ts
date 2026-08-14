@@ -6,13 +6,14 @@ import {
 import { getEffectivePushLeadMs } from "./delivery-lead";
 import { ALL_SCHEDULED_NOTIFICATION_TYPES } from "./notification-prefs";
 import type { RallyAssignment, User, RallyEvent } from "@prisma/client";
+import { listCanonicalPushSubscriptions } from "@/lib/push-devices";
 
 async function getPushLeadForUser(userId: string, eventPushLeadMs: number) {
-  const subscriptions = await prisma.pushSubscription.findMany({
-    where: { userId, active: true },
-    select: { deliveryLeadMs: true },
-  });
-  return getEffectivePushLeadMs(eventPushLeadMs, subscriptions);
+  const subscriptions = await listCanonicalPushSubscriptions(userId);
+  return getEffectivePushLeadMs(
+    eventPushLeadMs,
+    subscriptions.map((s) => ({ deliveryLeadMs: s.deliveryLeadMs }))
+  );
 }
 
 async function syncNotificationEventsForAssignment(

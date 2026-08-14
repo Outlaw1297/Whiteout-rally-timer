@@ -7,6 +7,7 @@ import {
   isDesktopEdge,
   pushEnableHint,
 } from "@/lib/push-support";
+import { getOrCreateDeviceId } from "@/lib/client-device-id";
 
 export type NotificationStatus =
   | "checking"
@@ -65,6 +66,7 @@ async function registerOnServer(subscription: PushSubscription): Promise<void> {
       keys: subJson.keys,
       userAgent: navigator.userAgent,
       platform: detectPlatform(),
+      deviceId: getOrCreateDeviceId(),
     }),
   });
 

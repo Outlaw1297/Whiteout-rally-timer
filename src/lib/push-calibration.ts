@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { sendPushNotification } from "@/lib/push";
 import { defaultDeliveryLeadMs } from "@/lib/delivery-lead";
+import { listCanonicalPushSubscriptions } from "@/lib/push-devices";
 
 export const CALIBRATION_PING_COUNT = 3;
 export const CALIBRATION_PING_SPACING_MS = 700;
@@ -18,9 +19,7 @@ export async function sendCalibrationPings(
   const silent = options.silent !== false; // default quiet
   const pingCount = mode === "live" ? LIVE_PING_COUNT : CALIBRATION_PING_COUNT;
 
-  const subscriptions = await prisma.pushSubscription.findMany({
-    where: { userId, active: true },
-  });
+  const subscriptions = await listCanonicalPushSubscriptions(userId);
 
   if (subscriptions.length === 0) {
     return { error: "No active push subscription" as const, status: 404 as const };
@@ -66,15 +65,7 @@ export async function sendCalibrationPings(
 }
 
 export async function getCalibrationStatus(userId: string) {
-  const subscriptions = await prisma.pushSubscription.findMany({
-    where: { userId, active: true },
-    select: {
-      id: true,
-      platform: true,
-      deliveryLeadMs: true,
-      deliverySampleCount: true,
-    },
-  });
+  const subscriptions = await listCanonicalPushSubscriptions(userId);
 
   const totalSamples = subscriptions.reduce((sum, s) => sum + s.deliverySampleCount, 0);
   const maxLead =
@@ -83,7 +74,12 @@ export async function getCalibrationStatus(userId: string) {
       : defaultDeliveryLeadMs();
 
   return {
-    devices: subscriptions,
+    devices: subscriptions.map((s) => ({
+      id: s.id,
+      platform: s.platform,
+      deliveryLeadMs: s.deliveryLeadMs,
+      deliverySampleCount: s.deliverySampleCount,
+    })),
     totalSamples,
     maxLeadMs: maxLead,
     isCalibrated: totalSamples >= CALIBRATION_PING_COUNT,

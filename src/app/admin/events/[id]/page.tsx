@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -35,6 +35,10 @@ import {
   groupAssignmentsByLaunchSlot,
   type MarchAssignment,
 } from "@/lib/march-groups";
+import {
+  mergeCallerEditDrafts,
+  type CallerEditDraft,
+} from "@/lib/caller-edit-drafts";
 import { HitOrderPreview } from "@/components/HitOrderPreview";
 import { RallyTimeline } from "@/components/RallyTimeline";
 import { isAdminRole } from "@/lib/roles";
@@ -107,9 +111,10 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [savingCallerId, setSavingCallerId] = useState<string | null>(null);
   const [quickAddingId, setQuickAddingId] = useState<string | null>(null);
-  const [editDrafts, setEditDrafts] = useState<
-    Record<string, { march: string; offset: string; userId: string; name: string }>
-  >({});
+  const [editDrafts, setEditDrafts] = useState<Record<string, CallerEditDraft>>({});
+  /** Assignment ids with unsaved local edits — polls must not clobber these. */
+  const dirtyCallerIdsRef = useRef<Set<string>>(new Set());
+  const timingDirtyRef = useRef(false);
 
   const { correctedNow } = useServerClock({
     activeRally: event?.status === "ACTIVE",
@@ -131,18 +136,27 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
     }
   };
 
+  const markCallerDirty = (assignmentId: string) => {
+    dirtyCallerIdsRef.current.add(assignmentId);
+  };
+
+  const clearCallerDirty = (assignmentId: string) => {
+    dirtyCallerIdsRef.current.delete(assignmentId);
+  };
+
   const syncDrafts = useCallback((data: EventDetail) => {
-    const next: Record<string, { march: string; offset: string; userId: string; name: string }> =
-      {};
+    const serverDrafts: Record<string, CallerEditDraft> = {};
     for (const a of data.assignments) {
-      next[a.id] = {
+      serverDrafts[a.id] = {
         march: a.marchFormatted || formatMarchDuration(a.marchDurationSeconds),
         offset: String(a.arrivalOffsetSeconds ?? 0),
         userId: a.userId || "",
         name: a.displayName,
       };
     }
-    setEditDrafts(next);
+    setEditDrafts((prev) =>
+      mergeCallerEditDrafts(prev, serverDrafts, dirtyCallerIdsRef.current)
+    );
   }, []);
 
   const loadEvent = useCallback(() => {
@@ -151,7 +165,9 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
       .then((data) => {
         if (data.error) return;
         setEvent(data);
-        setFirstCallerLead(String(data.firstCallerLeadSeconds ?? 3));
+        if (!timingDirtyRef.current) {
+          setFirstCallerLead(String(data.firstCallerLeadSeconds ?? 3));
+        }
         syncDrafts(data);
       });
   }, [params.id, syncDrafts]);
@@ -330,6 +346,7 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
         flash(null, data.error || "Failed to save caller");
         return;
       }
+      clearCallerDirty(assignmentId);
       flash("Caller saved");
       loadEvent();
     } finally {
@@ -415,6 +432,7 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
         flash(null, data.error || "Failed to save timing");
         return;
       }
+      timingDirtyRef.current = false;
       flash("Timing settings saved");
       loadEvent();
     } finally {
@@ -564,7 +582,10 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                 min={0}
                 max={300}
                 value={firstCallerLead}
-                onChange={(e) => setFirstCallerLead(e.target.value)}
+                onChange={(e) => {
+                  timingDirtyRef.current = true;
+                  setFirstCallerLead(e.target.value);
+                }}
                 className="input-field font-mono text-sm"
               />
               <p className="text-rally-muted text-xs mt-1">
@@ -691,12 +712,13 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                     <div className="min-w-0 flex-1">
                       <input
                         value={draft.name}
-                        onChange={(e) =>
+                        onChange={(e) => {
+                          markCallerDirty(caller.id);
                           setEditDrafts((prev) => ({
                             ...prev,
                             [caller.id]: { ...draft, name: e.target.value },
-                          }))
-                        }
+                          }));
+                        }}
                         className="input-field !min-h-[40px] !py-2 font-semibold text-sm"
                         aria-label={`Caller name for ${caller.displayName}`}
                       />
@@ -734,12 +756,13 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                       March (M:SS)
                       <input
                         value={draft.march}
-                        onChange={(e) =>
+                        onChange={(e) => {
+                          markCallerDirty(caller.id);
                           setEditDrafts((prev) => ({
                             ...prev,
                             [caller.id]: { ...draft, march: e.target.value },
-                          }))
-                        }
+                          }));
+                        }}
                         className="input-field !min-h-[40px] !py-2 font-mono text-sm mt-1"
                       />
                     </label>
@@ -753,12 +776,13 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                         min={-3600}
                         max={3600}
                         value={draft.offset}
-                        onChange={(e) =>
+                        onChange={(e) => {
+                          markCallerDirty(caller.id);
                           setEditDrafts((prev) => ({
                             ...prev,
                             [caller.id]: { ...draft, offset: e.target.value },
-                          }))
-                        }
+                          }));
+                        }}
                         className="input-field !min-h-[40px] !py-2 font-mono text-sm mt-1"
                         aria-label={`Arrival offset for ${caller.displayName}`}
                       />
@@ -770,12 +794,13 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                     Linked account
                     <select
                       value={draft.userId}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        markCallerDirty(caller.id);
                         setEditDrafts((prev) => ({
                           ...prev,
                           [caller.id]: { ...draft, userId: e.target.value },
-                        }))
-                      }
+                        }));
+                      }}
                       className="input-field !min-h-[40px] !py-2 text-sm mt-1"
                     >
                       <option value="">None (name only)</option>

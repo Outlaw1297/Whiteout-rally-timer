@@ -254,7 +254,12 @@ export function usePushNotifications() {
 
       let existing = await registration.pushManager.getSubscription();
       if (existing) {
-        const verified = await verifyEndpoint(existing.endpoint);
+        // A verify failure here (e.g. flaky connection) shouldn't block Enable —
+        // fall through to the normal reuse attempt, which the server will still
+        // accept even for a genuine cross-account handoff.
+        const verified = await verifyEndpoint(existing.endpoint).catch(
+          () => ({ registered: false, active: false }) as VerifyResult
+        );
         if (verified.reason === "owned_by_other") {
           // Someone else is currently registered on this device — the user
           // explicitly tapped Enable, so this is a deliberate handoff. Mint

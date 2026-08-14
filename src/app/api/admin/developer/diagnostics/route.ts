@@ -6,6 +6,7 @@ import { isDeveloperRole } from "@/lib/roles";
 import { getVapidDiagnostics, initWebPush } from "@/lib/push";
 import { isOnline } from "@/lib/presence";
 import { platformFamily, resolveDevicePlatform } from "@/lib/device-platform";
+import { selectCanonicalSubscriptions } from "@/lib/device-id";
 
 export const dynamic = "force-dynamic";
 
@@ -120,6 +121,7 @@ export async function GET(request: NextRequest) {
           lastSeenAt: true,
           createdAt: true,
           updatedAt: true,
+          deviceId: true,
         },
       },
       assignments: {
@@ -145,10 +147,13 @@ export async function GET(request: NextRequest) {
   const now = Date.now();
   const nestedUsers = users.map((u) => {
     const stats = tally(u.assignments);
-    const devices = u.pushSubscriptions.map((sub) => {
+    const canonical = selectCanonicalSubscriptions(u.pushSubscriptions);
+    const devices = canonical.map((sub) => {
       const platform = resolveDevicePlatform(sub.platform, sub.userAgent);
       return {
         id: sub.id,
+        deviceId: sub.deviceId,
+        deviceLabel: sub.deviceId ? sub.deviceId.slice(0, 8) : null,
         platform,
         platformFamily: platformFamily(platform),
         userAgent: sub.userAgent,
@@ -167,7 +172,8 @@ export async function GET(request: NextRequest) {
       displayName: u.displayName,
       role: u.role,
       active: u.active,
-      deviceCount: u.pushSubscriptions.length,
+      deviceCount: canonical.length,
+      staleDeviceCount: Math.max(0, u.pushSubscriptions.length - canonical.length),
       deliveryLeadMs: u.deliveryLeadMs,
       deliverySampleCount: u.deliverySampleCount,
       lastCalibratedAt: u.lastCalibratedAt?.toISOString() ?? null,

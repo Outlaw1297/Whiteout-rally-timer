@@ -4,6 +4,7 @@ import { jsonResponse, errorResponse, isValidUuid } from "@/lib/api";
 import { requireAuth } from "@/lib/auth";
 import { isDeveloperRole } from "@/lib/roles";
 import { sendPushNotification, isExpiredSubscription } from "@/lib/push";
+import { selectCanonicalSubscriptions } from "@/lib/device-id";
 
 export const dynamic = "force-dynamic";
 
@@ -45,12 +46,15 @@ export async function POST(request: NextRequest) {
     return errorResponse("subscriptionId, userId, or all:true required");
   }
 
-  const subscriptions = await prisma.pushSubscription.findMany({
+  const loaded = await prisma.pushSubscription.findMany({
     where,
     include: {
       user: { select: { displayName: true, username: true } },
     },
   });
+  const subscriptions = body.subscriptionId
+    ? loaded
+    : selectCanonicalSubscriptions(loaded);
 
   if (subscriptions.length === 0) {
     return errorResponse("No active devices found", 404);

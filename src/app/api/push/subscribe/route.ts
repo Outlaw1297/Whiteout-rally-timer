@@ -4,9 +4,11 @@ import { jsonResponse, errorResponse } from "@/lib/api";
 import { requireAuth } from "@/lib/auth";
 import { rateLimit, RATE_LIMITS, getClientIp, rateLimitResponse } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
-import { getVapidPublicKey, getVapidDiagnostics, initWebPush } from "@/lib/push";
+import { getVapidPublicKey, getVapidDiagnostics } from "@/lib/push";
 import { defaultDeliveryLeadMs } from "@/lib/delivery-lead";
 import { detectPlatformFromUA } from "@/lib/device-platform";
+import { normalizeDeviceId } from "@/lib/device-id";
+import { retireDuplicatePushSubscriptions } from "@/lib/push-devices";
 
 export async function GET() {
   const publicKey = await getVapidPublicKey();
@@ -33,6 +35,7 @@ export async function POST(request: NextRequest) {
     keys?: { p256dh?: string; auth?: string };
     userAgent?: string;
     platform?: string;
+    deviceId?: string;
   };
 
   try {
@@ -42,13 +45,12 @@ export async function POST(request: NextRequest) {
   }
 
   const { endpoint, keys, userAgent, platform: clientPlatform } = body;
+  const deviceId = normalizeDeviceId(body.deviceId);
 
   if (!endpoint || !keys?.p256dh || !keys?.auth) {
     return errorResponse("endpoint and keys (p256dh, auth) are required");
   }
 
-  // Prefer the browser-reported UA; fall back to the HTTP header. Always derive
-  // platform on the server — client labels can be stale/wrong (e.g. Linux before Android).
   const resolvedUa =
     (typeof userAgent === "string" && userAgent.trim()) ||
     request.headers.get("user-agent") ||
@@ -60,7 +62,18 @@ export async function POST(request: NextRequest) {
     fromUa ||
     null;
 
-  const freshLead = defaultDeliveryLeadMs(undefined, platform || resolvedUa);
+  const existing = await prisma.pushSubscription.findUnique({
+    where: { endpoint },
+  });
+  const sameDevice =
+    existing &&
+    existing.userId === session.id &&
+    ((deviceId && existing.deviceId === deviceId) || existing.endpoint === endpoint);
+
+  const freshLead = defaultDeliveryLeadMs(
+    sameDevice ? existing.deliveryLeadMs : undefined,
+    platform || resolvedUa
+  );
 
   const subscription = await prisma.pushSubscription.upsert({
     where: { endpoint },
@@ -71,9 +84,11 @@ export async function POST(request: NextRequest) {
       auth: keys.auth,
       userAgent: resolvedUa,
       platform,
+      deviceId,
       active: true,
       deliveryLeadMs: freshLead,
-      deliverySampleCount: 0,
+      deliverySampleCount: sameDevice ? existing.deliverySampleCount : 0,
+      lastSeenAt: new Date(),
     },
     update: {
       userId: session.id,
@@ -81,22 +96,37 @@ export async function POST(request: NextRequest) {
       auth: keys.auth,
       userAgent: resolvedUa,
       platform,
+      deviceId: deviceId ?? undefined,
       active: true,
-      deliveryLeadMs: freshLead,
-      deliverySampleCount: 0,
+      lastSeenAt: new Date(),
+      ...(sameDevice
+        ? {}
+        : { deliveryLeadMs: freshLead, deliverySampleCount: 0 }),
     },
+  });
+
+  const retired = await retireDuplicatePushSubscriptions({
+    userId: session.id,
+    keepId: subscription.id,
+    deviceId: subscription.deviceId,
+    userAgent: subscription.userAgent,
   });
 
   logger.pushSubscriptionCreated(subscription.id, session.id);
 
   await prisma.user.update({
     where: { id: session.id },
-    data: { deliveryLeadMs: freshLead, deliverySampleCount: 0 },
+    data: {
+      lastSeenAt: new Date(),
+      ...(sameDevice ? {} : { deliveryLeadMs: freshLead, deliverySampleCount: 0 }),
+    },
   });
 
   return jsonResponse({
     success: true,
     subscriptionId: subscription.id,
+    deviceId: subscription.deviceId,
     active: subscription.active,
+    retiredDuplicates: retired,
   });
 }

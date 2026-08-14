@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { listCanonicalPushSubscriptions } from "@/lib/push-devices";
 import { logger } from "@/lib/logger";
 import { sendPushNotification, isExpiredSubscription } from "@/lib/push";
 import {
@@ -195,9 +196,7 @@ async function processNotificationEvent(eventId: string) {
     return;
   }
 
-  const subscriptions = await prisma.pushSubscription.findMany({
-    where: { userId: user.id, active: true },
-  });
+  const subscriptions = await listCanonicalPushSubscriptions(user.id);
 
   // Linked account but no active push devices — not a successful send.
   if (subscriptions.length === 0) {

@@ -3,14 +3,13 @@ import { prisma } from "@/lib/prisma";
 import { jsonResponse, errorResponse } from "@/lib/api";
 import { requireAuth } from "@/lib/auth";
 import { sendPushNotification, isExpiredSubscription } from "@/lib/push";
+import { listCanonicalPushSubscriptions } from "@/lib/push-devices";
 
 export async function POST(request: NextRequest) {
   const session = await requireAuth(request);
   if (session instanceof Response) return session;
 
-  const subscriptions = await prisma.pushSubscription.findMany({
-    where: { userId: session.id, active: true },
-  });
+  const subscriptions = await listCanonicalPushSubscriptions(session.id);
 
   if (subscriptions.length === 0) {
     return errorResponse("No active push subscriptions. Enable notifications first.", 400);

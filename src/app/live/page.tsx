@@ -6,7 +6,7 @@ import { PublicTopNav } from "@/components/PublicTopNav";
 import { PublicRallyLiveView } from "@/components/PublicRallyLiveView";
 import { AppShell } from "@/components/ui/AppShell";
 import type { SerializedEvent } from "@/hooks/useEventSocket";
-import { mergeActiveEvents } from "@/lib/select-active-events";
+import { mergeLiveBoardEvents } from "@/lib/select-active-events";
 
 const LIVE_LIST_URLS = ["/api/live-rallies", "/api/events/live", "/api/events"];
 
@@ -23,7 +23,7 @@ async function fetchLiveBoardEvents(): Promise<SerializedEvent[]> {
       }
     })
   );
-  return mergeActiveEvents(batches);
+  return mergeLiveBoardEvents(batches);
 }
 
 export default function PublicLivePage() {

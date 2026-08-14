@@ -19,6 +19,7 @@ import {
   groupAssignmentsByLaunchSlot,
 } from "@/lib/march-groups";
 import { isAdminRole } from "@/lib/roles";
+import { isLiveOnPublicBoard } from "@/lib/select-active-events";
 
 export function PublicRallyLiveView({
   eventId,
@@ -92,8 +93,8 @@ function PublicRallyLiveBody({
   user: ReturnType<typeof useAuth>["user"];
   authLoading: boolean;
 }) {
-  const isActive = event.status === "ACTIVE";
   const isTemplate = event.status === "READY" || event.status === "DRAFT";
+  const isActive = isLiveOnPublicBoard(event);
 
   const { correctedNow } = useServerClock({
     activeRally: isActive,

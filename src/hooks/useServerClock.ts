@@ -61,17 +61,18 @@ export function useServerClock(options: UseServerClockOptions = {}): ServerClock
       const clientReceiveTime = Date.now();
       const data = await res.json();
 
+      let applied = false;
       if (data.serverReceiveTime && data.serverSendTime) {
-        clockSync.applyNtp(
+        applied = clockSync.applyNtp(
           clientSendTime,
           data.serverReceiveTime,
           data.serverSendTime,
           clientReceiveTime
         );
       } else if (data.unixMs) {
-        clockSync.applyUnixMs(data.unixMs, clientReceiveTime, clientSendTime);
+        applied = clockSync.applyUnixMs(data.unixMs, clientReceiveTime, clientSendTime);
       }
-      refreshState();
+      if (applied) refreshState();
     } catch {
       // keep last known anchor
     }
@@ -95,28 +96,30 @@ export function useServerClock(options: UseServerClockOptions = {}): ServerClock
           typeof data.serverSendTime === "number"
         ) {
           const clientReceiveTime = Date.now();
-          clockSync.applyNtp(
-            data.clientSendTime,
-            data.serverReceiveTime,
-            data.serverSendTime,
-            clientReceiveTime
-          );
-          refreshState();
+          if (
+            clockSync.applyNtp(
+              data.clientSendTime,
+              data.serverReceiveTime,
+              data.serverSendTime,
+              clientReceiveTime
+            )
+          ) {
+            refreshState();
+          }
           return;
         }
 
         // Server push keepalive — only nudge if we have not synced recently.
         if (data.type === "time_sync" && typeof data.serverTime === "number") {
-          const stale = !clockSync.getLastSyncAt() || Date.now() - clockSync.getLastSyncAt()! > 10_000;
+          const last = clockSync.getLastSyncAt();
+          const stale = !last || Date.now() - last > 10_000;
           if (stale) {
             const clientReceiveTime = Date.now();
-            const flightMs = Math.max(0, clientReceiveTime - data.serverTime);
-            clockSync.applyUnixMs(
-              data.serverTime + flightMs,
-              clientReceiveTime,
-              clientReceiveTime
-            );
-            refreshState();
+            // Do not add queue delay as "flight" — that jumps the on-screen timer
+            // when a notification blocks the main thread.
+            if (clockSync.applyUnixMs(data.serverTime, clientReceiveTime, clientReceiveTime)) {
+              refreshState();
+            }
           }
           setIsLive(true);
         }

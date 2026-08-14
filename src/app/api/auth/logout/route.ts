@@ -22,14 +22,18 @@ export async function POST(request: NextRequest) {
 
   let unbound = 0;
   if (session) {
-    const result = await unbindCurrentDevice({
-      userId: session.id,
-      username: session.username,
-      displayName: session.displayName,
-      endpoint,
-      deviceId,
-    });
-    unbound = result.unbound;
+    try {
+      const result = await unbindCurrentDevice({
+        userId: session.id,
+        username: session.username,
+        displayName: session.displayName,
+        endpoint,
+        deviceId,
+      });
+      unbound = result.unbound;
+    } catch {
+      /* still clear the session cookie if unbind fails */
+    }
 
     await writeActivityLog({
       kind: "LOGOUT",

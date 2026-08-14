@@ -280,6 +280,9 @@ export default function DeveloperPage() {
           return;
         }
         setStatusMsg(data.message || "Device removed");
+        setTestResults(null);
+        setTestHeadline("");
+        setTestDetail("");
         load();
         loadLogs();
       } catch {
@@ -420,14 +423,20 @@ export default function DeveloperPage() {
         </p>
       </Panel>
 
-      {(statusMsg || testHeadline || (testResults && testResults.length > 0)) && (
+      {statusMsg && !testHeadline && (
+        <Panel className="mb-4">
+          <p className="text-rally-success text-sm">{statusMsg}</p>
+        </Panel>
+      )}
+
+      {(testHeadline || (testResults && testResults.length > 0)) && (
         <Panel className="mb-4 text-xs space-y-2">
           <div className="flex items-center gap-2">
             <Bell className="h-4 w-4 text-rally-ice shrink-0" aria-hidden />
             <SectionLabel>Last test push</SectionLabel>
           </div>
           {testHeadline && (
-            <p className={`font-semibold ${statusMsg.includes("Sent") || testResults?.some((r) => r.success) ? "text-rally-success" : "text-rally-danger"}`}>
+            <p className={`font-semibold ${testResults?.some((r) => r.success) ? "text-rally-success" : "text-rally-danger"}`}>
               {testHeadline}
             </p>
           )}

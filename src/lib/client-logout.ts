@@ -11,8 +11,8 @@ export async function logoutAndUnbindThisDevice(): Promise<void> {
 
   try {
     if ("serviceWorker" in navigator) {
-      const registration = await navigator.serviceWorker.ready;
-      const subscription = await registration.pushManager.getSubscription();
+      const registration = await navigator.serviceWorker.getRegistration();
+      const subscription = await registration?.pushManager.getSubscription();
       endpoint = subscription?.endpoint;
     }
   } catch {

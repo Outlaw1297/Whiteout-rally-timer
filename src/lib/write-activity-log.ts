@@ -29,15 +29,14 @@ function toRow(input: ActivityLogInput) {
 async function pruneActivityLogs(): Promise<void> {
   const cutoff = new Date(Date.now() - LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000);
   await prisma.activityLog.deleteMany({ where: { createdAt: { lt: cutoff } } });
-  const extra = await prisma.activityLog.findMany({
-    orderBy: { createdAt: "desc" },
+  const extras = await prisma.activityLog.findMany({
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     skip: LOG_MAX_ROWS,
-    take: 1,
-    select: { createdAt: true },
+    select: { id: true },
   });
-  if (extra[0]) {
+  if (extras.length > 0) {
     await prisma.activityLog.deleteMany({
-      where: { createdAt: { lte: extra[0].createdAt } },
+      where: { id: { in: extras.map((row) => row.id) } },
     });
   }
 }

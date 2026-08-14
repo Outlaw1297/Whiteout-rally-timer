@@ -80,6 +80,12 @@ export function useForegroundPush() {
     // on-screen countdown hitch at throw time.
     const showBanner = () => {
       setMessages((prev) => [...prev.slice(-2), message]);
+      // Auto-dismiss after insert: background tabs pause rAF while
+      // setTimeout still runs, so a timer started before showBanner can
+      // fire against an empty list and leave the banner stuck.
+      if (notificationType !== "LAUNCH") {
+        window.setTimeout(() => dismiss(message.id), 5000);
+      }
     };
     if (typeof requestAnimationFrame === "function") {
       requestAnimationFrame(() => requestAnimationFrame(showBanner));
@@ -95,10 +101,6 @@ export function useForegroundPush() {
         notificationType,
         rallyId,
       });
-    }
-
-    if (notificationType !== "LAUNCH") {
-      window.setTimeout(() => dismiss(message.id), 5000);
     }
   }, [dismiss]);
 

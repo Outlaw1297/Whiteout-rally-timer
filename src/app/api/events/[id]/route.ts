@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { jsonResponse, errorResponse, isValidUuid } from "@/lib/api";
+import { jsonResponse, errorResponse, isValidUuid, NO_STORE_HEADERS } from "@/lib/api";
 import { requireAdmin } from "@/lib/auth";
 import { getSessionFromRequest } from "@/lib/session";
 import { isAdminRole } from "@/lib/roles";
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const { id } = params;
   // /api/events/live can be captured by this dynamic route on some Next builds.
   if (id === "live") {
-    return jsonResponse({ events: await listActivePublicEvents() });
+    return jsonResponse({ events: await listActivePublicEvents() }, 200, NO_STORE_HEADERS);
   }
   if (!isValidUuid(id)) return errorResponse("Invalid event ID");
 

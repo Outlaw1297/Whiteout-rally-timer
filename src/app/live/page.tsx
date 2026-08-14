@@ -12,15 +12,26 @@ export default function PublicLivePage() {
 
   useEffect(() => {
     let cancelled = false;
-    const load = () => {
-      fetch("/api/events/live")
-        .then((r) => r.json())
-        .then((data) => {
-          if (!cancelled) setEvents(data.events || []);
-        })
-        .catch(() => {
-          if (!cancelled) setEvents([]);
-        });
+    const load = async () => {
+      const urls = ["/api/live-rallies", "/api/events/live", "/api/events"];
+      for (const url of urls) {
+        try {
+          const res = await fetch(url);
+          if (!res.ok) continue;
+          const data = await res.json();
+          if (!Array.isArray(data.events)) continue;
+          if (cancelled) return;
+          setEvents(
+            data.events.filter(
+              (e: SerializedEvent) => String(e.status).toUpperCase() === "ACTIVE"
+            )
+          );
+          return;
+        } catch {
+          /* try next */
+        }
+      }
+      if (!cancelled) setEvents([]);
     };
     load();
     const interval = setInterval(load, 2500);

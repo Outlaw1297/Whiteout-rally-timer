@@ -10,6 +10,7 @@ import {
 } from "@/lib/rally-event";
 import { cancelAllEventNotifications } from "@/lib/notifications";
 import { broadcastRallyUpdate, broadcastRallyCancelled } from "@/server/rally-hub";
+import { listActivePublicEvents } from "@/lib/live-events";
 
 interface RouteParams {
   params: { id: string };
@@ -43,6 +44,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const session = await getSessionFromRequest(request);
 
   const { id } = params;
+  // /api/events/live can be captured by this dynamic route on some Next builds.
+  if (id === "live") {
+    return jsonResponse({ events: await listActivePublicEvents() });
+  }
   if (!isValidUuid(id)) return errorResponse("Invalid event ID");
 
   if (!session) {

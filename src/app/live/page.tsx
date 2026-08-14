@@ -6,6 +6,25 @@ import { PublicTopNav } from "@/components/PublicTopNav";
 import { PublicRallyLiveView } from "@/components/PublicRallyLiveView";
 import { AppShell } from "@/components/ui/AppShell";
 import type { SerializedEvent } from "@/hooks/useEventSocket";
+import { mergeLiveBoardEvents } from "@/lib/select-active-events";
+
+const LIVE_LIST_URLS = ["/api/live-rallies", "/api/events/live", "/api/events"];
+
+async function fetchLiveBoardEvents(): Promise<SerializedEvent[]> {
+  const batches = await Promise.all(
+    LIVE_LIST_URLS.map(async (url) => {
+      try {
+        const res = await fetch(url, { cache: "no-store" });
+        if (!res.ok) return [] as SerializedEvent[];
+        const data = await res.json();
+        return Array.isArray(data.events) ? (data.events as SerializedEvent[]) : [];
+      } catch {
+        return [] as SerializedEvent[];
+      }
+    })
+  );
+  return mergeLiveBoardEvents(batches);
+}
 
 export default function PublicLivePage() {
   const [events, setEvents] = useState<SerializedEvent[] | null>(null);
@@ -13,25 +32,8 @@ export default function PublicLivePage() {
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
-      const urls = ["/api/live-rallies", "/api/events/live", "/api/events"];
-      for (const url of urls) {
-        try {
-          const res = await fetch(url);
-          if (!res.ok) continue;
-          const data = await res.json();
-          if (!Array.isArray(data.events)) continue;
-          if (cancelled) return;
-          setEvents(
-            data.events.filter(
-              (e: SerializedEvent) => String(e.status).toUpperCase() === "ACTIVE"
-            )
-          );
-          return;
-        } catch {
-          /* try next */
-        }
-      }
-      if (!cancelled) setEvents([]);
+      const next = await fetchLiveBoardEvents();
+      if (!cancelled) setEvents(next);
     };
     load();
     const interval = setInterval(load, 2500);
@@ -41,7 +43,7 @@ export default function PublicLivePage() {
     };
   }, []);
 
-  const live = (events || []).filter((e) => e.status === "ACTIVE");
+  const live = events || [];
   const multi = live.length > 1;
 
   return (

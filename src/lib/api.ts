@@ -1,7 +1,15 @@
 import { NextResponse } from "next/server";
 
-export function jsonResponse(data: unknown, status = 200) {
-  return NextResponse.json(data, { status });
+export const NO_STORE_HEADERS = {
+  "Cache-Control": "private, no-store, no-cache, must-revalidate",
+};
+
+export function jsonResponse(
+  data: unknown,
+  status = 200,
+  headers?: Record<string, string>
+) {
+  return NextResponse.json(data, { status, headers });
 }
 
 export function errorResponse(message: string, status = 400) {

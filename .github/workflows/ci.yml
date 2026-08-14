@@ -19,3 +19,4 @@ jobs:
       - run: npm run test:timing
       - run: npm run test:live-board
       - run: npm run test:device-id
+      - run: npm run test:activity-log

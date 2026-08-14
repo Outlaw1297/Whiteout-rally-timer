@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import type { AppRole } from "@/lib/roles";
+import { logoutAndUnbindThisDevice } from "@/lib/client-logout";
 
 export interface AuthUser {
   id: string;
@@ -25,7 +26,7 @@ export function useAuth() {
   }, []);
 
   const logout = async () => {
-    await fetch("/api/auth/logout", { method: "POST" });
+    await logoutAndUnbindThisDevice();
     setUser(null);
     router.push("/login");
   };

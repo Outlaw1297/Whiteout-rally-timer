@@ -4,6 +4,12 @@ import { jsonResponse, errorResponse } from "@/lib/api";
 import { requireAuth } from "@/lib/auth";
 import { sendPushNotification, isExpiredSubscription } from "@/lib/push";
 import { listCanonicalPushSubscriptions } from "@/lib/push-devices";
+import {
+  pushEndpointHost,
+  type ActivityLogInput,
+} from "@/lib/activity-log";
+import { writeActivityLogs } from "@/lib/write-activity-log";
+import { shortDeviceId } from "@/lib/device-id";
 
 export async function POST(request: NextRequest) {
   const session = await requireAuth(request);
@@ -12,13 +18,39 @@ export async function POST(request: NextRequest) {
   const subscriptions = await listCanonicalPushSubscriptions(session.id);
 
   if (subscriptions.length === 0) {
+    await writeActivityLogs([
+      {
+        kind: "PUSH_TEST",
+        success: false,
+        userId: session.id,
+        username: session.username,
+        displayName: session.displayName,
+        message: "Test push skipped — no active devices",
+        error: "No active push subscriptions. Enable notifications first.",
+        meta: { source: "user-test" },
+      },
+    ]);
     return errorResponse("No active push subscriptions. Enable notifications first.", 400);
   }
 
   let successCount = 0;
   let lastError: string | null = null;
+  const logs: ActivityLogInput[] = [];
+  const results: Array<{
+    subscriptionId: string;
+    deviceId: string | null;
+    deviceLabel: string | null;
+    platform: string | null;
+    success: boolean;
+    error?: string;
+    statusCode?: number;
+    deactivated?: boolean;
+    latencyMs: number;
+    endpointHost: string | null;
+  }> = [];
   const targetAt = new Date().toISOString();
   for (const sub of subscriptions) {
+    const started = Date.now();
     const result = await sendPushNotification(
       { endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth },
       {
@@ -29,19 +61,60 @@ export async function POST(request: NextRequest) {
         targetAt,
       }
     );
+    const latencyMs = Date.now() - started;
+    const deactivated =
+      !result.success &&
+      (isExpiredSubscription(result.statusCode) || result.statusCode === 401);
 
     if (result.success) {
       successCount++;
     } else {
       lastError = result.error || lastError;
-      if (isExpiredSubscription(result.statusCode) || result.statusCode === 401) {
+      if (deactivated) {
         await prisma.pushSubscription.update({
           where: { id: sub.id },
           data: { active: false },
         });
       }
     }
+
+    results.push({
+      subscriptionId: sub.id,
+      deviceId: sub.deviceId,
+      deviceLabel: shortDeviceId(sub.deviceId),
+      platform: sub.platform,
+      success: result.success,
+      error: result.error,
+      statusCode: result.statusCode ?? (result.success ? 201 : undefined),
+      deactivated,
+      latencyMs,
+      endpointHost: pushEndpointHost(sub.endpoint),
+    });
+
+    logs.push({
+      kind: "PUSH_TEST",
+      success: result.success,
+      userId: session.id,
+      username: session.username,
+      displayName: session.displayName,
+      deviceId: sub.deviceId,
+      subscriptionId: sub.id,
+      platform: sub.platform,
+      message: result.success
+        ? `Test push accepted for ${sub.platform || "device"} (${latencyMs}ms)`
+        : `Test push failed for ${sub.platform || "device"}`,
+      error: result.error,
+      meta: {
+        source: "user-test",
+        statusCode: result.statusCode ?? (result.success ? 201 : null),
+        latencyMs,
+        endpointHost: pushEndpointHost(sub.endpoint),
+        deactivated,
+      },
+    });
   }
+
+  await writeActivityLogs(logs);
 
   if (successCount === 0) {
     const needsResubscribe =
@@ -54,5 +127,10 @@ export async function POST(request: NextRequest) {
     return errorResponse(message, 500);
   }
 
-  return jsonResponse({ success: true, devicesNotified: successCount });
+  return jsonResponse({
+    success: true,
+    devicesNotified: successCount,
+    devicesTested: subscriptions.length,
+    results,
+  });
 }

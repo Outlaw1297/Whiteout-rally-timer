@@ -5,6 +5,8 @@ import { requireAuth } from "@/lib/auth";
 import { rateLimit, RATE_LIMITS, getClientIp, rateLimitResponse } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
 import { syncUserDeliveryLead } from "@/lib/sync-user-delivery-lead";
+import { pushEndpointHost } from "@/lib/activity-log";
+import { writeActivityLog } from "@/lib/write-activity-log";
 
 export async function POST(request: NextRequest) {
   const session = await requireAuth(request);
@@ -38,6 +40,19 @@ export async function POST(request: NextRequest) {
   });
 
   logger.pushSubscriptionRemoved(subscription.id, "unsubscribed");
+
+  await writeActivityLog({
+    kind: "DEVICE_UNBIND",
+    success: true,
+    userId: session.id,
+    username: session.username,
+    displayName: session.displayName,
+    deviceId: subscription.deviceId,
+    subscriptionId: subscription.id,
+    platform: subscription.platform,
+    message: `${session.displayName} disabled notifications on this device`,
+    meta: { reason: "unsubscribed", endpointHost: pushEndpointHost(endpoint) },
+  });
 
   await syncUserDeliveryLead(session.id);
 

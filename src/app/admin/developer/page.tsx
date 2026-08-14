@@ -4,9 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
+  Bell,
   Check,
   Clock,
   Radio,
+  ScrollText,
   Send,
   Smartphone,
   Trash2,
@@ -71,6 +73,40 @@ interface ClockInfo {
   rttMs?: number;
 }
 
+interface PushTestResult {
+  subscriptionId: string;
+  deviceId?: string | null;
+  deviceLabel?: string | null;
+  platform: string | null;
+  user: string;
+  username?: string | null;
+  success: boolean;
+  error?: string;
+  statusCode?: number;
+  deactivated?: boolean;
+  latencyMs?: number;
+  endpointHost?: string;
+}
+
+interface ActivityLogRow {
+  id: string;
+  createdAt: string;
+  kind: string;
+  kindLabel: string;
+  group: string;
+  success: boolean;
+  userId: string | null;
+  username: string | null;
+  displayName: string | null;
+  deviceId: string | null;
+  deviceLabel: string | null;
+  platform: string | null;
+  message: string | null;
+  error: string | null;
+}
+
+type LogGroupFilter = "all" | "auth" | "device" | "notification";
+
 function formatWhen(iso: string | null | undefined): string {
   if (!iso) return "never";
   const d = new Date(iso);
@@ -107,14 +143,12 @@ export default function DeveloperPage() {
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
   const [testing, setTesting] = useState<string | null>(null);
-  const [testResults, setTestResults] = useState<Array<{
-    subscriptionId: string;
-    platform: string | null;
-    user: string;
-    success: boolean;
-    error?: string;
-  }> | null>(null);
+  const [testResults, setTestResults] = useState<PushTestResult[] | null>(null);
+  const [testHeadline, setTestHeadline] = useState("");
+  const [testDetail, setTestDetail] = useState("");
   const [statusMsg, setStatusMsg] = useState("");
+  const [logs, setLogs] = useState<ActivityLogRow[]>([]);
+  const [logGroup, setLogGroup] = useState<LogGroupFilter>("all");
 
   const load = useCallback(async () => {
     try {
@@ -177,11 +211,25 @@ export default function DeveloperPage() {
     }
   }, [router]);
 
+  const loadLogs = useCallback(async () => {
+    try {
+      const qs = logGroup === "all" ? "" : `?group=${logGroup}`;
+      const res = await fetch(`/api/admin/developer/logs${qs}`, { cache: "no-store" });
+      if (!res.ok) return;
+      const data = await res.json();
+      setLogs(data.logs || []);
+    } catch {
+      /* keep previous rows */
+    }
+  }, [logGroup]);
+
   const sendTest = useCallback(
     async (opts: { subscriptionId?: string; userId?: string; all?: boolean }) => {
       setError("");
       setStatusMsg("");
       setTestResults(null);
+      setTestHeadline("");
+      setTestDetail("");
       setTesting(opts.all ? "all" : opts.subscriptionId || opts.userId || "one");
       try {
         const res = await fetch("/api/admin/push/test", {
@@ -192,22 +240,31 @@ export default function DeveloperPage() {
         const data = await res.json();
         if (!res.ok) {
           setError(data.error || "Test failed");
+          setTestHeadline("Test did not send");
+          setTestDetail(data.error || "The push service was not reached.");
+          loadLogs();
           return;
         }
         setTestResults(data.results || []);
+        setTestHeadline(data.headline || `Sent to ${data.devicesNotified}/${data.devicesTested} devices`);
+        setTestDetail(
+          data.detail ||
+            "Accepted means Apple or FCM took the message. The phone can still stay silent if Show Previews is off."
+        );
         setStatusMsg(
           `Sent to ${data.devicesNotified}/${data.devicesTested} device${
             data.devicesTested === 1 ? "" : "s"
           }`
         );
         load();
+        loadLogs();
       } catch {
         setError("Test request failed");
       } finally {
         setTesting(null);
       }
     },
-    [load]
+    [load, loadLogs]
   );
 
   const deleteDevice = useCallback(
@@ -224,11 +281,12 @@ export default function DeveloperPage() {
         }
         setStatusMsg(data.message || "Device removed");
         load();
+        loadLogs();
       } catch {
         setError("Failed to delete device");
       }
     },
-    [load]
+    [load, loadLogs]
   );
 
   useEffect(() => {
@@ -241,10 +299,14 @@ export default function DeveloperPage() {
   useEffect(() => {
     if (user && isDeveloperRole(user.role)) {
       load();
-      const interval = setInterval(load, 8000);
+      loadLogs();
+      const interval = setInterval(() => {
+        load();
+        loadLogs();
+      }, 8000);
       return () => clearInterval(interval);
     }
-  }, [user, load]);
+  }, [user, load, loadLogs]);
 
   const filteredUsers = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -283,7 +345,9 @@ export default function DeveloperPage() {
 
       <h1 className="text-xl font-bold text-rally-snow mb-1">Developer</h1>
       <p className="text-rally-muted text-sm mb-4">
-        Users with nested devices, delivery stats, and server clock diagnostics.
+        Devices, test pushes, and an activity log for logins, registrations, and notification
+        results. Log out unbinds this browser’s push only — other phones stay subscribed, and the
+        install id stays so this phone reattaches on the next login.
       </p>
 
       {error && (
@@ -308,6 +372,10 @@ export default function DeveloperPage() {
             {testing === "all" ? "Testing…" : "Test All Devices"}
           </button>
         </div>
+        <p className="text-[11px] text-rally-muted">
+          Test sends a real push. Success means Apple or FCM accepted it — not that the banner was
+          visible. iOS stays silent when Show Previews is Off.
+        </p>
         {clock ? (
           <>
             <p className="font-mono text-sm text-rally-snow">{clock.serverTime}</p>
@@ -352,27 +420,123 @@ export default function DeveloperPage() {
         </p>
       </Panel>
 
-      {(statusMsg || (testResults && testResults.length > 0)) && (
-        <Panel className="mb-4 text-xs space-y-1">
-          {statusMsg && <p className="text-rally-success font-semibold">{statusMsg}</p>}
+      {(statusMsg || testHeadline || (testResults && testResults.length > 0)) && (
+        <Panel className="mb-4 text-xs space-y-2">
+          <div className="flex items-center gap-2">
+            <Bell className="h-4 w-4 text-rally-ice shrink-0" aria-hidden />
+            <SectionLabel>Last test push</SectionLabel>
+          </div>
+          {testHeadline && (
+            <p className={`font-semibold ${statusMsg.includes("Sent") || testResults?.some((r) => r.success) ? "text-rally-success" : "text-rally-danger"}`}>
+              {testHeadline}
+            </p>
+          )}
+          {testDetail && <p className="text-rally-muted">{testDetail}</p>}
           {testResults?.map((r) => (
-            <p
+            <div
               key={r.subscriptionId}
-              className={`flex items-center gap-1.5 ${
-                r.success ? "text-rally-success" : "text-rally-danger"
+              className={`rounded-lg border p-2 space-y-0.5 ${
+                r.success
+                  ? "border-rally-success/30 bg-rally-success/5"
+                  : "border-rally-danger/30 bg-rally-danger/5"
               }`}
             >
-              {r.success ? (
-                <Check className="h-3 w-3 shrink-0" aria-hidden />
-              ) : (
-                <X className="h-3 w-3 shrink-0" aria-hidden />
-              )}
-              {r.user} · {r.platform || "unknown"}
-              {r.error ? ` — ${r.error}` : ""}
-            </p>
+              <p
+                className={`flex items-center gap-1.5 font-semibold ${
+                  r.success ? "text-rally-success" : "text-rally-danger"
+                }`}
+              >
+                {r.success ? (
+                  <Check className="h-3 w-3 shrink-0" aria-hidden />
+                ) : (
+                  <X className="h-3 w-3 shrink-0" aria-hidden />
+                )}
+                {r.user} · {r.platform || "unknown"}
+                {r.deviceLabel ? ` · id ${r.deviceLabel}` : ""}
+              </p>
+              <p className="text-rally-muted font-mono text-[11px]">
+                {r.endpointHost || "push host unknown"}
+                {r.statusCode != null ? ` · HTTP ${r.statusCode}` : r.success ? " · accepted" : ""}
+                {r.latencyMs != null ? ` · ${r.latencyMs}ms` : ""}
+                {r.deactivated ? " · stale endpoint deactivated" : ""}
+              </p>
+              {r.error && <p className="text-rally-danger">{r.error}</p>}
+            </div>
           ))}
         </Panel>
       )}
+
+      <Panel className="mb-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <ScrollText className="h-4 w-4 text-rally-ice shrink-0" aria-hidden />
+            <SectionLabel>Activity log</SectionLabel>
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {(
+              [
+                ["all", "All"],
+                ["notification", "Pushes"],
+                ["device", "Devices"],
+                ["auth", "Logins"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setLogGroup(value)}
+                className={`!min-h-[28px] !py-0.5 !px-2 text-[11px] ${
+                  logGroup === value ? "btn-primary" : "btn-ghost"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <p className="text-[11px] text-rally-muted mt-1 mb-2">
+          Newest first. Rally alerts, developer tests, device register/unbind, and sign-in. Kept 14
+          days.
+        </p>
+        <div className="max-h-80 overflow-auto space-y-1.5">
+          {logs.length === 0 ? (
+            <p className="text-rally-muted text-sm py-3 text-center">No log rows yet</p>
+          ) : (
+            logs.map((row) => (
+              <div
+                key={row.id}
+                className="rounded-lg border border-rally-border bg-rally-bg p-2 text-[11px]"
+              >
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <StatusBadge
+                    tone={
+                      row.kind === "PUSH_SKIPPED" || row.kind === "LOGIN_FAILED"
+                        ? "warning"
+                        : row.success
+                          ? "success"
+                          : "danger"
+                    }
+                  >
+                    {row.kindLabel}
+                  </StatusBadge>
+                  <span className="text-rally-muted font-mono">{formatWhen(row.createdAt)}</span>
+                  {row.displayName && (
+                    <span className="text-rally-snow">{row.displayName}</span>
+                  )}
+                  {row.platform && (
+                    <span className="text-rally-muted">{row.platform}</span>
+                  )}
+                  {row.deviceLabel && (
+                    <span className="font-mono text-rally-muted">id {row.deviceLabel}</span>
+                  )}
+                </div>
+                {row.message && <p className="text-rally-snow mt-1">{row.message}</p>}
+                {row.error && <p className="text-rally-danger mt-0.5">{row.error}</p>}
+              </div>
+            ))
+          )}
+        </div>
+      </Panel>
 
       {notificationSummary && (
         <Panel className="mb-4">

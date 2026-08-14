@@ -264,6 +264,43 @@ export async function migrateFeaturePackColumns(): Promise<void> {
     `);
     logger.info("pruned_duplicate_push_subscriptions", { pruned });
   }
+
+  await migrateActivityLogTable();
+}
+
+/** Developer activity log (logins, device bind/unbind, push send results). */
+export async function migrateActivityLogTable(): Promise<void> {
+  if (!(await tableExists("ActivityLog"))) {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "ActivityLog" (
+        "id" TEXT NOT NULL,
+        "createdAt" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "kind" TEXT NOT NULL,
+        "success" BOOLEAN NOT NULL DEFAULT true,
+        "userId" TEXT,
+        "username" TEXT,
+        "displayName" TEXT,
+        "deviceId" TEXT,
+        "subscriptionId" TEXT,
+        "platform" TEXT,
+        "message" TEXT,
+        "error" TEXT,
+        "meta" JSONB,
+        CONSTRAINT "ActivityLog_pkey" PRIMARY KEY ("id")
+      )
+    `);
+    logger.info("migrated_activity_log_table");
+  }
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "ActivityLog_createdAt_idx" ON "ActivityLog"("createdAt")
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "ActivityLog_kind_createdAt_idx" ON "ActivityLog"("kind", "createdAt")
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "ActivityLog_userId_createdAt_idx" ON "ActivityLog"("userId", "createdAt")
+  `);
 }
 
 /** Ensure DEVELOPER role exists; promote the initial admin if none yet. */

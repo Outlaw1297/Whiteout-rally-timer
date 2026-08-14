@@ -190,3 +190,27 @@ model VapidConfig {
   createdAt  DateTime @default(now()) @db.Timestamptz(3)
   updatedAt  DateTime @updatedAt @db.Timestamptz(3)
 }
+
+/**
+ * Durable developer log: logins, device register/unbind, test pushes, rally sends.
+ * No FK to User — rows stay after an account is deleted.
+ */
+model ActivityLog {
+  id             String   @id @default(uuid())
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  kind           String
+  success        Boolean  @default(true)
+  userId         String?
+  username       String?
+  displayName    String?
+  deviceId       String?
+  subscriptionId String?
+  platform       String?
+  message        String?
+  error          String?
+  meta           Json?
+
+  @@index([createdAt])
+  @@index([kind, createdAt])
+  @@index([userId, createdAt])
+}

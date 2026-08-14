@@ -7,6 +7,7 @@ import { PublicTopNav } from "@/components/PublicTopNav";
 
 import { homePathForRole } from "@/lib/roles";
 import { shouldOfferDeviceOnboarding } from "@/lib/device-onboarding";
+import { getOrCreateDeviceId } from "@/lib/client-device-id";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -23,7 +24,11 @@ export default function LoginPage() {
     const res = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({
+        username,
+        password,
+        deviceId: getOrCreateDeviceId(),
+      }),
     });
 
     const data = await res.json();

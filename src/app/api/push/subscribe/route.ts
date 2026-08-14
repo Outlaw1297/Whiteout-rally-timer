@@ -9,6 +9,7 @@ import { defaultDeliveryLeadMs } from "@/lib/delivery-lead";
 import { detectPlatformFromUA } from "@/lib/device-platform";
 import { normalizeDeviceId } from "@/lib/device-id";
 import { retireDuplicatePushSubscriptions } from "@/lib/push-devices";
+import { writeActivityLog } from "@/lib/write-activity-log";
 
 export async function GET() {
   const publicKey = await getVapidPublicKey();
@@ -113,6 +114,43 @@ export async function POST(request: NextRequest) {
   });
 
   logger.pushSubscriptionCreated(subscription.id, session.id);
+
+  const isNew = !existing;
+  await writeActivityLog({
+    kind: "DEVICE_REGISTER",
+    success: true,
+    userId: session.id,
+    username: session.username,
+    displayName: session.displayName,
+    deviceId: subscription.deviceId,
+    subscriptionId: subscription.id,
+    platform,
+    message: isNew
+      ? `${session.displayName} registered ${platform || "a device"}${
+          subscription.deviceId ? ` · id ${subscription.deviceId.slice(0, 8)}` : ""
+        }`
+      : `${session.displayName} re-registered ${platform || "this device"}`,
+    meta: {
+      created: isNew,
+      retiredDuplicates: retired,
+      sameDevice,
+    },
+  });
+
+  if (retired > 0) {
+    await writeActivityLog({
+      kind: "DEVICE_RETIRE",
+      success: true,
+      userId: session.id,
+      username: session.username,
+      displayName: session.displayName,
+      deviceId: subscription.deviceId,
+      subscriptionId: subscription.id,
+      platform,
+      message: `Retired ${retired} duplicate endpoint${retired === 1 ? "" : "s"} for this device`,
+      meta: { retired },
+    });
+  }
 
   await prisma.user.update({
     where: { id: session.id },

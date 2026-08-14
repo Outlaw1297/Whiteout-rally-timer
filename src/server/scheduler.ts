@@ -10,6 +10,8 @@ import {
   type NotificationOffsetType,
 } from "@/lib/timing";
 import { completeRallyAfterLastCaller } from "@/lib/complete-rally";
+import { pushEndpointHost, type ActivityLogInput } from "@/lib/activity-log";
+import { writeActivityLogs } from "@/lib/write-activity-log";
 
 const POLL_INTERVAL_MS = 100;
 const DUE_GRACE_MS = 100;
@@ -157,6 +159,18 @@ async function processNotificationEvent(eventId: string) {
       where: { id: eventId },
       data: { status: "SKIPPED", error: "no target arrival time" },
     });
+    await writeActivityLogs([
+      {
+        kind: "PUSH_SKIPPED",
+        success: false,
+        userId: user?.id,
+        username: user?.username,
+        displayName: user?.displayName || callerName,
+        message: `${rallyEvent.name} · ${notification.type} missed — no target arrival time`,
+        error: "no target arrival time",
+        meta: { source: "scheduler", rally: rallyEvent.name, type: notification.type },
+      },
+    ]);
     return;
   }
 
@@ -193,6 +207,16 @@ async function processNotificationEvent(eventId: string) {
         error: "no linked account",
       },
     });
+    await writeActivityLogs([
+      {
+        kind: "PUSH_SKIPPED",
+        success: false,
+        displayName: callerName,
+        message: `${rallyEvent.name} · ${notification.type} missed — ${callerName} has no linked account`,
+        error: "no linked account",
+        meta: { source: "scheduler", rally: rallyEvent.name, type: notification.type },
+      },
+    ]);
     return;
   }
 
@@ -215,6 +239,18 @@ async function processNotificationEvent(eventId: string) {
       type: notification.type,
       scheduledAt: notification.scheduledAt.toISOString(),
     });
+    await writeActivityLogs([
+      {
+        kind: "PUSH_SKIPPED",
+        success: false,
+        userId: user.id,
+        username: user.username,
+        displayName: user.displayName,
+        message: `${rallyEvent.name} · ${notification.type} missed — no active devices for ${user.displayName}`,
+        error: "no devices",
+        meta: { source: "scheduler", rally: rallyEvent.name, type: notification.type },
+      },
+    ]);
     return;
   }
 
@@ -222,6 +258,7 @@ async function processNotificationEvent(eventId: string) {
   let failCount = 0;
   let lastError: string | null = null;
   const expiredIds: string[] = [];
+  const deviceLogs: ActivityLogInput[] = [];
 
   await mapPool(subscriptions, MAX_PARALLEL_DEVICES, async (sub) => {
     const result = await sendPushNotification(
@@ -247,6 +284,29 @@ async function processNotificationEvent(eventId: string) {
         expiredIds.push(sub.id);
       }
     }
+
+    deviceLogs.push({
+      kind: result.success ? "PUSH_SENT" : "PUSH_FAILED",
+      success: result.success,
+      userId: user.id,
+      username: user.username,
+      displayName: user.displayName,
+      deviceId: sub.deviceId,
+      subscriptionId: sub.id,
+      platform: sub.platform,
+      message: result.success
+        ? `${rallyEvent.name} · ${presented.type} accepted · ${sub.platform || "device"}`
+        : `${rallyEvent.name} · ${presented.type} failed · ${sub.platform || "device"}`,
+      error: result.error,
+      meta: {
+        source: "scheduler",
+        rally: rallyEvent.name,
+        type: notification.type,
+        presentedType: presented.type,
+        statusCode: result.statusCode ?? (result.success ? 201 : null),
+        endpointHost: pushEndpointHost(sub.endpoint),
+      },
+    });
   });
 
   if (expiredIds.length > 0) {
@@ -282,6 +342,8 @@ async function processNotificationEvent(eventId: string) {
     successCount,
     failCount,
   });
+
+  await writeActivityLogs(deviceLogs);
 }
 
 async function flushDueLaunchNotifications(now: number) {

@@ -4,7 +4,14 @@ import { jsonResponse, errorResponse, isValidUuid } from "@/lib/api";
 import { requireAuth } from "@/lib/auth";
 import { isDeveloperRole } from "@/lib/roles";
 import { sendPushNotification, isExpiredSubscription } from "@/lib/push";
-import { selectCanonicalSubscriptions } from "@/lib/device-id";
+import { selectCanonicalSubscriptions, shortDeviceId } from "@/lib/device-id";
+import {
+  pushEndpointHost,
+  summarizePushTestResults,
+  type ActivityLogInput,
+  type PushTestDeviceResult,
+} from "@/lib/activity-log";
+import { writeActivityLogs } from "@/lib/write-activity-log";
 
 export const dynamic = "force-dynamic";
 
@@ -57,23 +64,33 @@ export async function POST(request: NextRequest) {
     : selectCanonicalSubscriptions(loaded);
 
   if (subscriptions.length === 0) {
+    await writeActivityLogs([
+      {
+        kind: "PUSH_TEST",
+        success: false,
+        userId: session.id,
+        username: session.username,
+        displayName: session.displayName,
+        message: "Developer test — no active devices found",
+        error: "No active devices found",
+        meta: {
+          source: "developer-test",
+          target: body.all ? "all" : body.userId ? "user" : "subscription",
+        },
+      },
+    ]);
     return errorResponse("No active devices found", 404);
   }
 
-  let successCount = 0;
-  const results: Array<{
-    subscriptionId: string;
-    platform: string | null;
-    user: string;
-    success: boolean;
-    error?: string;
-  }> = [];
+  const results: PushTestDeviceResult[] = [];
+  const logs: ActivityLogInput[] = [];
 
   const targetAt = new Date().toISOString();
 
   // Fan out in parallel — important when testing many devices at once.
   await Promise.all(
     subscriptions.map(async (sub) => {
+      const started = Date.now();
       const result = await sendPushNotification(
         { endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth },
         {
@@ -84,30 +101,70 @@ export async function POST(request: NextRequest) {
           targetAt,
         }
       );
+      const latencyMs = Date.now() - started;
+      const deactivated =
+        !result.success &&
+        (isExpiredSubscription(result.statusCode) || result.statusCode === 401);
 
-      if (result.success) {
-        successCount++;
-      } else if (isExpiredSubscription(result.statusCode) || result.statusCode === 401) {
+      if (deactivated) {
         await prisma.pushSubscription.update({
           where: { id: sub.id },
           data: { active: false },
         });
       }
 
-      results.push({
+      const row: PushTestDeviceResult = {
         subscriptionId: sub.id,
+        deviceId: sub.deviceId,
+        deviceLabel: shortDeviceId(sub.deviceId),
         platform: sub.platform,
         user: sub.user.displayName,
+        username: sub.user.username,
         success: result.success,
         error: result.error,
+        statusCode: result.statusCode ?? (result.success ? 201 : undefined),
+        deactivated,
+        latencyMs,
+        endpointHost: pushEndpointHost(sub.endpoint) ?? undefined,
+      };
+      results.push(row);
+
+      logs.push({
+        kind: "PUSH_TEST",
+        success: result.success,
+        userId: sub.userId,
+        username: sub.user.username,
+        displayName: sub.user.displayName,
+        deviceId: sub.deviceId,
+        subscriptionId: sub.id,
+        platform: sub.platform,
+        message: result.success
+          ? `Developer test accepted · ${sub.user.displayName} · ${sub.platform || "device"} (${latencyMs}ms)`
+          : `Developer test failed · ${sub.user.displayName} · ${sub.platform || "device"}`,
+        error: result.error,
+        meta: {
+          source: "developer-test",
+          triggeredBy: session.username,
+          statusCode: row.statusCode ?? null,
+          latencyMs,
+          endpointHost: row.endpointHost ?? null,
+          deactivated,
+        },
       });
     })
   );
 
+  await writeActivityLogs(logs);
+
+  const summary = summarizePushTestResults(results);
+
   return jsonResponse({
-    success: successCount > 0,
-    devicesTested: subscriptions.length,
-    devicesNotified: successCount,
+    success: summary.devicesNotified > 0,
+    devicesTested: summary.devicesTested,
+    devicesNotified: summary.devicesNotified,
+    headline: summary.headline,
+    detail: summary.detail,
+    sentAt: targetAt,
     results,
   });
 }

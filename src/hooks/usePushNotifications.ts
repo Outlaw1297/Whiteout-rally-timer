@@ -18,7 +18,8 @@ export type NotificationStatus =
   | "granted"
   | "denied"
   | "subscribed"
-  | "stale";
+  | "stale"
+  | "device-in-use";
 
 function urlBase64ToUint8Array(base64String: string) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -79,14 +80,32 @@ async function registerOnServer(subscription: PushSubscription): Promise<void> {
   }
 }
 
-async function verifyEndpoint(endpoint: string) {
+type VerifyResult = { registered: boolean; active: boolean; reason?: string };
+
+async function verifyEndpoint(endpoint: string): Promise<VerifyResult> {
   const res = await fetch("/api/push/verify", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ endpoint }),
   });
   if (!res.ok) return { registered: false, active: false };
-  return res.json() as Promise<{ registered: boolean; active: boolean }>;
+  return res.json() as Promise<VerifyResult>;
+}
+
+/**
+ * A browser has exactly one live push subscription per service worker.
+ * When a second account logs in on the same device, that subscription
+ * still belongs to whoever registered it last — resubscribing here mints
+ * a fresh endpoint for the current account instead of stealing the old one.
+ */
+async function replaceWithFreshSubscription(
+  registration: ServiceWorkerRegistration,
+  existing: PushSubscription,
+  publicKey: string
+): Promise<PushSubscription> {
+  await existing.unsubscribe().catch(() => {});
+  await sleep(250);
+  return subscribeWithKey(registration, publicKey);
 }
 
 async function subscribeWithKey(
@@ -162,6 +181,14 @@ export function usePushNotifications() {
         return "subscribed";
       }
 
+      if (verified.reason === "owned_by_other") {
+        // Another account currently owns this device's one push channel.
+        // Don't silently re-register — that would steal it back on every
+        // page load and leave the other account's alerts dead with no signal.
+        setThisDeviceRegistered(false);
+        return "device-in-use";
+      }
+
       // Local sub exists but server lost it — re-register without forcing a new browser sub.
       await registerOnServer(localSub);
       setThisDeviceRegistered(true);
@@ -225,21 +252,30 @@ export function usePushNotifications() {
 
       const publicKey = await fetchPublicKey();
 
-      const existing = await registration.pushManager.getSubscription();
+      let existing = await registration.pushManager.getSubscription();
       if (existing) {
-        // Prefer reusing the existing subscription if the server will accept it.
-        try {
-          await registerOnServer(existing);
-          setThisDeviceRegistered(true);
-          setStatus("subscribed");
-          return { ok: true };
-        } catch {
-          await existing.unsubscribe().catch(() => {});
-          await sleep(300);
+        const verified = await verifyEndpoint(existing.endpoint);
+        if (verified.reason === "owned_by_other") {
+          // Someone else is currently registered on this device — the user
+          // explicitly tapped Enable, so this is a deliberate handoff. Mint
+          // a fresh endpoint for this account rather than reassigning theirs.
+          existing = await replaceWithFreshSubscription(registration, existing, publicKey);
+        } else {
+          // Prefer reusing the existing subscription if the server will accept it.
+          try {
+            await registerOnServer(existing);
+            setThisDeviceRegistered(true);
+            setStatus("subscribed");
+            return { ok: true };
+          } catch {
+            await existing.unsubscribe().catch(() => {});
+            await sleep(300);
+            existing = null;
+          }
         }
       }
 
-      const subscription = await subscribeWithKey(registration, publicKey);
+      const subscription = existing || (await subscribeWithKey(registration, publicKey));
       await registerOnServer(subscription);
 
       setThisDeviceRegistered(true);

@@ -71,6 +71,19 @@ export async function POST(request: NextRequest) {
     existing.userId === session.id &&
     ((deviceId && existing.deviceId === deviceId) || existing.endpoint === endpoint);
 
+  if (existing && existing.userId !== session.id && existing.active) {
+    // A browser has exactly one live push endpoint, so a second account
+    // registering it here is a deliberate device handoff, not a duplicate.
+    // Log it — the previous owner's DB row now points at this account and
+    // will show as unregistered next time they check.
+    logger.warn("push_endpoint_owner_changed", {
+      endpoint,
+      previousUserId: existing.userId,
+      newUserId: session.id,
+      deviceId,
+    });
+  }
+
   const freshLead = defaultDeliveryLeadMs(
     sameDevice ? existing.deliveryLeadMs : undefined,
     platform || resolvedUa

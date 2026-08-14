@@ -95,9 +95,15 @@ export default function AdminDashboard() {
       (e.status === "ACTIVE" || e.status === "COMPLETED")
   );
 
+  const startableSelected = events.filter(
+    (e) =>
+      selected.has(e.id) &&
+      (e.status === "READY" || e.status === "DRAFT" || e.status === "COMPLETED")
+  );
+
   const startSelected = async () => {
     setBatchError("");
-    if (selected.size === 0) {
+    if (startableSelected.length === 0) {
       setBatchError("Select at least one template");
       return;
     }
@@ -107,7 +113,7 @@ export default function AdminDashboard() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          eventIds: Array.from(selected),
+          eventIds: startableSelected.map((e) => e.id),
           staggerSeconds: parseInt(staggerSeconds, 10) || 0,
         }),
       });
@@ -233,12 +239,12 @@ export default function AdminDashboard() {
             <button
               type="button"
               onClick={startSelected}
-              disabled={startingMany || resettingMany || selected.size === 0}
+              disabled={startingMany || resettingMany || startableSelected.length === 0}
               className="btn-success flex-1 !min-h-[40px] !py-2 text-sm"
             >
               {startingMany
                 ? "Starting..."
-                : `Start ${selected.size || ""} Selected`.trim()}
+                : `Start ${startableSelected.length || ""} Selected`.trim()}
             </button>
             <button
               type="button"

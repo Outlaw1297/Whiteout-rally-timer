@@ -38,6 +38,7 @@ import {
 import {
   mergeCallerEditDrafts,
   type CallerEditDraft,
+  type CallerEditField,
 } from "@/lib/caller-edit-drafts";
 import { HitOrderPreview } from "@/components/HitOrderPreview";
 import { RallyTimeline } from "@/components/RallyTimeline";
@@ -112,8 +113,8 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
   const [savingCallerId, setSavingCallerId] = useState<string | null>(null);
   const [quickAddingId, setQuickAddingId] = useState<string | null>(null);
   const [editDrafts, setEditDrafts] = useState<Record<string, CallerEditDraft>>({});
-  /** Assignment ids with unsaved local edits — polls must not clobber these. */
-  const dirtyCallerIdsRef = useRef<Set<string>>(new Set());
+  /** Per-assignment fields with unsaved local edits — polls must not clobber these. */
+  const dirtyCallerFieldsRef = useRef<Record<string, Set<CallerEditField>>>({});
   const timingDirtyRef = useRef(false);
 
   const { correctedNow } = useServerClock({
@@ -136,12 +137,14 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
     }
   };
 
-  const markCallerDirty = (assignmentId: string) => {
-    dirtyCallerIdsRef.current.add(assignmentId);
+  const markCallerDirty = (assignmentId: string, field: CallerEditField) => {
+    const fields = dirtyCallerFieldsRef.current[assignmentId] ?? new Set<CallerEditField>();
+    fields.add(field);
+    dirtyCallerFieldsRef.current[assignmentId] = fields;
   };
 
   const clearCallerDirty = (assignmentId: string) => {
-    dirtyCallerIdsRef.current.delete(assignmentId);
+    delete dirtyCallerFieldsRef.current[assignmentId];
   };
 
   const syncDrafts = useCallback((data: EventDetail) => {
@@ -155,7 +158,7 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
       };
     }
     setEditDrafts((prev) =>
-      mergeCallerEditDrafts(prev, serverDrafts, dirtyCallerIdsRef.current)
+      mergeCallerEditDrafts(prev, serverDrafts, dirtyCallerFieldsRef.current)
     );
   }, []);
 
@@ -320,13 +323,38 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
   const saveCallerEdits = async (assignmentId: string) => {
     const draft = editDrafts[assignmentId];
     if (!draft) return;
-    const offset = parseInt(draft.offset, 10);
-    if (!Number.isFinite(offset) || offset < -3600 || offset > 3600) {
-      flash(null, "Offset must be between -3600 and 3600");
-      return;
+    const dirty = dirtyCallerFieldsRef.current[assignmentId];
+    const body: {
+      callerName?: string;
+      marchDuration?: string;
+      arrivalOffsetSeconds?: number;
+      userId?: string | null;
+    } = {};
+    if (dirty?.has("offset")) {
+      const offset = parseInt(draft.offset, 10);
+      if (!Number.isFinite(offset) || offset < -3600 || offset > 3600) {
+        flash(null, "Offset must be between -3600 and 3600");
+        return;
+      }
+      body.arrivalOffsetSeconds = offset;
     }
-    if (!parseMarchDuration(draft.march)) {
-      flash(null, "Invalid march duration (use M:SS)");
+    if (dirty?.has("march")) {
+      if (!parseMarchDuration(draft.march)) {
+        flash(null, "Invalid march duration (use M:SS)");
+        return;
+      }
+      body.marchDuration = draft.march;
+    }
+    if (dirty?.has("name")) {
+      body.callerName = draft.name.trim();
+    }
+    if (dirty?.has("userId")) {
+      body.userId = draft.userId || null;
+    }
+    if (Object.keys(body).length === 0) {
+      clearCallerDirty(assignmentId);
+      flash("Caller saved");
+      loadEvent();
       return;
     }
     setSavingCallerId(assignmentId);
@@ -334,12 +362,7 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
       const res = await fetch(`/api/events/${params.id}/assignments/${assignmentId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          callerName: draft.name.trim(),
-          marchDuration: draft.march,
-          arrivalOffsetSeconds: offset,
-          userId: draft.userId || null,
-        }),
+        body: JSON.stringify(body),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -713,7 +736,7 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                       <input
                         value={draft.name}
                         onChange={(e) => {
-                          markCallerDirty(caller.id);
+                          markCallerDirty(caller.id, "name");
                           setEditDrafts((prev) => ({
                             ...prev,
                             [caller.id]: { ...draft, name: e.target.value },
@@ -757,7 +780,7 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                       <input
                         value={draft.march}
                         onChange={(e) => {
-                          markCallerDirty(caller.id);
+                          markCallerDirty(caller.id, "march");
                           setEditDrafts((prev) => ({
                             ...prev,
                             [caller.id]: { ...draft, march: e.target.value },
@@ -777,7 +800,7 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                         max={3600}
                         value={draft.offset}
                         onChange={(e) => {
-                          markCallerDirty(caller.id);
+                          markCallerDirty(caller.id, "offset");
                           setEditDrafts((prev) => ({
                             ...prev,
                             [caller.id]: { ...draft, offset: e.target.value },
@@ -795,7 +818,7 @@ export default function AdminEventPage({ params }: { params: { id: string } }) {
                     <select
                       value={draft.userId}
                       onChange={(e) => {
-                        markCallerDirty(caller.id);
+                        markCallerDirty(caller.id, "userId");
                         setEditDrafts((prev) => ({
                           ...prev,
                           [caller.id]: { ...draft, userId: e.target.value },

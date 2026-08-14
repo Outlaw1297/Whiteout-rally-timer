@@ -5,6 +5,7 @@ import {
   calculateLaunchTime,
   calculateExpectedArrival,
   computeTargetArrivalOnGo,
+  computeSharedTargetArrivalOnGo,
   DEFAULT_GATHER_SECONDS,
   getNextCaller,
   getNotificationSchedule,
@@ -68,6 +69,30 @@ const aliceLaunch = calculateLaunchTime(targetOnGo, 300, 480);
 assertEqual(aliceLaunch, 19, 0, 3, "GO Alice launch (longest march throws first)");
 
 console.log("\nGO workflow tests passed.");
+
+// Batch GO: Test1 march 0:32 vs Test2 march 0:10 must share arrival at stagger 0
+const batchGo = new Date();
+batchGo.setHours(22, 46, 58, 0);
+const test1Own = computeTargetArrivalOnGo(batchGo, 300, [32], 30);
+const test2Own = computeTargetArrivalOnGo(batchGo, 300, [10], 30);
+if (test1Own.getTime() - test2Own.getTime() !== 22_000) {
+  console.error("FAIL Test1 vs Test2 own arrivals should differ by march (22s)");
+  process.exit(1);
+}
+const sharedHit = computeSharedTargetArrivalOnGo(batchGo, [
+  { gatherDurationSeconds: 300, firstCallerLeadSeconds: 30, marches: [32] },
+  { gatherDurationSeconds: 300, firstCallerLeadSeconds: 30, marches: [10] },
+]);
+if (sharedHit.getTime() !== test1Own.getTime()) {
+  console.error("FAIL batch shared arrival should match the later (longer-march) rally");
+  process.exit(1);
+}
+const staggeredSecond = new Date(sharedHit.getTime() + 10_000);
+if (staggeredSecond.getTime() - sharedHit.getTime() !== 10_000) {
+  console.error("FAIL stagger should offset shared arrival by N seconds");
+  process.exit(1);
+}
+console.log("PASS batch GO shared arrival (stagger 0) and stagger offset");
 
 // Next caller progression
 const base = Date.now();

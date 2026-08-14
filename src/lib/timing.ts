@@ -79,6 +79,36 @@ export function computeTargetArrivalOnGo(
   );
 }
 
+export type RallyGoSpec = {
+  gatherDurationSeconds: number;
+  firstCallerLeadSeconds?: number;
+  marches: number[];
+  offsets?: number[];
+};
+
+/**
+ * Shared arrival for a batch GO: the latest individual target so every rally
+ * can still honor first-caller lead. Stagger is applied by the caller.
+ */
+export function computeSharedTargetArrivalOnGo(
+  startedAt: Date,
+  rallies: RallyGoSpec[]
+): Date {
+  if (rallies.length === 0) return startedAt;
+  let latest = startedAt;
+  for (const rally of rallies) {
+    const target = computeTargetArrivalOnGo(
+      startedAt,
+      rally.gatherDurationSeconds,
+      rally.marches,
+      rally.firstCallerLeadSeconds,
+      rally.offsets ?? []
+    );
+    if (target.getTime() > latest.getTime()) latest = target;
+  }
+  return latest;
+}
+
 /** Parse "8:00", "6:30", "4:15", "12:37" → seconds */
 export function parseMarchDuration(input: string): number | null {
   const trimmed = input.trim();

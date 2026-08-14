@@ -24,6 +24,7 @@ export default function AdminDashboard() {
   const [showCreate, setShowCreate] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [startingMany, setStartingMany] = useState(false);
+  const [resettingMany, setResettingMany] = useState(false);
   const [staggerSeconds, setStaggerSeconds] = useState("0");
   const [batchError, setBatchError] = useState("");
 
@@ -81,8 +82,17 @@ export default function AdminDashboard() {
 
   const selectable = events.filter(
     (e) =>
-      (e.status === "READY" || e.status === "DRAFT" || e.status === "COMPLETED") &&
+      (e.status === "READY" ||
+        e.status === "DRAFT" ||
+        e.status === "COMPLETED" ||
+        e.status === "ACTIVE") &&
       e.assignments.length > 0
+  );
+
+  const resettableSelected = events.filter(
+    (e) =>
+      selected.has(e.id) &&
+      (e.status === "ACTIVE" || e.status === "COMPLETED")
   );
 
   const startSelected = async () => {
@@ -112,6 +122,42 @@ export default function AdminDashboard() {
       if (firstOk) router.push(`/admin/events/${firstOk.id}`);
     } finally {
       setStartingMany(false);
+    }
+  };
+
+  const resetSelected = async () => {
+    setBatchError("");
+    if (resettableSelected.length === 0) {
+      setBatchError("Select completed or live rallies to reset");
+      return;
+    }
+    if (
+      !confirm(
+        `Reset ${resettableSelected.length} selected ${
+          resettableSelected.length === 1 ? "rally" : "rallies"
+        } back to templates? Launch times will be cleared.`
+      )
+    ) {
+      return;
+    }
+    setResettingMany(true);
+    try {
+      const res = await fetch("/api/events/reset-many", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventIds: resettableSelected.map((e) => e.id),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setBatchError(data.error || "Failed to reset selected rallies");
+        return;
+      }
+      setSelected(new Set());
+      loadEvents();
+    } finally {
+      setResettingMany(false);
     }
   };
 
@@ -169,11 +215,12 @@ export default function AdminDashboard() {
 
       {selectable.length > 0 && (
         <Panel className="mb-4 space-y-3">
-          <SectionLabel>Start Multiple Templates</SectionLabel>
+          <SectionLabel>Batch templates</SectionLabel>
           <p className="text-rally-muted text-xs">
-            Check templates below, then start them together. Optional stagger delays each GO.
+            Check templates below, then start them together. Stagger 0 lands every rally at
+            the same arrival; stagger delays each GO and arrival by that many seconds.
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <label className="label-field shrink-0">Stagger (s)</label>
             <input
               type="number"
@@ -186,12 +233,23 @@ export default function AdminDashboard() {
             <button
               type="button"
               onClick={startSelected}
-              disabled={startingMany || selected.size === 0}
+              disabled={startingMany || resettingMany || selected.size === 0}
               className="btn-success flex-1 !min-h-[40px] !py-2 text-sm"
             >
               {startingMany
                 ? "Starting..."
                 : `Start ${selected.size || ""} Selected`.trim()}
+            </button>
+            <button
+              type="button"
+              onClick={resetSelected}
+              disabled={startingMany || resettingMany || resettableSelected.length === 0}
+              className="btn-secondary flex-1 !min-h-[40px] !py-2 text-sm gap-1"
+            >
+              <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+              {resettingMany
+                ? "Resetting..."
+                : `Reset ${resettableSelected.length || ""} Selected`.trim()}
             </button>
           </div>
           {batchError && <p className="text-rally-danger text-xs">{batchError}</p>}
@@ -206,7 +264,8 @@ export default function AdminDashboard() {
           const canSelect =
             (event.status === "READY" ||
               event.status === "DRAFT" ||
-              event.status === "COMPLETED") &&
+              event.status === "COMPLETED" ||
+              event.status === "ACTIVE") &&
             event.assignments.length > 0;
           return (
             <Panel key={event.id}>

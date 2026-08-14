@@ -17,33 +17,6 @@ export interface ForegroundPushMessage {
   receivedAt: number;
 }
 
-function tryPageNotification(message: ForegroundPushMessage) {
-  if (typeof document === "undefined" || document.visibilityState !== "visible") return;
-  if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
-
-  try {
-    const notification = new Notification(message.title, {
-      body: message.body,
-      icon: "/icons/icon-192.png",
-      tag: `rally-fg-${message.rallyId}-${message.notificationType}-${message.assignmentId}-${message.scheduledAt}`,
-    });
-    notification.onclick = () => {
-      window.focus();
-      if (message.url) window.location.href = message.url;
-      notification.close();
-    };
-  } catch {
-    // iOS standalone may not allow page-level Notification — in-app banner covers this.
-  }
-}
-
-function tryVibrate(notificationType: string) {
-  if (typeof navigator === "undefined" || !navigator.vibrate) return;
-  navigator.vibrate(
-    notificationType === "LAUNCH" ? [300, 100, 300, 100, 300] : [200, 100, 200]
-  );
-}
-
 export function useForegroundPush() {
   const [messages, setMessages] = useState<ForegroundPushMessage[]>([]);
   const recentRef = useRef<Map<string, number>>(new Map());
@@ -102,9 +75,17 @@ export function useForegroundPush() {
       receivedAt: now,
     };
 
-    setMessages((prev) => [...prev.slice(-2), message]);
-    tryPageNotification(message);
-    tryVibrate(notificationType);
+    // SW already showed the OS heads-up + vibrate. Do not create a second
+    // Notification() here — that blocks the main thread and makes the
+    // on-screen countdown hitch at throw time.
+    const showBanner = () => {
+      setMessages((prev) => [...prev.slice(-2), message]);
+    };
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() => requestAnimationFrame(showBanner));
+    } else {
+      window.setTimeout(showBanner, 0);
+    }
 
     if (targetAt) {
       reportDeliveryFeedback({

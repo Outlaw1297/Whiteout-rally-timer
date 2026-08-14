@@ -17,6 +17,7 @@ import {
   applyNtpSample,
   createMonotonicAnchor,
   readMonotonicNow,
+  shouldDiscardNtpSample,
 } from "../src/lib/clock-sync";
 import { getEffectivePushLeadMs, nextDeliveryLeadMs } from "../src/lib/delivery-lead";
 import { allCallersHaveCalled, callerHasCalled } from "../src/lib/caller-launch";
@@ -214,6 +215,31 @@ if (Math.abs(ntp.offset - 1) > 2) {
   process.exit(1);
 }
 console.log("PASS monotonic clock sync");
+
+if (shouldDiscardNtpSample(80, 40, true)) {
+  console.error("FAIL should keep a sample close to min RTT");
+  process.exit(1);
+}
+if (!shouldDiscardNtpSample(200, 40, true)) {
+  console.error("FAIL should drop hitch-inflated RTT vs min");
+  process.exit(1);
+}
+if (!shouldDiscardNtpSample(500, 40, true)) {
+  console.error("FAIL should drop extreme RTT after we already have a clock");
+  process.exit(1);
+}
+if (shouldDiscardNtpSample(500, null, false)) {
+  console.error("FAIL first sample must be accepted even if RTT is high");
+  process.exit(1);
+}
+const noSnap = applyServerTimeSync(createMonotonicAnchor(1_000_000), 1_001_000, {
+  allowSnap: false,
+});
+if (Math.abs(readMonotonicNow(noSnap) - 1_000_000) > 5) {
+  console.error("FAIL one-way keepalive must not snap the countdown", readMonotonicNow(noSnap));
+  process.exit(1);
+}
+console.log("PASS hitch-inflated clock samples discarded");
 
 const learned = nextDeliveryLeadMs(1000, 250, 3);
 if (learned.deliveryLeadMs < 1000 || learned.deliveryLeadMs > 1200) {

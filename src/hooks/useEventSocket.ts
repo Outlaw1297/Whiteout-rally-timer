@@ -70,10 +70,14 @@ export function useEventSocket({
       return;
     }
 
-    if (typeof data.serverTime === "number") {
+    // Keepalive only — NTP pongs are authoritative. Skip unless the clock is stale,
+    // and never treat main-thread delay as one-way flight (that snaps the countdown).
+    if (data.type === "time_sync" && typeof data.serverTime === "number") {
+      const last = clockSync.getLastSyncAt();
+      const stale = !last || Date.now() - last > 10_000;
+      if (!stale) return;
       const clientReceiveTime = Date.now();
-      const flightMs = Math.max(0, clientReceiveTime - data.serverTime);
-      clockSync.applyUnixMs(data.serverTime + flightMs, clientReceiveTime, clientReceiveTime);
+      clockSync.applyUnixMs(data.serverTime, clientReceiveTime, clientReceiveTime);
     }
   }, []);
 

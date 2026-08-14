@@ -11,6 +11,7 @@ const SKIP_PATHS = new Set([
   "/login",
   "/install",
   "/fix-notifications",
+  "/live",
 ]);
 
 /**

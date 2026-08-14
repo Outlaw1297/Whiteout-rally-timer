@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutGrid, Users, Code2, LogOut, ExternalLink } from "lucide-react";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { HomeButton } from "@/components/HomeButton";
-import { pickPublicLiveHref } from "@/lib/public-live-view";
+import { PUBLIC_LIVE_HREF, isPublicLiveNavActive } from "@/lib/public-live-view";
 
 export function AdminNav({
   displayName,
@@ -19,35 +18,15 @@ export function AdminNav({
 }) {
   const pathname = usePathname();
   const isDeveloper = role === "DEVELOPER";
-  const [liveHref, setLiveHref] = useState(() => pickPublicLiveHref(pathname, []));
-
-  useEffect(() => {
-    if (pathname?.startsWith("/admin/events/")) {
-      setLiveHref(pickPublicLiveHref(pathname, []));
-      return;
-    }
-    let cancelled = false;
-    fetch("/api/events")
-      .then((r) => r.json())
-      .then((data) => {
-        if (!cancelled) setLiveHref(pickPublicLiveHref(pathname, data.events || []));
-      })
-      .catch(() => {
-        if (!cancelled) setLiveHref("/");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [pathname]);
 
   const links = [
     { href: "/admin", label: "Templates", icon: LayoutGrid, match: (p: string) => p === "/admin" || p.startsWith("/admin/events") },
     { href: "/admin/users", label: "Users", icon: Users, match: (p: string) => p.startsWith("/admin/users") },
     {
-      href: liveHref,
+      href: PUBLIC_LIVE_HREF,
       label: "Public live view",
       icon: ExternalLink,
-      match: (p: string) => p.startsWith("/events/"),
+      match: isPublicLiveNavActive,
     },
     ...(isDeveloper
       ? [

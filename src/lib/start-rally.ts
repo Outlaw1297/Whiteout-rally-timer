@@ -14,7 +14,7 @@ const eventInclude = {
 
 export async function startOrRestartRally(
   eventId: string,
-  options: { startedAt?: Date } = {}
+  options: { startedAt?: Date; targetArrivalTime?: Date } = {}
 ) {
   const event = await prisma.rallyEvent.findUnique({
     where: { id: eventId },
@@ -39,13 +39,15 @@ export async function startOrRestartRally(
   const startedAt = options.startedAt ?? new Date();
   const marches = event.assignments.map((a) => a.marchDurationSeconds);
   const offsets = event.assignments.map((a) => a.arrivalOffsetSeconds ?? 0);
-  const targetArrivalTime = computeTargetArrivalOnGo(
-    startedAt,
-    event.gatherDurationSeconds,
-    marches,
-    event.firstCallerLeadSeconds,
-    offsets
-  );
+  const targetArrivalTime =
+    options.targetArrivalTime ??
+    computeTargetArrivalOnGo(
+      startedAt,
+      event.gatherDurationSeconds,
+      marches,
+      event.firstCallerLeadSeconds,
+      offsets
+    );
 
   await prisma.$transaction(async (tx) => {
     await tx.rallyEvent.update({

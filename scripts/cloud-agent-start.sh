@@ -39,5 +39,3 @@ fi
 
 npx prisma generate
 npm run db:deploy
-
-exec npm run dev

@@ -2,8 +2,12 @@ import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { createPushReceiptToken, pushFingerprint } from "@/lib/push-receipt";
 import {
+  DELIVERY_WINDOW_MAX_AGE_DAYS,
+  DELIVERY_WINDOW_MAX_SAMPLES,
   deliveryLeadCorrectionMs,
+  deliveryWindowTargetMs,
   nextDeliveryLeadMs,
+  summarizeDeliveryWindow,
   trustedReceiptTime,
 } from "@/lib/delivery-lead";
 import { syncUserDeliveryLead } from "@/lib/sync-user-delivery-lead";
@@ -74,6 +78,7 @@ export async function createPushDeliveryAttempt(opts: {
   payload: PushDeliveryPayloadInfo;
   endpoint: string;
   vapidPublicKey?: string | null;
+  declarativePayload?: boolean;
 }) {
   const dispatchId = crypto.randomUUID();
   const receiptToken = createPushReceiptToken(dispatchId);
@@ -94,6 +99,7 @@ export async function createPushDeliveryAttempt(opts: {
       notificationType: opts.payload.notificationType ?? null,
       rallyId: opts.payload.rallyId ?? null,
       assignmentId: opts.payload.assignmentId ?? null,
+      declarativePayload: !!opts.declarativePayload,
       targetAt: parseDate(opts.payload.targetAt),
     },
   });
@@ -143,6 +149,10 @@ export interface PassiveCalibrationResult {
   roundTripMs?: number;
   correctionMs?: number;
   deliveryLeadMs?: number;
+  p50Ms?: number | null;
+  p90Ms?: number | null;
+  windowCount?: number;
+  calibrationMethod?: string;
   advancedNotifications?: number;
 }
 
@@ -161,6 +171,7 @@ export async function applyPassiveCalibrationForAttempt(opts: {
       select: {
         id: true,
         userId: true,
+        deviceId: true,
         subscriptionId: true,
         targetAt: true,
         createdAt: true,
@@ -209,9 +220,36 @@ export async function applyPassiveCalibrationForAttempt(opts: {
       return { applied: false, duplicate: true } as const;
     }
 
+    const recentCutoff = new Date(
+      opts.observedAt.getTime() - DELIVERY_WINDOW_MAX_AGE_DAYS * 24 * 60 * 60 * 1000
+    );
+    const recentAttempts = await tx.pushDeliveryAttempt.findMany({
+      where: {
+        userId: subscription.userId,
+        ...(attempt.deviceId
+          ? { deviceId: attempt.deviceId }
+          : { subscriptionId: subscription.id }),
+        calibrationAppliedAt: { not: null },
+        calibrationRoundTripMs: { not: null },
+        createdAt: { gte: recentCutoff },
+      },
+      orderBy: { createdAt: "desc" },
+      take: DELIVERY_WINDOW_MAX_SAMPLES,
+      select: { calibrationRoundTripMs: true },
+    });
+    const windowStats = summarizeDeliveryWindow(
+      recentAttempts.flatMap((row) =>
+        row.calibrationRoundTripMs == null ? [] : [row.calibrationRoundTripMs]
+      )
+    );
+    const target = deliveryWindowTargetMs(
+      windowStats,
+      measuredRoundTripMs,
+      subscription.deliveryLeadMs
+    );
     const correctionMs = deliveryLeadCorrectionMs(
       subscription.deliveryLeadMs,
-      measuredRoundTripMs
+      target.targetMs
     );
     const next = nextDeliveryLeadMs(
       subscription.deliveryLeadMs,
@@ -222,7 +260,23 @@ export async function applyPassiveCalibrationForAttempt(opts: {
 
     await tx.pushSubscription.update({
       where: { id: subscription.id },
-      data: { ...next, lastCalibratedAt: calibratedAt, lastSeenAt: calibratedAt },
+      data: {
+        ...next,
+        deliveryP50Ms: windowStats.p50Ms,
+        deliveryP90Ms: windowStats.p90Ms,
+        deliveryWindowCount: windowStats.count,
+        lastCalibratedAt: calibratedAt,
+        lastSeenAt: calibratedAt,
+      },
+    });
+    await tx.pushDeliveryAttempt.update({
+      where: { id: attempt.id },
+      data: {
+        calibrationP50Ms: windowStats.p50Ms,
+        calibrationP90Ms: windowStats.p90Ms,
+        calibrationWindowCount: windowStats.count,
+        calibrationMethod: target.method,
+      },
     });
     await tx.user.update({
       where: { id: subscription.userId },
@@ -236,6 +290,10 @@ export async function applyPassiveCalibrationForAttempt(opts: {
       roundTripMs: measuredRoundTripMs,
       correctionMs,
       deliveryLeadMs: next.deliveryLeadMs,
+      p50Ms: windowStats.p50Ms,
+      p90Ms: windowStats.p90Ms,
+      windowCount: windowStats.count,
+      calibrationMethod: target.method,
       userId: subscription.userId,
     } as const;
   });
@@ -262,6 +320,10 @@ export async function applyPassiveCalibrationForAttempt(opts: {
     roundTripMs: result.roundTripMs,
     correctionMs: result.correctionMs,
     deliveryLeadMs: result.deliveryLeadMs,
+    p50Ms: result.p50Ms,
+    p90Ms: result.p90Ms,
+    windowCount: result.windowCount,
+    calibrationMethod: result.calibrationMethod,
     advancedNotifications: rescheduled.advanced,
   });
 

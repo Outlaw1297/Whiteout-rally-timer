@@ -8,6 +8,7 @@ import {
   markPushProviderFailed,
   type PushDeliveryContext,
 } from "./push-delivery";
+import { buildDeclarativePushEnvelope } from "./declarative-push";
 
 const CONFIG_ID = "default";
 
@@ -337,6 +338,7 @@ export async function sendPushNotification(
         payload,
         endpoint: subscription.endpoint,
         vapidPublicKey: activePublicKey,
+        declarativePayload: true,
       });
       dispatchId = attempt.dispatchId;
       receiptToken = attempt.receiptToken;
@@ -347,12 +349,13 @@ export async function sendPushNotification(
     }
   }
 
-  const outboundPayload: PushPayload = {
+  const applicationPayload: PushPayload = {
     ...payload,
     ...(dispatchId ? { dispatchId } : {}),
     ...(receiptToken ? { receiptToken } : {}),
     ...(context?.subscriptionId ? { subscriptionId: context.subscriptionId } : {}),
   };
+  const outboundPayload = buildDeclarativePushEnvelope(applicationPayload);
   const startedAt = Date.now();
 
   try {

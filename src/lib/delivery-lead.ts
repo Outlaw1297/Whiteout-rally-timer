@@ -2,12 +2,67 @@ import { DEFAULT_PUSH_LEAD_MS } from "./timing";
 
 export const MIN_DELIVERY_LEAD_MS = 0;
 export const MAX_DELIVERY_LEAD_MS = 8000;
+export const DELIVERY_PERCENTILE_MIN_SAMPLES = 10;
+export const DELIVERY_WINDOW_MAX_SAMPLES = 50;
+export const DELIVERY_WINDOW_MAX_AGE_DAYS = 30;
 /** Lower alpha = more stable rolling average; resists single bad samples. */
 const EMA_ALPHA = 0.18;
 /** Cap how far one sample can move the learned lead (ms). */
 const MAX_STEP_MS = 400;
 /** Ignore extreme outliers beyond this delay magnitude (ms). */
-const OUTLIER_ABS_MS = 12_000;
+export const MAX_VALID_DELIVERY_SAMPLE_MS = 12_000;
+
+export interface DeliveryWindowStats {
+  count: number;
+  discardedCount: number;
+  p50Ms: number | null;
+  p90Ms: number | null;
+  percentileReady: boolean;
+}
+
+function nearestRank(sorted: number[], percentile: number): number | null {
+  if (sorted.length === 0) return null;
+  const rank = Math.max(1, Math.ceil(percentile * sorted.length));
+  return sorted[Math.min(sorted.length - 1, rank - 1)];
+}
+
+/** Summarize a bounded recent receipt window without letting extreme stalls dominate it. */
+export function summarizeDeliveryWindow(samples: number[]): DeliveryWindowStats {
+  const valid = samples
+    .filter(
+      (sample) =>
+        Number.isFinite(sample) && sample >= 0 && sample <= MAX_VALID_DELIVERY_SAMPLE_MS
+    )
+    .map(Math.round)
+    .sort((a, b) => a - b);
+
+  return {
+    count: valid.length,
+    discardedCount: samples.length - valid.length,
+    p50Ms: nearestRank(valid, 0.5),
+    p90Ms: nearestRank(valid, 0.9),
+    percentileReady: valid.length >= DELIVERY_PERCENTILE_MIN_SAMPLES,
+  };
+}
+
+/** Use recent P90 once it is statistically useful; otherwise learn from the latest valid receipt. */
+export function deliveryWindowTargetMs(
+  stats: DeliveryWindowStats,
+  latestRoundTripMs: number,
+  currentLeadMs: number
+): { targetMs: number; method: "recent_p90" | "latest_receipt" | "ignored_outlier" } {
+  if (stats.percentileReady && stats.p90Ms != null) {
+    return { targetMs: stats.p90Ms, method: "recent_p90" };
+  }
+  if (
+    !Number.isFinite(latestRoundTripMs) ||
+    latestRoundTripMs < 0 ||
+    latestRoundTripMs > MAX_VALID_DELIVERY_SAMPLE_MS
+  ) {
+    return { targetMs: currentLeadMs, method: "ignored_outlier" };
+  }
+  return { targetMs: Math.round(latestRoundTripMs), method: "latest_receipt" };
+}
 
 /**
  * Positive delayMs means the notification arrived late vs the target moment.
@@ -18,7 +73,10 @@ export function nextDeliveryLeadMs(
   delayMs: number,
   sampleCount: number
 ): { deliveryLeadMs: number; deliverySampleCount: number } {
-  const clampedDelay = Math.max(-OUTLIER_ABS_MS, Math.min(OUTLIER_ABS_MS, delayMs));
+  const clampedDelay = Math.max(
+    -MAX_VALID_DELIVERY_SAMPLE_MS,
+    Math.min(MAX_VALID_DELIVERY_SAMPLE_MS, delayMs)
+  );
   const desired = Math.max(
     MIN_DELIVERY_LEAD_MS,
     Math.min(MAX_DELIVERY_LEAD_MS, currentLead + clampedDelay)

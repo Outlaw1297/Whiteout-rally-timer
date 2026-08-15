@@ -23,10 +23,13 @@ import {
 import {
   getEffectivePushLeadMs,
   deliveryLeadCorrectionMs,
+  deliveryWindowTargetMs,
   nextDeliveryLeadMs,
   nextEarlierScheduleMs,
+  summarizeDeliveryWindow,
   trustedReceiptTime,
 } from "../src/lib/delivery-lead";
+import { buildDeclarativePushEnvelope } from "../src/lib/declarative-push";
 import { allCallersHaveCalled, callerHasCalled } from "../src/lib/caller-launch";
 import { shouldDeferRallyCompletion } from "../src/lib/complete-rally";
 import { getHitOrderPreview, getThrowOrderPreview } from "../src/lib/march-groups";
@@ -556,4 +559,78 @@ console.log("PASS adaptive delivery lead");
     process.exit(1);
   }
   console.log("PASS passive calibration learns signed-receipt round trip for every push");
+}
+
+{
+  const stats = summarizeDeliveryWindow([
+    100,
+    200,
+    300,
+    400,
+    500,
+    600,
+    700,
+    800,
+    900,
+    1_000,
+    60_000,
+  ]);
+  if (
+    !stats.percentileReady ||
+    stats.count !== 10 ||
+    stats.discardedCount !== 1 ||
+    stats.p50Ms !== 500 ||
+    stats.p90Ms !== 900
+  ) {
+    console.error("FAIL guarded recent delivery percentiles", stats);
+    process.exit(1);
+  }
+  const target = deliveryWindowTargetMs(stats, 1_000, 750);
+  if (target.method !== "recent_p90" || target.targetMs !== 900) {
+    console.error("FAIL ready delivery window should target P90", target);
+    process.exit(1);
+  }
+  const learning = summarizeDeliveryWindow([200, 250, 300]);
+  const learningTarget = deliveryWindowTargetMs(learning, 325, 1_000);
+  if (learningTarget.method !== "latest_receipt" || learningTarget.targetMs !== 325) {
+    console.error("FAIL sparse delivery window should learn latest receipt", learningTarget);
+    process.exit(1);
+  }
+  const ignored = deliveryWindowTargetMs(learning, 60_000, 1_000);
+  if (ignored.method !== "ignored_outlier" || ignored.targetMs !== 1_000) {
+    console.error("FAIL extreme receipt must not change delivery lead", ignored);
+    process.exit(1);
+  }
+  console.log("PASS guarded recent P90 delivery model");
+}
+
+{
+  const envelope = buildDeclarativePushEnvelope(
+    {
+      title: "10s — almost throw time",
+      body: "Ice Castle · Call1",
+      rallyId: "rally 1",
+      assignmentId: "assignment-1",
+      notificationType: "WARNING_10",
+      dispatchId: "dispatch-1",
+      receiptToken: "signed-token",
+    },
+    "https://timer.example"
+  );
+  if (envelope.web_push !== 8030 || envelope.notification.silent !== false) {
+    console.error("FAIL declarative push marker or visibility", envelope);
+    process.exit(1);
+  }
+  if (envelope.notification.navigate !== "https://timer.example/caller/events/rally%201") {
+    console.error("FAIL declarative push navigation", envelope.notification.navigate);
+    process.exit(1);
+  }
+  if (
+    envelope.notification.data.dispatchId !== "dispatch-1" ||
+    envelope.notification.data.receiptToken !== "signed-token"
+  ) {
+    console.error("FAIL declarative push must retain signed receipt data", envelope.notification.data);
+    process.exit(1);
+  }
+  console.log("PASS backward-compatible declarative push envelope");
 }

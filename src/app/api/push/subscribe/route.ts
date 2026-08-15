@@ -81,9 +81,22 @@ export async function POST(request: NextRequest) {
     existing &&
     existing.userId === session.id &&
     ((deviceId && existing.deviceId === deviceId) || existing.endpoint === endpoint);
+  const priorDevice =
+    !sameDevice && deviceId
+      ? await prisma.pushSubscription.findFirst({
+          where: {
+            userId: session.id,
+            deviceId,
+            ...(existing ? { id: { not: existing.id } } : {}),
+          },
+          orderBy: [{ active: "desc" }, { updatedAt: "desc" }],
+        })
+      : null;
+  const calibrationSource = sameDevice ? existing : priorDevice;
+  const samePhysicalDevice = !!calibrationSource;
 
   const freshLead = defaultDeliveryLeadMs(
-    sameDevice ? existing.deliveryLeadMs : undefined,
+    calibrationSource?.deliveryLeadMs,
     platform || resolvedUa
   );
 
@@ -99,7 +112,11 @@ export async function POST(request: NextRequest) {
       deviceId,
       active: true,
       deliveryLeadMs: freshLead,
-      deliverySampleCount: sameDevice ? existing.deliverySampleCount : 0,
+      deliverySampleCount: calibrationSource?.deliverySampleCount ?? 0,
+      deliveryP50Ms: calibrationSource?.deliveryP50Ms ?? null,
+      deliveryP90Ms: calibrationSource?.deliveryP90Ms ?? null,
+      deliveryWindowCount: calibrationSource?.deliveryWindowCount ?? 0,
+      lastCalibratedAt: calibrationSource?.lastCalibratedAt ?? null,
       lastSeenAt: new Date(),
     },
     update: {
@@ -113,7 +130,23 @@ export async function POST(request: NextRequest) {
       lastSeenAt: new Date(),
       ...(sameDevice
         ? {}
-        : { deliveryLeadMs: freshLead, deliverySampleCount: 0 }),
+        : calibrationSource
+          ? {
+              deliveryLeadMs: freshLead,
+              deliverySampleCount: calibrationSource.deliverySampleCount,
+              deliveryP50Ms: calibrationSource.deliveryP50Ms,
+              deliveryP90Ms: calibrationSource.deliveryP90Ms,
+              deliveryWindowCount: calibrationSource.deliveryWindowCount,
+              lastCalibratedAt: calibrationSource.lastCalibratedAt,
+            }
+          : {
+              deliveryLeadMs: freshLead,
+              deliverySampleCount: 0,
+              deliveryP50Ms: null,
+              deliveryP90Ms: null,
+              deliveryWindowCount: 0,
+              lastCalibratedAt: null,
+            }),
     },
   });
 
@@ -147,6 +180,7 @@ export async function POST(request: NextRequest) {
       created: isNew,
       retiredDuplicates: retired,
       sameDevice,
+      inheritedDeviceCalibration: !!priorDevice,
       repairReason,
     },
   });
@@ -170,7 +204,7 @@ export async function POST(request: NextRequest) {
     where: { id: session.id },
     data: {
       lastSeenAt: new Date(),
-      ...(sameDevice ? {} : { deliveryLeadMs: freshLead, deliverySampleCount: 0 }),
+      ...(samePhysicalDevice ? {} : { deliveryLeadMs: freshLead, deliverySampleCount: 0 }),
     },
   });
 

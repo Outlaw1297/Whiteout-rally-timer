@@ -617,8 +617,12 @@ console.log("PASS adaptive delivery lead");
     },
     "https://timer.example"
   );
-  if (envelope.web_push !== 8030 || envelope.notification.silent !== false) {
-    console.error("FAIL declarative push marker or visibility", envelope);
+  if (
+    envelope.web_push !== 8030 ||
+    envelope.mutable !== true ||
+    envelope.notification.silent !== false
+  ) {
+    console.error("FAIL declarative push marker, worker opt-in, or visibility", envelope);
     process.exit(1);
   }
   if (envelope.notification.navigate !== "https://timer.example/caller/events/rally%201") {

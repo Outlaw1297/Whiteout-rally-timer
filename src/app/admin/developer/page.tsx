@@ -374,7 +374,9 @@ export default function DeveloperPage() {
         </div>
         <p className="text-[11px] text-rally-muted">
           Test sends a real push. Success means Apple or FCM accepted it — not that the banner was
-          visible. iOS stays silent when Show Previews is Off.
+          visible. iOS stays silent when Show Previews is Off. If an iPhone gets the test and then
+          never throw alerts, reopen the home-screen app (Apple pauses delivery after silent pings
+          or unused PWAs).
         </p>
         {clock ? (
           <>

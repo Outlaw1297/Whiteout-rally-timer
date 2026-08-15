@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { getOrCreateDeviceId } from "@/lib/client-device-id";
+import { isIOSDevice } from "@/lib/push-support";
 
 const LIVE_PING_INTERVAL_MS = 2 * 60_000;
 const PRESENCE_INTERVAL_MS = 60_000;
@@ -56,6 +57,8 @@ export function useSilentLivePing(enabled = true) {
     };
 
     const runLivePing = async () => {
+      // Silent Web Push is not allowed on iOS — it stops later throw alerts.
+      if (isIOSDevice()) return;
       if (!isSubscribed) return;
       if (pingInFlightRef.current) return;
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;

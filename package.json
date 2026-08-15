@@ -12,6 +12,7 @@
     "test:timing": "tsx scripts/test-timing.ts",
     "test:live-board": "tsx scripts/test-live-board.ts",
     "test:device-id": "tsx scripts/test-device-id.ts",
+    "test:ios-push": "tsx scripts/test-ios-push.ts",
     "test:activity-log": "tsx scripts/test-activity-log.ts",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",

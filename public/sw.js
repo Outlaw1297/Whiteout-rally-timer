@@ -35,6 +35,12 @@ function hasFocusedClient(clientList) {
   return clientList.some((c) => c.focused);
 }
 
+/** iOS Web Push: every push must show a user-visible notification or Apple stops delivery. */
+function isIOSServiceWorker() {
+  const ua = self.navigator?.userAgent || "";
+  return /iPhone|iPad|iPod/i.test(ua);
+}
+
 /**
  * Close older notifications for THIS caller only, after a delay so Samsung
  * One UI can finish showing the heads-up / brief pop-up first.
@@ -210,23 +216,37 @@ self.addEventListener("push", (event) => {
       // When any app window is open, skip the OS banner and deliver via postMessage.
       // When backgrounded, Chrome still requires a user-visible notification for
       // push (userVisibleOnly) — show a silent placeholder, then close it ASAP.
-      const skipBanner = preferSilent && hasOpenClient;
+      const iosSafe = isIOSServiceWorker();
+      // Never skip showNotification on iOS — silent/skipped pushes burn the
+      // delivery budget and later throw alerts never arrive (test still works).
+      const skipBanner = preferSilent && hasOpenClient && !iosSafe;
+      const useSilentPlaceholder = preferSilent && !iosSafe;
 
       const silentTitle = " ";
       const silentBody = " ";
+      const displayTitle = useSilentPlaceholder
+        ? silentTitle
+        : preferSilent
+          ? title.trim() || "Whiteout Rally"
+          : title;
+      const displayBody = useSilentPlaceholder
+        ? silentBody
+        : preferSilent
+          ? body.trim() || "Keeping throw alerts ready"
+          : body;
       const notificationOptions = {
-        body: preferSilent ? silentBody : body,
+        body: displayBody,
         icon: "/icons/icon-192.png",
         badge: "/icons/icon-192.png",
         tag,
-        renotify: !preferSilent,
+        renotify: !useSilentPlaceholder,
         // Keep THROW sticky when possible; Android mostly ignores this, but it
         // does not hurt heads-up when Pop-up is enabled.
         requireInteraction: !preferSilent && isLaunch,
-        silent: preferSilent,
+        silent: useSilentPlaceholder,
         timestamp: receivedAtMs,
         // Short patterns — long multi-pulse vibrates are less reliable on One UI.
-        vibrate: preferSilent ? [] : isLaunch ? [400, 120, 400] : [220, 100, 220],
+        vibrate: useSilentPlaceholder ? [] : isLaunch ? [400, 120, 400] : [220, 100, 220],
         actions: preferSilent
           ? []
           : [
@@ -244,19 +264,16 @@ self.addEventListener("push", (event) => {
 
       // OS notification FIRST — this is what background users see.
       if (!skipBanner) {
-        const shown = await showRallyNotification(
-          preferSilent ? silentTitle : title,
-          notificationOptions
-        );
+        const shown = await showRallyNotification(displayTitle, notificationOptions);
         if (!shown) {
           await self.registration.showNotification(
-            preferSilent ? silentTitle : title || "Whiteout Rally",
+            displayTitle || "Whiteout Rally",
             {
-              body: preferSilent ? silentBody : body || "Rally notification",
+              body: displayBody || "Rally notification",
               icon: "/icons/icon-192.png",
               tag,
-              renotify: !preferSilent,
-              silent: preferSilent,
+              renotify: !useSilentPlaceholder,
+              silent: useSilentPlaceholder,
               data: notificationOptions.data,
             }
           );
@@ -264,7 +281,8 @@ self.addEventListener("push", (event) => {
 
         // Immediately dismiss silent calibration placeholders so they never linger
         // in the shade / make noise on OEMs that ignore the silent flag.
-        if (preferSilent) {
+        // Do not close on iOS — Apple treats an instant close as "not shown".
+        if (useSilentPlaceholder) {
           try {
             const notes = await self.registration.getNotifications({ tag });
             for (const note of notes) note.close();

@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { isIOSDevice } from "@/lib/push-support";
+import { DEFAULT_PUSH_LEAD_MS } from "@/lib/timing";
 
 export type CalibrationPhase = "idle" | "running" | "complete" | "partial" | "failed";
 
@@ -73,6 +75,19 @@ export function usePushCalibration() {
     }));
 
     try {
+      if (isIOSDevice()) {
+        setState({
+          phase: "complete",
+          received: 0,
+          total: 0,
+          deliveryLeadMs: DEFAULT_PUSH_LEAD_MS,
+          learnedLeadMs: DEFAULT_PUSH_LEAD_MS,
+          message:
+            "iPhone keeps throw alerts visible. Silent timing pings are skipped so Apple does not stop later notifications.",
+        });
+        return;
+      }
+
       const before = await fetchCalibrationStatus();
       const samplesBefore = before?.totalSamples ?? 0;
 

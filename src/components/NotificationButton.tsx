@@ -202,12 +202,15 @@ export function NotificationButton({ onStatusChange }: { onStatusChange?: () => 
         )}
       </div>
 
-      {(isCalibrating || calibration.phase === "complete" || calibration.phase === "partial") && (
+      {(isCalibrating ||
+        calibration.phase === "complete" ||
+        calibration.phase === "partial" ||
+        calibration.phase === "fallback") && (
         <div
           className={`w-full p-3 rounded-lg border text-sm ${
             calibration.phase === "complete"
               ? "bg-rally-success/10 border-rally-success/40"
-              : calibration.phase === "partial"
+              : calibration.phase === "partial" || calibration.phase === "fallback"
                 ? "bg-rally-warning/10 border-rally-warning/40"
                 : "bg-rally-surface border-rally-border"
           }`}
@@ -239,6 +242,12 @@ export function NotificationButton({ onStatusChange }: { onStatusChange?: () => 
           {calibration.phase === "partial" && (
             <>
               <p className="font-bold text-rally-warning">Calibration partial</p>
+              <p className="text-rally-muted text-xs mt-1">{calibration.message}</p>
+            </>
+          )}
+          {calibration.phase === "fallback" && (
+            <>
+              <p className="font-bold text-rally-warning">Apple fallback mode detected</p>
               <p className="text-rally-muted text-xs mt-1">{calibration.message}</p>
             </>
           )}

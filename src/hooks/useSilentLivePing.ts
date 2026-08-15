@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { getOrCreateDeviceId } from "@/lib/client-device-id";
+import { inspectServiceWorkerHealth } from "@/lib/service-worker-health";
 
 const PRESENCE_INTERVAL_MS = 60_000;
 
@@ -29,6 +30,7 @@ async function getLocalPushState(): Promise<{
 export function useSilentLivePing(enabled = true) {
   const { user } = useAuth();
   const presenceInFlightRef = useRef(false);
+  const workerHealthReportedRef = useRef(false);
 
   useEffect(() => {
     if (!enabled || !user) return;
@@ -38,17 +40,27 @@ export function useSilentLivePing(enabled = true) {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       presenceInFlightRef.current = true;
       try {
-        const localPush = await getLocalPushState();
-        await fetch("/api/push/presence", {
+        const shouldReportWorkerHealth = !workerHealthReportedRef.current;
+        const [localPush, workerHealth] = await Promise.all([
+          getLocalPushState(),
+          shouldReportWorkerHealth ? inspectServiceWorkerHealth() : Promise.resolve(null),
+        ]);
+        const response = await fetch("/api/push/presence", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             ...(localPush.endpoint ? { endpoint: localPush.endpoint } : {}),
             localSubscriptionState: localPush.state,
             deviceId: getOrCreateDeviceId(),
+            ...(workerHealth
+              ? { reportWorkerHealth: true, workerHealth }
+              : {}),
           }),
           credentials: "include",
         });
+        if (response.ok && shouldReportWorkerHealth) {
+          workerHealthReportedRef.current = true;
+        }
       } catch {
         /* next interval retries */
       } finally {

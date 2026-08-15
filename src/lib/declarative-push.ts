@@ -8,6 +8,8 @@ export interface DeclarativeSourcePayload {
   subscriptionId?: string;
   notificationType?: string;
   silent?: boolean;
+  dispatchId?: string;
+  receiptToken?: string;
 }
 
 export interface DeclarativePushEnvelope<T extends DeclarativeSourcePayload> {
@@ -38,10 +40,27 @@ function configuredPushOrigin(): string {
 }
 
 export function pushNavigatePath(payload: DeclarativeSourcePayload): string {
-  if (payload.rallyId && !String(payload.rallyId).startsWith("calibration")) {
+  if (
+    payload.assignmentId &&
+    payload.rallyId &&
+    !String(payload.rallyId).startsWith("calibration")
+  ) {
     return `/caller/events/${encodeURIComponent(String(payload.rallyId))}`;
   }
   return "/caller";
+}
+
+function trackedNavigateUrl(payload: DeclarativeSourcePayload, origin: string): string {
+  const next = pushNavigatePath(payload);
+  if (!payload.dispatchId || !payload.receiptToken) {
+    return new URL(next, origin).toString();
+  }
+
+  const tracker = new URL("/api/push/open", origin);
+  tracker.searchParams.set("dispatchId", payload.dispatchId);
+  tracker.searchParams.set("receiptToken", payload.receiptToken);
+  tracker.searchParams.set("next", next);
+  return tracker.toString();
 }
 
 export function pushNotificationTag(payload: DeclarativeSourcePayload): string {
@@ -65,7 +84,10 @@ export function buildDeclarativePushEnvelope<T extends DeclarativeSourcePayload>
 ): DeclarativePushEnvelope<T> {
   const title = payload.title.trim() || "Whiteout Rally";
   const body = payload.body.trim() || "Rally notification";
-  const navigate = new URL(pushNavigatePath(payload), origin).toString();
+  // A declarative notification can be displayed and opened without launching
+  // our service worker. Route the click through a signed same-origin redirect
+  // so that fallback delivery becomes visible in the developer timeline.
+  const navigate = trackedNavigateUrl(payload, origin);
   const data = { ...payload, title, body, silent: false, navigate } as T & {
     navigate: string;
   };

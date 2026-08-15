@@ -19,6 +19,15 @@ export async function POST(request: NextRequest) {
     endpoint?: string;
     deviceId?: string;
     localSubscriptionState?: "present" | "missing" | "unknown";
+    reportWorkerHealth?: boolean;
+    workerHealth?: {
+      supported?: boolean;
+      controlled?: boolean;
+      registrationState?: string;
+      version?: string | null;
+      responding?: boolean;
+      scriptPath?: string | null;
+    };
   } = {};
   try {
     body = await request.json();
@@ -34,6 +43,8 @@ export async function POST(request: NextRequest) {
   });
 
   let stampedId: string | null = null;
+  let stampedSubscriptionId: string | null = null;
+  let stampedPlatform: string | null = null;
   const deviceId = normalizeDeviceId(body.deviceId);
   let retired = 0;
 
@@ -72,10 +83,52 @@ export async function POST(request: NextRequest) {
           userId: session.id,
           endpoint: body.endpoint,
         },
-        select: { id: true, deviceId: true },
+        select: { id: true, deviceId: true, platform: true },
       });
       stampedId = sub?.deviceId ?? sub?.id ?? null;
+      stampedSubscriptionId = sub?.id ?? null;
+      stampedPlatform = sub?.platform ?? null;
     }
+  }
+
+  if (body.reportWorkerHealth && body.workerHealth) {
+    const health = body.workerHealth;
+    const version = typeof health.version === "string" ? health.version.slice(0, 100) : null;
+    const registrationState =
+      typeof health.registrationState === "string"
+        ? health.registrationState.slice(0, 30)
+        : "unknown";
+    const scriptPath =
+      typeof health.scriptPath === "string" ? health.scriptPath.slice(0, 255) : null;
+    const controlled = health.controlled === true;
+    const responding = health.responding === true;
+    const status = controlled
+      ? "controlling this PWA"
+      : health.supported === false
+        ? "not supported"
+        : "registered but not controlling this page";
+
+    await writeActivityLog({
+      kind: "SW_HEALTH",
+      success: controlled && responding,
+      userId: session.id,
+      username: session.username,
+      displayName: session.displayName,
+      deviceId,
+      subscriptionId: stampedSubscriptionId,
+      platform: stampedPlatform,
+      message: `PWA opened: service worker ${version || registrationState} is ${status}`,
+      error: responding ? null : "Worker did not answer the foreground version check",
+      meta: {
+        controlled,
+        responding,
+        supported: health.supported !== false,
+        registrationState,
+        version,
+        scriptPath,
+        localSubscriptionState: body.localSubscriptionState || "unknown",
+      },
+    });
   }
 
   return jsonResponse({

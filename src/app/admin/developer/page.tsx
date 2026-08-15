@@ -202,6 +202,9 @@ function deliveryDiagnosis(row: PushDeliveryRow): string {
   if (row.providerError) return "The push provider rejected the request; inspect the provider error below.";
   if (!row.providerAcceptedAt) return "The server has not recorded a push-provider response yet.";
   if (!row.receivedAt) {
+    if (row.clickedAt) {
+      return "The declarative Apple fallback was opened, but the service worker was bypassed. Delivery works; this dispatch cannot provide a timing sample.";
+    }
     return ageMs < 30_000
       ? "Apple/FCM accepted the push; waiting briefly for the device receipt."
       : row.declarativePayload
@@ -741,7 +744,11 @@ export default function DeveloperPage() {
                           <StatusBadge tone={displayFailed ? "danger" : row.displayedAt ? "success" : "neutral"}>
                             {displayFailed ? "Display failed" : row.displayedAt ? "Display succeeded" : "Display unknown"}
                           </StatusBadge>
-                          {row.clickedAt && <StatusBadge tone="success">Clicked</StatusBadge>}
+                          {row.clickedAt && (
+                            <StatusBadge tone="success">
+                              {row.receivedAt ? "Clicked" : "Fallback opened"}
+                            </StatusBadge>
+                          )}
                           {row.calibrationAppliedAt && (
                             <StatusBadge tone="success">Timing learned</StatusBadge>
                           )}
@@ -756,7 +763,7 @@ export default function DeveloperPage() {
                     <div className="border-t border-rally-border px-3 py-2 space-y-1 font-mono text-[10px] text-rally-muted overflow-x-auto">
                       <p>dispatch: <span className="text-rally-snow">{row.dispatchId}</span></p>
                       <p>source: {row.source} · provider: {row.providerAcceptedAt ? formatWhen(row.providerAcceptedAt) : "—"} · {row.providerDurationMs ?? "—"}ms</p>
-                      <p>worker received: {formatWhen(row.receivedAt)} · displayed: {formatWhen(row.displayedAt)} · clicked: {formatWhen(row.clickedAt)}</p>
+                      <p>worker received: {formatWhen(row.receivedAt)} · displayed: {formatWhen(row.displayedAt)} · opened/clicked: {formatWhen(row.clickedAt)}</p>
                       <p>timing target: {formatWhen(row.targetAt)} · round trip: {row.calibrationRoundTripMs == null ? "—" : `${row.calibrationRoundTripMs}ms`} · target offset: {formatOffset(row.calibrationDelayMs)} · {row.calibrationAppliedAt ? "applied once" : "not applied"}</p>
                       <p>timing model: {row.calibrationMethod?.replaceAll("_", " ") || "—"} · P50 {row.calibrationP50Ms == null ? "—" : `${row.calibrationP50Ms}ms`} · P90 {row.calibrationP90Ms == null ? "—" : `${row.calibrationP90Ms}ms`} · recent n={row.calibrationWindowCount ?? 0}</p>
                       <p>endpoint: {row.endpointHost || "—"} · fp {row.endpointFingerprint || "—"} · VAPID fp {row.vapidFingerprint || "—"}</p>

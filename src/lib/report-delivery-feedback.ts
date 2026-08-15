@@ -8,6 +8,7 @@ export function reportDeliveryFeedback(payload: {
   notificationType?: string;
   rallyId?: string;
   endpoint?: string;
+  dispatchId?: string;
 }) {
   if (!payload.targetAt) return;
 

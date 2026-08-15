@@ -236,12 +236,22 @@ model PushDeliveryAttempt {
   notificationType     String?
   rallyId              String?
   assignmentId         String?
+  /** Intended user-visible time carried in the push payload. */
+  targetAt             DateTime? @db.Timestamptz(3)
   providerStatus       Int?
   providerMessageId    String?
   providerDurationMs   Int?
   providerAcceptedAt   DateTime? @db.Timestamptz(3)
   providerError        String?
   receivedAt           DateTime? @db.Timestamptz(3)
+  /** Device wall-clock receipt time, accepted only when close to server time. */
+  clientReceivedAt     DateTime? @db.Timestamptz(3)
+  /** Set atomically when this dispatch updates the learned device lead. */
+  calibrationAppliedAt DateTime? @db.Timestamptz(3)
+  /** Measured server-send to signed device-receipt round trip. */
+  calibrationRoundTripMs Int?
+  /** Device receipt offset from the intended user-visible target. */
+  calibrationDelayMs   Int?
   displayedAt          DateTime? @db.Timestamptz(3)
   displayFailedAt      DateTime? @db.Timestamptz(3)
   displayError         String?

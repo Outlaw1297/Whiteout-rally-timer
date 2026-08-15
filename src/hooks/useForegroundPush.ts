@@ -13,6 +13,7 @@ export interface ForegroundPushMessage {
   assignmentId: string;
   scheduledAt: string;
   targetAt: string;
+  dispatchId: string;
   url: string;
   receivedAt: number;
 }
@@ -41,12 +42,14 @@ export function useForegroundPush() {
         );
       }
       const targetAt = String(data.targetAt || "");
+      const dispatchId = String(data.dispatchId || "");
       if (targetAt) {
         reportDeliveryFeedback({
           targetAt,
           receivedAtMs: clockSync.correctedNow(),
           notificationType,
           rallyId: String(data.rallyId || "calibration"),
+          dispatchId,
         });
       }
       return;
@@ -56,6 +59,7 @@ export function useForegroundPush() {
     const assignmentId = String(data.assignmentId || "");
     const scheduledAt = String(data.scheduledAt || "");
     const targetAt = String(data.targetAt || "");
+    const dispatchId = String(data.dispatchId || "");
     const dedupeKey = `${rallyId}:${notificationType}:${assignmentId}:${scheduledAt}`;
     const now = clockSync.correctedNow();
     const lastSeen = recentRef.current.get(dedupeKey);
@@ -71,6 +75,7 @@ export function useForegroundPush() {
       assignmentId,
       scheduledAt,
       targetAt,
+      dispatchId,
       url: String(data.url || "/caller"),
       receivedAt: now,
     };
@@ -94,6 +99,7 @@ export function useForegroundPush() {
         assignmentId,
         notificationType,
         rallyId,
+        dispatchId,
       });
     }
 

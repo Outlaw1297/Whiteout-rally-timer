@@ -7,6 +7,7 @@ import { syncUserDeliveryLead } from "@/lib/sync-user-delivery-lead";
 import { logger } from "@/lib/logger";
 import { normalizeDeviceId } from "@/lib/device-id";
 import { listCanonicalPushSubscriptions } from "@/lib/push-devices";
+import { applyPassiveCalibrationForAttempt } from "@/lib/push-delivery";
 
 export async function POST(request: NextRequest) {
   const session = await getSessionFromRequest(request);
@@ -20,6 +21,7 @@ export async function POST(request: NextRequest) {
     rallyId?: string;
     endpoint?: string;
     deviceId?: string;
+    dispatchId?: string;
   };
 
   try {
@@ -62,6 +64,25 @@ export async function POST(request: NextRequest) {
 
   if (subscriptions.length === 0) {
     return errorResponse("No active push subscription", 404);
+  }
+
+  const dispatchId = body.dispatchId?.trim();
+  if (dispatchId) {
+    const matchingAttempt = await prisma.pushDeliveryAttempt.findFirst({
+      where: {
+        dispatchId,
+        userId: session.id,
+        subscriptionId: { in: subscriptions.map((sub) => sub.id) },
+      },
+      select: { dispatchId: true },
+    });
+    if (matchingAttempt) {
+      const calibration = await applyPassiveCalibrationForAttempt({
+        dispatchId,
+        observedAt: new Date(),
+      });
+      return jsonResponse({ ok: true, dispatchId, calibration });
+    }
   }
 
   const delayMs = receivedAtMs - targetMs;

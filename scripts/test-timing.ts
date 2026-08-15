@@ -20,7 +20,13 @@ import {
   readMonotonicNow,
   shouldDiscardNtpSample,
 } from "../src/lib/clock-sync";
-import { getEffectivePushLeadMs, nextDeliveryLeadMs } from "../src/lib/delivery-lead";
+import {
+  getEffectivePushLeadMs,
+  deliveryLeadCorrectionMs,
+  nextDeliveryLeadMs,
+  nextEarlierScheduleMs,
+  trustedReceiptTime,
+} from "../src/lib/delivery-lead";
 import { allCallersHaveCalled, callerHasCalled } from "../src/lib/caller-launch";
 import { shouldDeferRallyCompletion } from "../src/lib/complete-rally";
 import { getHitOrderPreview, getThrowOrderPreview } from "../src/lib/march-groups";
@@ -500,4 +506,54 @@ console.log("PASS adaptive delivery lead");
   console.log("PASS THROW survives rally completion skip filter");
 }
 
+{
+  const now = 1_000_000;
+  const target = now + 10_000;
+  const current = target - 1_000;
+  const advanced = nextEarlierScheduleMs(current, target, 2_500, now);
+  if (advanced !== target - 2_500) {
+    console.error("FAIL increased learned lead should pull a pending alert earlier", advanced);
+    process.exit(1);
+  }
 
+  const wouldMoveLater = nextEarlierScheduleMs(target - 3_000, target, 1_500, now);
+  if (wouldMoveLater !== null) {
+    console.error("FAIL passive calibration must never move an active alert later");
+    process.exit(1);
+  }
+
+  const overdue = nextEarlierScheduleMs(target - 500, target, 20_000, now + 1_000);
+  if (overdue !== now + 1_000) {
+    console.error("FAIL an earlier time in the past should advance safely to now", overdue);
+    process.exit(1);
+  }
+  console.log("PASS passive calibration only advances pending alerts");
+}
+
+{
+  const serverReceipt = new Date("2026-08-15T19:00:00.000Z");
+  const alignedClient = serverReceipt.getTime() - 175;
+  if (trustedReceiptTime(alignedClient, serverReceipt).getTime() !== alignedClient) {
+    console.error("FAIL aligned device receipt time should be used");
+    process.exit(1);
+  }
+  const skewedClient = serverReceipt.getTime() - 120_000;
+  if (trustedReceiptTime(skewedClient, serverReceipt).getTime() !== serverReceipt.getTime()) {
+    console.error("FAIL skewed device clock should fall back to signed server receipt time");
+    process.exit(1);
+  }
+  console.log("PASS passive receipt clock-skew guard");
+}
+
+{
+  const currentLead = 1_000;
+  if (deliveryLeadCorrectionMs(currentLead, 240) !== -760) {
+    console.error("FAIL every push should learn measured round trip rather than accumulate delay");
+    process.exit(1);
+  }
+  if (deliveryLeadCorrectionMs(currentLead, 1_250) !== 250) {
+    console.error("FAIL slower measured round trip should increase the learned lead");
+    process.exit(1);
+  }
+  console.log("PASS passive calibration learns signed-receipt round trip for every push");
+}

@@ -125,12 +125,17 @@ interface PushDeliveryRow {
   vapidFingerprint: string | null;
   notificationType: string | null;
   rallyId: string | null;
+  targetAt: string | null;
   providerStatus: number | null;
   providerMessageId: string | null;
   providerDurationMs: number | null;
   providerAcceptedAt: string | null;
   providerError: string | null;
   receivedAt: string | null;
+  clientReceivedAt: string | null;
+  calibrationAppliedAt: string | null;
+  calibrationRoundTripMs: number | null;
+  calibrationDelayMs: number | null;
   displayedAt: string | null;
   displayFailedAt: string | null;
   displayError: string | null;
@@ -713,6 +718,9 @@ export default function DeveloperPage() {
                             {displayFailed ? "Display failed" : row.displayedAt ? "Display succeeded" : "Display unknown"}
                           </StatusBadge>
                           {row.clickedAt && <StatusBadge tone="success">Clicked</StatusBadge>}
+                          {row.calibrationAppliedAt && (
+                            <StatusBadge tone="success">Timing learned</StatusBadge>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -722,6 +730,7 @@ export default function DeveloperPage() {
                       <p>dispatch: <span className="text-rally-snow">{row.dispatchId}</span></p>
                       <p>source: {row.source} · provider: {row.providerAcceptedAt ? formatWhen(row.providerAcceptedAt) : "—"} · {row.providerDurationMs ?? "—"}ms</p>
                       <p>worker received: {formatWhen(row.receivedAt)} · displayed: {formatWhen(row.displayedAt)} · clicked: {formatWhen(row.clickedAt)}</p>
+                      <p>timing target: {formatWhen(row.targetAt)} · round trip: {row.calibrationRoundTripMs == null ? "—" : `${row.calibrationRoundTripMs}ms`} · target offset: {formatOffset(row.calibrationDelayMs)} · {row.calibrationAppliedAt ? "applied once" : "not applied"}</p>
                       <p>endpoint: {row.endpointHost || "—"} · fp {row.endpointFingerprint || "—"} · VAPID fp {row.vapidFingerprint || "—"}</p>
                       <p>device: {row.deviceId || "—"} · SW: {row.serviceWorkerVersion || "—"}</p>
                       <p className="font-sans text-rally-snow">Diagnosis: {deliveryDiagnosis(row)}</p>

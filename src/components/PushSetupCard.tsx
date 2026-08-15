@@ -64,8 +64,11 @@ function PushSetupCardInner({ onSubscribed }: { onSubscribed?: () => void }) {
   }, [checkStatus, refreshServer]);
 
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    // The push provider already checks and repairs the browser subscription on
+    // mount. Only load the account/server summary here, avoiding two concurrent
+    // repair attempts whose results can arrive out of order.
+    refreshServer();
+  }, [refreshServer]);
 
   useEffect(() => {
     const interval = setInterval(refreshServer, 8000);

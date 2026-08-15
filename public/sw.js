@@ -1,4 +1,4 @@
-self.__RALLY_SW_VERSION = "2026-08-15-push-observability-1";
+self.__RALLY_SW_VERSION = "2026-08-15-pwa-refresh-2";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();

@@ -149,7 +149,10 @@ export function usePushNotifications() {
 
   const registerServiceWorker = async () => {
     if (!("serviceWorker" in navigator)) return null;
-    const registration = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+    const registration = await navigator.serviceWorker.register("/sw.js", {
+      scope: "/",
+      updateViaCache: "none",
+    });
     await navigator.serviceWorker.ready;
     return registration;
   };

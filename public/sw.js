@@ -1,3 +1,5 @@
+self.__RALLY_SW_VERSION = "2026-08-15-push-observability-1";
+
 self.addEventListener("install", (event) => {
   self.skipWaiting();
 });
@@ -14,6 +16,28 @@ self.addEventListener("message", (event) => {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function safeError(error) {
+  if (!error) return "Unknown notification error";
+  const name = typeof error.name === "string" ? error.name : "Error";
+  const message = typeof error.message === "string" ? error.message : String(error);
+  return `${name}: ${message}`.slice(0, 900);
+}
+
+async function postPushReceipt(data, stage, detail = {}) {
+  if (!data?.dispatchId || !data?.receiptToken) return;
+  await fetch("/api/push/receipt", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      dispatchId: data.dispatchId,
+      receiptToken: data.receiptToken,
+      stage,
+      serviceWorkerVersion: self.__RALLY_SW_VERSION,
+      ...detail,
+    }),
+  });
 }
 
 async function listWindowClients() {
@@ -91,28 +115,29 @@ function presentForLatency(data, receivedAtMs) {
  * action buttons / exotic vibrate patterns.
  */
 async function showRallyNotification(title, options) {
+  const errors = [];
   // Pass 1: heads-up friendly (no actions)
   try {
     const { actions: _a, ...noActions } = options;
     await self.registration.showNotification(title, noActions);
-    return true;
-  } catch {
-    /* try with actions / full set */
+    return { shown: true, attempt: "no-actions", errors };
+  } catch (error) {
+    errors.push(`no-actions: ${safeError(error)}`);
   }
 
   try {
     await self.registration.showNotification(title, options);
-    return true;
-  } catch {
-    /* try stripped */
+    return { shown: true, attempt: "full", errors };
+  } catch (error) {
+    errors.push(`full: ${safeError(error)}`);
   }
 
   try {
     const { actions: _a, vibrate: _v, timestamp: _t, ...rest } = options;
     await self.registration.showNotification(title, rest);
-    return true;
-  } catch {
-    /* try minimal */
+    return { shown: true, attempt: "stripped", errors };
+  } catch (error) {
+    errors.push(`stripped: ${safeError(error)}`);
   }
 
   try {
@@ -125,9 +150,10 @@ async function showRallyNotification(title, options) {
       silent: !!options.silent,
       data: options.data,
     });
-    return true;
-  } catch {
-    return false;
+    return { shown: true, attempt: "minimal", errors };
+  } catch (error) {
+    errors.push(`minimal: ${safeError(error)}`);
+    return { shown: false, attempt: "failed", errors };
   }
 }
 
@@ -164,7 +190,15 @@ self.addEventListener("push", (event) => {
   const calibrationTotal = data.calibrationTotal || 0;
   const isCalibration = notificationType === "CALIBRATION";
   const isLivePing = !!data.livePing || rallyId === "calibration-live";
-  const preferSilent = isCalibration || !!data.silent || isLivePing;
+  // Apple Web Push revokes subscriptions that process silent pushes. Legacy
+  // calibration/live-ping payloads are deliberately upgraded to visible alerts.
+  const preferSilent = false;
+  if (!title.trim()) {
+    presented.title = isCalibration ? "🔔 Rally notification timing check" : "Whiteout Rally";
+  }
+  if (!body.trim()) {
+    presented.body = isCalibration ? "Notification delivery timing check." : "Rally update";
+  }
   const url = assignmentId
     ? `/caller/events/${rallyId}`
     : rallyId
@@ -175,8 +209,8 @@ self.addEventListener("push", (event) => {
 
   const payload = {
     type: "rally-push",
-    title,
-    body,
+    title: presented.title,
+    body: presented.body,
     rallyId,
     notificationType,
     assignmentId,
@@ -186,6 +220,8 @@ self.addEventListener("push", (event) => {
     calibrationTotal,
     silent: preferSilent,
     livePing: isLivePing,
+    dispatchId: data.dispatchId || "",
+    subscriptionId: data.subscriptionId || "",
     url,
   };
 
@@ -194,8 +230,8 @@ self.addEventListener("push", (event) => {
    * stacking unique rows. Unique tags (with timestamps) caused Android/Samsung to
    * rate-limit heads-up — later alerts only appeared in the shade / quick panel.
    */
-  const tag = preferSilent
-    ? `calibration-${isLivePing ? "live" : "setup"}-${assignmentId || "device"}`
+  const tag = isCalibration
+    ? `rally-calibration-${data.subscriptionId || "device"}`
     : assignmentId
       ? `rally-caller-${assignmentId}`
       : `rally-event-${rallyId || "general"}`;
@@ -204,87 +240,60 @@ self.addEventListener("push", (event) => {
     (async () => {
       const clientList = await listWindowClients();
       const inForeground = hasFocusedClient(clientList);
-      const hasOpenClient = clientList.length > 0;
-
-      // Silent calibration / live pings must not interrupt the user.
-      // When any app window is open, skip the OS banner and deliver via postMessage.
-      // When backgrounded, Chrome still requires a user-visible notification for
-      // push (userVisibleOnly) — show a silent placeholder, then close it ASAP.
-      const skipBanner = preferSilent && hasOpenClient;
-
-      const silentTitle = " ";
-      const silentBody = " ";
+      const receiptTasks = [postPushReceipt(data, "received").catch(() => {})];
       const notificationOptions = {
-        body: preferSilent ? silentBody : body,
+        body: presented.body,
         icon: "/icons/icon-192.png",
         badge: "/icons/icon-192.png",
         tag,
-        renotify: !preferSilent,
+        renotify: true,
         // Keep THROW sticky when possible; Android mostly ignores this, but it
         // does not hurt heads-up when Pop-up is enabled.
-        requireInteraction: !preferSilent && isLaunch,
-        silent: preferSilent,
+        requireInteraction: isLaunch,
+        silent: false,
         timestamp: receivedAtMs,
         // Short patterns — long multi-pulse vibrates are less reliable on One UI.
-        vibrate: preferSilent ? [] : isLaunch ? [400, 120, 400] : [220, 100, 220],
-        actions: preferSilent
-          ? []
-          : [
-              { action: "open", title: "Open rally" },
-              { action: "dismiss", title: "Dismiss" },
-            ],
+        vibrate: isLaunch ? [400, 120, 400] : [220, 100, 220],
+        actions: [
+          { action: "open", title: "Open rally" },
+          { action: "dismiss", title: "Dismiss" },
+        ],
         data: {
           rallyId,
           assignmentId,
           notificationType,
           url,
-          silent: preferSilent,
+          silent: false,
+          dispatchId: data.dispatchId || "",
+          receiptToken: data.receiptToken || "",
         },
       };
 
-      // OS notification FIRST — this is what background users see.
-      if (!skipBanner) {
-        const shown = await showRallyNotification(
-          preferSilent ? silentTitle : title,
-          notificationOptions
+      // Always create a user-visible effect. This is mandatory on Apple platforms.
+      const display = await showRallyNotification(presented.title, notificationOptions);
+      if (display.shown) {
+        receiptTasks.push(
+          postPushReceipt(data, "displayed", { attempt: display.attempt }).catch(() => {})
         );
-        if (!shown) {
-          await self.registration.showNotification(
-            preferSilent ? silentTitle : title || "Whiteout Rally",
-            {
-              body: preferSilent ? silentBody : body || "Rally notification",
-              icon: "/icons/icon-192.png",
-              tag,
-              renotify: !preferSilent,
-              silent: preferSilent,
-              data: notificationOptions.data,
-            }
-          );
-        }
-
-        // Immediately dismiss silent calibration placeholders so they never linger
-        // in the shade / make noise on OEMs that ignore the silent flag.
-        if (preferSilent) {
-          try {
-            const notes = await self.registration.getNotifications({ tag });
-            for (const note of notes) note.close();
-          } catch {
-            /* ignore */
-          }
-        }
+      } else {
+        receiptTasks.push(
+          postPushReceipt(data, "display_failed", {
+            error: display.errors.join(" | "),
+          }).catch(() => {})
+        );
       }
 
       // Then notify open pages (in-app banner when foreground).
       broadcastToClients(clientList, payload);
 
       // Delayed, caller-scoped cleanup only (stable tags already replace in place).
-      if (!preferSilent && !skipBanner && assignmentId) {
+      if (assignmentId) {
         void clearPriorCallerNotifications(assignmentId, tag);
       }
 
       // Auto-dismiss only when the PWA is actually focused — never while gaming
       // in another app (Fold cover / multi-window visible-but-unfocused).
-      if (inForeground && notificationType === "RALLY_STARTED" && !preferSilent) {
+      if (inForeground && notificationType === "RALLY_STARTED") {
         setTimeout(() => {
           self.registration
             .getNotifications({ tag })
@@ -297,7 +306,6 @@ self.addEventListener("push", (event) => {
 
       if (
         inForeground &&
-        !preferSilent &&
         !isLaunch &&
         String(notificationType).startsWith("WARNING_")
       ) {
@@ -312,6 +320,9 @@ self.addEventListener("push", (event) => {
       }
 
       if (targetAt) {
+        const currentSubscription = await self.registration.pushManager
+          .getSubscription()
+          .catch(() => null);
         await fetch("/api/push/delivery-feedback", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -322,9 +333,12 @@ self.addEventListener("push", (event) => {
             assignmentId,
             notificationType,
             rallyId,
+            endpoint: currentSubscription?.endpoint,
           }),
         }).catch(() => {});
       }
+
+      await Promise.allSettled(receiptTasks);
     })()
   );
 });
@@ -332,20 +346,32 @@ self.addEventListener("push", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
+  const notificationData = event.notification.data || {};
   if (event.action === "dismiss") return;
+
+  const clickReceipt = postPushReceipt(
+    {
+      dispatchId: notificationData.dispatchId,
+      receiptToken: notificationData.receiptToken,
+    },
+    "clicked"
+  ).catch(() => {});
 
   const url = event.notification.data?.url || "/caller";
 
   event.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
-      for (const client of clientList) {
-        if ("focus" in client) {
-          if (client.url.includes(url)) return client.focus();
+    Promise.all([
+      clickReceipt,
+      self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
+        for (const client of clientList) {
+          if ("focus" in client) {
+            if (client.url.includes(url)) return client.focus();
+          }
         }
-      }
-      if (self.clients.openWindow) {
-        return self.clients.openWindow(url);
-      }
-    })
+        if (self.clients.openWindow) {
+          return self.clients.openWindow(url);
+        }
+      }),
+    ])
   );
 });

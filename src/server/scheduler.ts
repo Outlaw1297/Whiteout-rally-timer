@@ -272,6 +272,15 @@ async function processNotificationEvent(eventId: string) {
         scheduledAt: notification.scheduledAt.toISOString(),
         targetAt: targetAt || undefined,
         launchTime: assignment.launchTime?.toISOString(),
+      },
+      {
+        source: "scheduler",
+        userId: user.id,
+        username: user.username,
+        displayName: user.displayName,
+        subscriptionId: sub.id,
+        deviceId: sub.deviceId,
+        platform: sub.platform,
       }
     );
 
@@ -303,7 +312,9 @@ async function processNotificationEvent(eventId: string) {
         rally: rallyEvent.name,
         type: notification.type,
         presentedType: presented.type,
-        statusCode: result.statusCode ?? (result.success ? 201 : null),
+        statusCode: result.statusCode ?? null,
+        dispatchId: result.dispatchId ?? null,
+        providerMessageId: result.providerMessageId ?? null,
         endpointHost: pushEndpointHost(sub.endpoint),
       },
     });

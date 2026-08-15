@@ -37,6 +37,7 @@ export async function POST(request: NextRequest) {
     userAgent?: string;
     platform?: string;
     deviceId?: string;
+    repairReason?: string;
   };
 
   try {
@@ -47,6 +48,16 @@ export async function POST(request: NextRequest) {
 
   const { endpoint, keys, userAgent, platform: clientPlatform } = body;
   const deviceId = normalizeDeviceId(body.deviceId);
+  const repairReason = [
+    "local_subscription_missing",
+    "not_found",
+    "inactive",
+    "encryption_keys_changed",
+    "device_changed",
+    "server_subscription_mismatch",
+  ].includes(body.repairReason || "")
+    ? body.repairReason
+    : null;
 
   if (!endpoint || !keys?.p256dh || !keys?.auth) {
     return errorResponse("endpoint and keys (p256dh, auth) are required");
@@ -125,7 +136,9 @@ export async function POST(request: NextRequest) {
     deviceId: subscription.deviceId,
     subscriptionId: subscription.id,
     platform,
-    message: isNew
+    message: repairReason
+      ? `${session.displayName} repaired ${platform || "this device"} push registration (${repairReason.replaceAll("_", " ")})`
+      : isNew
       ? `${session.displayName} registered ${platform || "a device"}${
           subscription.deviceId ? ` · id ${subscription.deviceId.slice(0, 8)}` : ""
         }`
@@ -134,6 +147,7 @@ export async function POST(request: NextRequest) {
       created: isNew,
       retiredDuplicates: retired,
       sameDevice,
+      repairReason,
     },
   });
 

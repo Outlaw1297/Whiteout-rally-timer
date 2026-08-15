@@ -33,7 +33,7 @@ export function usePushCalibration() {
   const [state, setState] = useState<CalibrationState>({
     phase: "idle",
     received: 0,
-    total: 3,
+    total: 1,
     deliveryLeadMs: null,
     message: null,
     learnedLeadMs: null,
@@ -66,7 +66,7 @@ export function usePushCalibration() {
     setState((prev) => ({
       phase: "running",
       received: 0,
-      total: 3,
+      total: 1,
       deliveryLeadMs: null,
       message: "Keep this screen open for a few seconds while we measure delivery timing.",
       learnedLeadMs: prev.learnedLeadMs,
@@ -82,7 +82,7 @@ export function usePushCalibration() {
         setState({
           phase: "failed",
           received: 0,
-          total: 3,
+            total: 1,
           deliveryLeadMs: null,
           message: data.error || "Calibration could not start.",
           learnedLeadMs: null,
@@ -91,7 +91,7 @@ export function usePushCalibration() {
       }
 
       const data = await res.json();
-      const total = data.total ?? 3;
+      const total = data.total ?? 1;
       const targetSamples = (data.samplesBefore ?? samplesBefore) + total;
       const deadline = Date.now() + CALIBRATION_TIMEOUT_MS;
 
@@ -143,7 +143,7 @@ export function usePushCalibration() {
     setState((prev) => ({
       phase: "idle",
       received: 0,
-      total: 3,
+      total: 1,
       deliveryLeadMs: null,
       message: null,
       learnedLeadMs: prev.learnedLeadMs ?? prev.deliveryLeadMs,

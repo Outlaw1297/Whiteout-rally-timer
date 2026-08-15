@@ -282,8 +282,8 @@ export function NotificationButton({ onStatusChange }: { onStatusChange?: () => 
                 : "Enable Rally Notifications"}
           </button>
           <p className="text-rally-muted text-xs text-center px-2">
-            Includes a quick timing calibration for this device (about 5 seconds). Rally
-            alerts work in the background after setup.
+            Includes one visible timing-check notification. Rally alerts work in the
+            background after setup.
           </p>
         </>
       ) : (

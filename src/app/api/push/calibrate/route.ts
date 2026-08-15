@@ -32,7 +32,8 @@ export async function POST(request: NextRequest) {
   }
 
   const mode = body.mode === "live" ? "live" : "setup";
-  const silent = body.silent !== false;
+  // Retained for request compatibility; calibration pushes are always visible.
+  const silent = false;
 
   // Any live-ping attempt means the app is open — mark presence even if we skip sending.
   if (mode === "live") {

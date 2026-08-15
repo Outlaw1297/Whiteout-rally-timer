@@ -214,3 +214,46 @@ model ActivityLog {
   @@index([kind, createdAt])
   @@index([userId, createdAt])
 }
+
+/**
+ * One row per push/device attempt. Provider acceptance and device-side receipts
+ * update the same row so the developer UI can show an end-to-end timeline.
+ * Endpoints, encryption keys, and notification bodies are intentionally omitted.
+ */
+model PushDeliveryAttempt {
+  id                   String    @id @default(uuid())
+  dispatchId           String    @unique
+  source               String
+  userId               String?
+  username             String?
+  displayName          String?
+  subscriptionId       String?
+  deviceId             String?
+  platform             String?
+  endpointHost         String?
+  endpointFingerprint  String?
+  vapidFingerprint     String?
+  notificationType     String?
+  rallyId              String?
+  assignmentId         String?
+  providerStatus       Int?
+  providerMessageId    String?
+  providerDurationMs   Int?
+  providerAcceptedAt   DateTime? @db.Timestamptz(3)
+  providerError        String?
+  receivedAt           DateTime? @db.Timestamptz(3)
+  displayedAt          DateTime? @db.Timestamptz(3)
+  displayFailedAt      DateTime? @db.Timestamptz(3)
+  displayError         String?
+  clickedAt            DateTime? @db.Timestamptz(3)
+  serviceWorkerVersion String?
+  createdAt            DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime  @updatedAt @db.Timestamptz(3)
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([subscriptionId, createdAt])
+  @@index([deviceId, createdAt])
+  @@index([providerStatus, createdAt])
+  @@index([notificationType, createdAt])
+}

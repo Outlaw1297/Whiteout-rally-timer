@@ -2,6 +2,12 @@ import webpush from "web-push";
 import crypto from "crypto";
 import { prisma } from "./prisma";
 import { logger } from "./logger";
+import {
+  createPushDeliveryAttempt,
+  markPushProviderAccepted,
+  markPushProviderFailed,
+  type PushDeliveryContext,
+} from "./push-delivery";
 
 const CONFIG_ID = "default";
 
@@ -272,25 +278,76 @@ export interface PushPayload {
   calibrationTotal?: number;
   silent?: boolean;
   livePing?: boolean;
+  dispatchId?: string;
+  receiptToken?: string;
+  subscriptionId?: string;
+}
+
+export interface PushSendResult {
+  success: boolean;
+  statusCode?: number;
+  error?: string;
+  dispatchId?: string;
+  providerMessageId?: string;
+}
+
+function responseHeader(
+  headers: Record<string, string | string[] | undefined>,
+  ...names: string[]
+): string | undefined {
+  for (const name of names) {
+    const value = headers[name] ?? headers[name.toLowerCase()];
+    if (Array.isArray(value)) return value[0];
+    if (value) return value;
+  }
+  return undefined;
 }
 
 export async function sendPushNotification(
   subscription: { endpoint: string; p256dh: string; auth: string },
-  payload: PushPayload
-): Promise<{ success: boolean; statusCode?: number; error?: string }> {
+  payload: PushPayload,
+  context?: PushDeliveryContext
+): Promise<PushSendResult> {
   if (!(await initWebPush())) {
     return { success: false, error: lastInitError || "VAPID not configured" };
   }
 
   // Short TTL + Android Doze = messages expire before Chrome wakes.
-  // Rally alerts need minutes of headroom; silent pings can stay brief.
+  // Rally alerts need minutes of headroom; calibration probes can stay brief.
   const isEphemeral = !!payload.silent || !!payload.livePing || payload.notificationType === "CALIBRATION";
   const ttlSeconds = isEphemeral ? 90 : 900;
   // Don't let a hung FCM/web-push call block the scheduler tick forever.
   const SEND_TIMEOUT_MS = isEphemeral ? 5_000 : 8_000;
 
+  let dispatchId: string | undefined;
+  let receiptToken: string | undefined;
+  if (context) {
+    try {
+      const attempt = await createPushDeliveryAttempt({
+        context,
+        payload,
+        endpoint: subscription.endpoint,
+        vapidPublicKey: activePublicKey,
+      });
+      dispatchId = attempt.dispatchId;
+      receiptToken = attempt.receiptToken;
+    } catch (err) {
+      logger.warn("push_delivery_attempt_create_failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  const outboundPayload: PushPayload = {
+    ...payload,
+    ...(dispatchId ? { dispatchId } : {}),
+    ...(receiptToken ? { receiptToken } : {}),
+    ...(context?.subscriptionId ? { subscriptionId: context.subscriptionId } : {}),
+  };
+  const startedAt = Date.now();
+
   try {
-    await Promise.race([
+    const response = await Promise.race([
       webpush.sendNotification(
         {
           endpoint: subscription.endpoint,
@@ -299,7 +356,7 @@ export async function sendPushNotification(
             auth: subscription.auth,
           },
         },
-        JSON.stringify(payload),
+        JSON.stringify(outboundPayload),
         {
           TTL: ttlSeconds,
           urgency: "high",
@@ -309,7 +366,27 @@ export async function sendPushNotification(
         setTimeout(() => reject(new Error("webpush_send_timeout")), SEND_TIMEOUT_MS);
       }),
     ]);
-    return { success: true };
+    const durationMs = Date.now() - startedAt;
+    const providerMessageId = responseHeader(
+      response.headers as Record<string, string | string[] | undefined>,
+      "apns-id",
+      "x-request-id",
+      "location"
+    );
+    if (dispatchId) {
+      await markPushProviderAccepted({
+        dispatchId,
+        statusCode: response.statusCode,
+        messageId: providerMessageId,
+        durationMs,
+      }).catch(() => {});
+    }
+    return {
+      success: true,
+      statusCode: response.statusCode,
+      dispatchId,
+      providerMessageId,
+    };
   } catch (err: unknown) {
     const error = err as { statusCode?: number; message?: string; body?: string };
     logger.error("push_send_failed", {
@@ -318,14 +395,24 @@ export async function sendPushNotification(
       body: error.body,
     });
 
+    if (dispatchId) {
+      await markPushProviderFailed({
+        dispatchId,
+        statusCode: error.statusCode,
+        error: error.message || error.body || "Unknown push error",
+        durationMs: Date.now() - startedAt,
+      }).catch(() => {});
+    }
+
     if (error.message === "webpush_send_timeout") {
-      return { success: false, error: "push send timed out" };
+      return { success: false, error: "push send timed out", dispatchId };
     }
 
     if (error.statusCode === 401) {
       return {
         success: false,
         statusCode: 401,
+        dispatchId,
         error:
           "VAPID key mismatch — tap Disable then Enable notifications to re-register this device",
       };
@@ -335,6 +422,7 @@ export async function sendPushNotification(
       success: false,
       statusCode: error.statusCode,
       error: error.message || "Unknown push error",
+      dispatchId,
     };
   }
 }

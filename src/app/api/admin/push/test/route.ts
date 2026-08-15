@@ -99,6 +99,15 @@ export async function POST(request: NextRequest) {
           rallyId: "developer-test",
           notificationType: "TEST",
           targetAt,
+        },
+        {
+          source: "developer-test",
+          userId: sub.userId,
+          username: sub.user.username,
+          displayName: sub.user.displayName,
+          subscriptionId: sub.id,
+          deviceId: sub.deviceId,
+          platform: sub.platform,
         }
       );
       const latencyMs = Date.now() - started;
@@ -122,7 +131,7 @@ export async function POST(request: NextRequest) {
         username: sub.user.username,
         success: result.success,
         error: result.error,
-        statusCode: result.statusCode ?? (result.success ? 201 : undefined),
+        statusCode: result.statusCode,
         deactivated,
         latencyMs,
         endpointHost: pushEndpointHost(sub.endpoint) ?? undefined,
@@ -146,6 +155,8 @@ export async function POST(request: NextRequest) {
           source: "developer-test",
           triggeredBy: session.username,
           statusCode: row.statusCode ?? null,
+          dispatchId: result.dispatchId ?? null,
+          providerMessageId: result.providerMessageId ?? null,
           latencyMs,
           endpointHost: row.endpointHost ?? null,
           deactivated,

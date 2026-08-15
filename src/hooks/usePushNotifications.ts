@@ -9,6 +9,8 @@ import {
 } from "@/lib/push-support";
 import { getOrCreateDeviceId } from "@/lib/client-device-id";
 
+const PUSH_DISABLED_STORAGE_KEY = "rally-push-disabled";
+
 export type NotificationStatus =
   | "checking"
   | "unsupported"
@@ -52,7 +54,10 @@ async function fetchPublicKey(): Promise<string> {
   return data.publicKey as string;
 }
 
-async function registerOnServer(subscription: PushSubscription): Promise<void> {
+async function registerOnServer(
+  subscription: PushSubscription,
+  repairReason?: string
+): Promise<void> {
   const subJson = subscription.toJSON();
   if (!subJson.keys?.p256dh || !subJson.keys?.auth) {
     throw new Error("Browser subscription is missing encryption keys");
@@ -67,6 +72,7 @@ async function registerOnServer(subscription: PushSubscription): Promise<void> {
       userAgent: navigator.userAgent,
       platform: detectPlatform(),
       deviceId: getOrCreateDeviceId(),
+      ...(repairReason ? { repairReason } : {}),
     }),
   });
 
@@ -79,14 +85,32 @@ async function registerOnServer(subscription: PushSubscription): Promise<void> {
   }
 }
 
-async function verifyEndpoint(endpoint: string) {
+async function backendExpectsThisDevice(): Promise<boolean> {
+  const params = new URLSearchParams({ deviceId: getOrCreateDeviceId() });
+  const res = await fetch(`/api/push/status?${params}`, { cache: "no-store" });
+  if (!res.ok) return false;
+  const data = await res.json();
+  return data.thisDeviceExpected === true;
+}
+
+async function verifySubscription(subscription: PushSubscription) {
+  const json = subscription.toJSON();
   const res = await fetch("/api/push/verify", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ endpoint }),
+    body: JSON.stringify({
+      endpoint: subscription.endpoint,
+      keys: json.keys,
+      deviceId: getOrCreateDeviceId(),
+    }),
   });
-  if (!res.ok) return { registered: false, active: false };
-  return res.json() as Promise<{ registered: boolean; active: boolean }>;
+  if (!res.ok) return { registered: false, active: false, matches: false };
+  return res.json() as Promise<{
+    registered: boolean;
+    active: boolean;
+    matches: boolean;
+    reason?: string;
+  }>;
 }
 
 async function subscribeWithKey(
@@ -152,18 +176,36 @@ export function usePushNotifications() {
     const localSub = await registration.pushManager.getSubscription();
     if (!localSub) {
       setThisDeviceRegistered(false);
+      const intentionallyDisabled = localStorage.getItem(PUSH_DISABLED_STORAGE_KEY) === "true";
+      if (permission === "granted" && !intentionallyDisabled) {
+        try {
+          // Only self-heal if the backend still expected a subscription for this
+          // install. This avoids undoing an intentional Disable from older builds.
+          if (await backendExpectsThisDevice()) {
+            const publicKey = await fetchPublicKey();
+            const repaired = await subscribeWithKey(registration, publicKey);
+            await registerOnServer(repaired, "local_subscription_missing");
+            setThisDeviceRegistered(true);
+            setLastError(null);
+            return "subscribed";
+          }
+        } catch {
+          return "stale";
+        }
+      }
       return permission === "granted" ? "granted" : "default";
     }
 
     try {
-      const verified = await verifyEndpoint(localSub.endpoint);
-      if (verified.registered && verified.active) {
+      const verified = await verifySubscription(localSub);
+      if (verified.registered && verified.active && verified.matches) {
         setThisDeviceRegistered(true);
         return "subscribed";
       }
 
-      // Local sub exists but server lost it — re-register without forcing a new browser sub.
-      await registerOnServer(localSub);
+      // Local subscription exists but the server row or encryption keys drifted.
+      // Re-register the complete browser subscription without minting a new one.
+      await registerOnServer(localSub, verified.reason || "server_subscription_mismatch");
       setThisDeviceRegistered(true);
       setLastError(null);
       return "subscribed";
@@ -230,6 +272,7 @@ export function usePushNotifications() {
         // Prefer reusing the existing subscription if the server will accept it.
         try {
           await registerOnServer(existing);
+          localStorage.removeItem(PUSH_DISABLED_STORAGE_KEY);
           setThisDeviceRegistered(true);
           setStatus("subscribed");
           return { ok: true };
@@ -242,6 +285,7 @@ export function usePushNotifications() {
       const subscription = await subscribeWithKey(registration, publicKey);
       await registerOnServer(subscription);
 
+      localStorage.removeItem(PUSH_DISABLED_STORAGE_KEY);
       setThisDeviceRegistered(true);
       setStatus("subscribed");
       return { ok: true };
@@ -260,6 +304,7 @@ export function usePushNotifications() {
 
   const disableNotifications = async () => {
     setLoading(true);
+    localStorage.setItem(PUSH_DISABLED_STORAGE_KEY, "true");
     try {
       const registration = await navigator.serviceWorker.ready;
       const subscription = await registration.pushManager.getSubscription();

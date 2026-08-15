@@ -2,32 +2,32 @@
 
 import { useEffect, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { getOrCreateDeviceId } from "@/lib/client-device-id";
 
-const LIVE_PING_INTERVAL_MS = 2 * 60_000;
 const PRESENCE_INTERVAL_MS = 60_000;
-const LIVE_PING_STORAGE_KEY = "rally-live-ping-at";
 
-async function getPushEndpoint(): Promise<string | undefined> {
+async function getLocalPushState(): Promise<{
+  state: "present" | "missing" | "unknown";
+  endpoint?: string;
+}> {
   try {
-    if (!("serviceWorker" in navigator)) return undefined;
+    if (!("serviceWorker" in navigator)) return { state: "unknown" };
     const reg = await navigator.serviceWorker.ready;
     const sub = await reg.pushManager.getSubscription();
-    return sub?.endpoint;
+    return sub
+      ? { state: "present", endpoint: sub.endpoint }
+      : { state: "missing" };
   } catch {
-    return undefined;
+    return { state: "unknown" };
   }
 }
 
 /**
- * Quiet delivery-timing pings while the app is open and no rally timers are running.
- * Also sends a lightweight presence heartbeat so admins can see online/offline status.
+ * Lightweight HTTP presence heartbeat. Do not use Web Push for silent liveness
+ * checks: Apple requires every push event to produce a visible notification.
  */
 export function useSilentLivePing(enabled = true) {
   const { user } = useAuth();
-  const { isSubscribed } = usePushNotifications();
-  const pingInFlightRef = useRef(false);
   const presenceInFlightRef = useRef(false);
 
   useEffect(() => {
@@ -38,12 +38,13 @@ export function useSilentLivePing(enabled = true) {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       presenceInFlightRef.current = true;
       try {
-        const endpoint = isSubscribed ? await getPushEndpoint() : undefined;
+        const localPush = await getLocalPushState();
         await fetch("/api/push/presence", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            ...(endpoint ? { endpoint } : {}),
+            ...(localPush.endpoint ? { endpoint: localPush.endpoint } : {}),
+            localSubscriptionState: localPush.state,
             deviceId: getOrCreateDeviceId(),
           }),
           credentials: "include",
@@ -55,40 +56,12 @@ export function useSilentLivePing(enabled = true) {
       }
     };
 
-    const runLivePing = async () => {
-      if (!isSubscribed) return;
-      if (pingInFlightRef.current) return;
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-
-      const last = Number(localStorage.getItem(LIVE_PING_STORAGE_KEY) || 0);
-      if (Date.now() - last < LIVE_PING_INTERVAL_MS - 5_000) return;
-
-      pingInFlightRef.current = true;
-      try {
-        const res = await fetch("/api/push/calibrate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mode: "live", silent: true }),
-        });
-        if (res.ok || res.status === 409) {
-          localStorage.setItem(LIVE_PING_STORAGE_KEY, String(Date.now()));
-        }
-      } catch {
-        // ignore network errors — next interval retries
-      } finally {
-        pingInFlightRef.current = false;
-      }
-    };
-
     const presenceInitial = window.setTimeout(sendPresence, 2_000);
     const presenceInterval = window.setInterval(sendPresence, PRESENCE_INTERVAL_MS);
-    const pingInitial = window.setTimeout(runLivePing, 8_000);
-    const pingInterval = window.setInterval(runLivePing, LIVE_PING_INTERVAL_MS);
 
     const onVisible = () => {
       if (document.visibilityState === "visible") {
         sendPresence();
-        runLivePing();
       }
     };
     document.addEventListener("visibilitychange", onVisible);
@@ -96,9 +69,7 @@ export function useSilentLivePing(enabled = true) {
     return () => {
       window.clearTimeout(presenceInitial);
       window.clearInterval(presenceInterval);
-      window.clearTimeout(pingInitial);
-      window.clearInterval(pingInterval);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [enabled, user, isSubscribed]);
+  }, [enabled, user]);
 }

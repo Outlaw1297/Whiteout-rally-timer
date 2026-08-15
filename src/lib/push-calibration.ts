@@ -3,7 +3,7 @@ import { sendPushNotification } from "@/lib/push";
 import { defaultDeliveryLeadMs } from "@/lib/delivery-lead";
 import { listCanonicalPushSubscriptions } from "@/lib/push-devices";
 
-export const CALIBRATION_PING_COUNT = 3;
+export const CALIBRATION_PING_COUNT = 1;
 export const CALIBRATION_PING_SPACING_MS = 700;
 export const LIVE_PING_COUNT = 1;
 
@@ -16,10 +16,16 @@ export async function sendCalibrationPings(
   options: { mode?: "setup" | "live"; silent?: boolean } = {}
 ) {
   const mode = options.mode === "live" ? "live" : "setup";
-  const silent = options.silent !== false; // default quiet
+  // WebKit revokes subscriptions that receive pushes without a user-visible
+  // notification. Calibration must therefore always be visible.
+  const silent = false;
   const pingCount = mode === "live" ? LIVE_PING_COUNT : CALIBRATION_PING_COUNT;
 
   const subscriptions = await listCanonicalPushSubscriptions(userId);
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { username: true, displayName: true },
+  });
 
   if (subscriptions.length === 0) {
     return { error: "No active push subscription" as const, status: 404 as const };
@@ -34,17 +40,24 @@ export async function sendCalibrationPings(
       await sendPushNotification(
         { endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth },
         {
-          // Blank title/body — SW skips OS banners for silent calibration when the
-          // app is open, and immediately closes any required placeholder when not.
-          title: " ",
-          body: " ",
+          title: "🔔 Rally notification timing check",
+          body: "This visible test confirms notification delivery and measures timing.",
           rallyId: mode === "live" ? "calibration-live" : "calibration",
           notificationType: "CALIBRATION",
           targetAt,
           calibrationIndex: i + 1,
           calibrationTotal: pingCount,
-          silent: true,
-          livePing: mode === "live",
+          silent,
+          livePing: false,
+        },
+        {
+          source: "calibration",
+          userId,
+          username: user?.username,
+          displayName: user?.displayName,
+          subscriptionId: sub.id,
+          deviceId: sub.deviceId,
+          platform: sub.platform,
         }
       );
     }

@@ -12,6 +12,7 @@ export interface DeclarativeSourcePayload {
 
 export interface DeclarativePushEnvelope<T extends DeclarativeSourcePayload> {
   web_push: typeof DECLARATIVE_WEB_PUSH_VERSION;
+  mutable: true;
   notification: {
     title: string;
     body: string;
@@ -70,6 +71,10 @@ export function buildDeclarativePushEnvelope<T extends DeclarativeSourcePayload>
 
   return {
     web_push: DECLARATIVE_WEB_PUSH_VERSION,
+    // Apple displays the declarative notification directly unless this flag
+    // opts into service-worker processing. The declared notification remains
+    // the visible fallback if worker startup or replacement display fails.
+    mutable: true,
     notification: {
       title,
       body,

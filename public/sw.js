@@ -1,4 +1,4 @@
-self.__RALLY_SW_VERSION = "2026-08-15-declarative-p90-1";
+self.__RALLY_SW_VERSION = "2026-08-15-declarative-p90-2";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();

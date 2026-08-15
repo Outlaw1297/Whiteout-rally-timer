@@ -4,11 +4,13 @@ import { jsonResponse } from "@/lib/api";
 import { requireAuth } from "@/lib/auth";
 import { getVapidPublicKey, getVapidDiagnostics, initWebPush } from "@/lib/push";
 import { resolveDevicePlatform } from "@/lib/device-platform";
+import { normalizeDeviceId } from "@/lib/device-id";
 
 export async function GET(request: NextRequest) {
   const session = await requireAuth(request);
   if (session instanceof Response) return session;
 
+  const deviceId = normalizeDeviceId(new URL(request.url).searchParams.get("deviceId"));
   const subscriptions = await prisma.pushSubscription.findMany({
     where: { userId: session.id, active: true },
     select: {
@@ -19,6 +21,7 @@ export async function GET(request: NextRequest) {
       userAgent: true,
       createdAt: true,
       updatedAt: true,
+      deviceId: true,
     },
     orderBy: { updatedAt: "desc" },
   });
@@ -43,5 +46,6 @@ export async function GET(request: NextRequest) {
       updatedAt: sub.updatedAt.toISOString(),
     })),
     deviceCount: subscriptions.length,
+    thisDeviceExpected: !!deviceId && subscriptions.some((sub) => sub.deviceId === deviceId),
   });
 }

@@ -1,13 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   Bell,
+  ChevronDown,
+  ChevronRight,
   Check,
   Clock,
+  Download,
   Radio,
+  RefreshCw,
+  Search,
   ScrollText,
   Send,
   Smartphone,
@@ -103,6 +108,46 @@ interface ActivityLogRow {
   platform: string | null;
   message: string | null;
   error: string | null;
+  subscriptionId?: string | null;
+  meta?: Record<string, unknown> | null;
+}
+
+interface PushDeliveryRow {
+  id: string;
+  dispatchId: string;
+  source: string;
+  displayName: string | null;
+  username: string | null;
+  deviceId: string | null;
+  platform: string | null;
+  endpointHost: string | null;
+  endpointFingerprint: string | null;
+  vapidFingerprint: string | null;
+  notificationType: string | null;
+  rallyId: string | null;
+  providerStatus: number | null;
+  providerMessageId: string | null;
+  providerDurationMs: number | null;
+  providerAcceptedAt: string | null;
+  providerError: string | null;
+  receivedAt: string | null;
+  displayedAt: string | null;
+  displayFailedAt: string | null;
+  displayError: string | null;
+  clickedAt: string | null;
+  serviceWorkerVersion: string | null;
+  createdAt: string;
+}
+
+interface PushDeliverySummary {
+  hours: number;
+  total: number;
+  providerAccepted: number;
+  providerFailed: number;
+  received: number;
+  displayed: number;
+  displayFailed: number;
+  acceptedNoReceipt: number;
 }
 
 type LogGroupFilter = "all" | "auth" | "device" | "notification";
@@ -130,6 +175,22 @@ function formatOffset(ms: number | undefined | null): string {
   return `${ms >= 0 ? "+" : ""}${Math.round(ms)}ms`;
 }
 
+function deliveryDiagnosis(row: PushDeliveryRow): string {
+  const ageMs = Date.now() - new Date(row.createdAt).getTime();
+  if (row.providerError) return "The push provider rejected the request; inspect the provider error below.";
+  if (!row.providerAcceptedAt) return "The server has not recorded a push-provider response yet.";
+  if (!row.receivedAt) {
+    return ageMs < 30_000
+      ? "Apple/FCM accepted the push; waiting briefly for the device receipt."
+      : "Apple/FCM accepted the push, but the service worker did not report receiving it.";
+  }
+  if (row.displayFailedAt) return "The service worker received the push, but showNotification failed.";
+  if (row.displayedAt) {
+    return "The service worker created the notification. If no banner appeared, check Focus/Gaming Focus, notification settings, or an iOS/Game Mode interaction.";
+  }
+  return "The service worker received the push; notification display is still unresolved.";
+}
+
 export default function DeveloperPage() {
   const { user, loading, logout } = useAuth();
   const router = useRouter();
@@ -149,6 +210,15 @@ export default function DeveloperPage() {
   const [statusMsg, setStatusMsg] = useState("");
   const [logs, setLogs] = useState<ActivityLogRow[]>([]);
   const [logGroup, setLogGroup] = useState<LogGroupFilter>("all");
+  const [deliveries, setDeliveries] = useState<PushDeliveryRow[]>([]);
+  const [deliverySummary, setDeliverySummary] = useState<PushDeliverySummary | null>(null);
+  const [deliveryQuery, setDeliveryQuery] = useState("");
+  const [deliveryOutcome, setDeliveryOutcome] = useState("all");
+  const [deliveryHours, setDeliveryHours] = useState("24");
+  const [deliveryCursor, setDeliveryCursor] = useState<string | null>(null);
+  const [deliveryLoading, setDeliveryLoading] = useState(false);
+  const [expandedDelivery, setExpandedDelivery] = useState<string | null>(null);
+  const reviewingOlderDeliveries = useRef(false);
 
   const load = useCallback(async () => {
     try {
@@ -222,6 +292,43 @@ export default function DeveloperPage() {
       /* keep previous rows */
     }
   }, [logGroup]);
+
+  const loadDeliveries = useCallback(
+    async (append = false, cursor: string | null = null) => {
+      setDeliveryLoading(true);
+      try {
+        const params = new URLSearchParams({
+          hours: deliveryHours,
+          outcome: deliveryOutcome,
+          limit: "30",
+        });
+        if (deliveryQuery.trim()) params.set("q", deliveryQuery.trim());
+        if (append && cursor) params.set("cursor", cursor);
+        const res = await fetch(`/api/admin/developer/push-deliveries?${params}`, {
+          cache: "no-store",
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        setDeliveries((previous) => (append ? [...previous, ...(data.rows || [])] : data.rows || []));
+        reviewingOlderDeliveries.current = append;
+        setDeliveryCursor(data.nextCursor || null);
+        setDeliverySummary(data.summary || null);
+      } finally {
+        setDeliveryLoading(false);
+      }
+    },
+    [deliveryHours, deliveryOutcome, deliveryQuery]
+  );
+
+  const exportDeliveries = useCallback(() => {
+    const blob = new Blob([JSON.stringify(deliveries, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `push-deliveries-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }, [deliveries]);
 
   const sendTest = useCallback(
     async (opts: { subscriptionId?: string; userId?: string; all?: boolean }) => {
@@ -300,13 +407,15 @@ export default function DeveloperPage() {
     if (user && isDeveloperRole(user.role)) {
       load();
       loadLogs();
+      loadDeliveries();
       const interval = setInterval(() => {
         load();
         loadLogs();
+        if (!reviewingOlderDeliveries.current) loadDeliveries();
       }, 8000);
       return () => clearInterval(interval);
     }
-  }, [user, load, loadLogs]);
+  }, [user, load, loadLogs, loadDeliveries]);
 
   const filteredUsers = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -465,6 +574,178 @@ export default function DeveloperPage() {
           ))}
         </Panel>
       )}
+
+      <Panel className="mb-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2">
+            <Radio className="h-4 w-4 text-rally-ice shrink-0" aria-hidden />
+            <SectionLabel>Push delivery explorer</SectionLabel>
+          </div>
+          <div className="flex gap-1">
+            <button
+              type="button"
+              onClick={() => loadDeliveries()}
+              disabled={deliveryLoading}
+              className="btn-ghost !min-h-[30px] !py-1 !px-2 text-[11px] gap-1"
+            >
+              <RefreshCw className={`h-3 w-3 ${deliveryLoading ? "animate-spin" : ""}`} aria-hidden />
+              Refresh
+            </button>
+            <button
+              type="button"
+              onClick={exportDeliveries}
+              disabled={deliveries.length === 0}
+              className="btn-ghost !min-h-[30px] !py-1 !px-2 text-[11px] gap-1"
+            >
+              <Download className="h-3 w-3" aria-hidden />
+              Export JSON
+            </button>
+          </div>
+        </div>
+
+        {deliverySummary && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3 text-[11px]">
+            <div className="rounded-lg border border-rally-border bg-rally-bg p-2">
+              <p className="text-rally-muted">Provider accepted</p>
+              <p className="text-rally-success font-mono text-base">{deliverySummary.providerAccepted}</p>
+            </div>
+            <div className="rounded-lg border border-rally-border bg-rally-bg p-2">
+              <p className="text-rally-muted">Worker received</p>
+              <p className="text-rally-ice font-mono text-base">{deliverySummary.received}</p>
+            </div>
+            <div className="rounded-lg border border-rally-border bg-rally-bg p-2">
+              <p className="text-rally-muted">Display succeeded</p>
+              <p className="text-rally-success font-mono text-base">{deliverySummary.displayed}</p>
+            </div>
+            <div className="rounded-lg border border-rally-border bg-rally-bg p-2">
+              <p className="text-rally-muted">Accepted, no receipt</p>
+              <p className="text-rally-warning font-mono text-base">{deliverySummary.acceptedNoReceipt}</p>
+            </div>
+          </div>
+        )}
+
+        <div className="grid sm:grid-cols-[1fr_auto_auto] gap-2 mb-3">
+          <label className="relative">
+            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-rally-muted" aria-hidden />
+            <input
+              value={deliveryQuery}
+              onChange={(event) => setDeliveryQuery(event.target.value)}
+              placeholder="Search user, device, dispatch ID, fingerprint…"
+              className="input-field w-full !pl-8 !min-h-[36px] text-xs"
+              aria-label="Search push deliveries"
+            />
+          </label>
+          <select
+            value={deliveryOutcome}
+            onChange={(event) => setDeliveryOutcome(event.target.value)}
+            className="input-field !min-h-[36px] text-xs"
+            aria-label="Filter by delivery outcome"
+          >
+            <option value="all">All outcomes</option>
+            <option value="accepted_no_receipt">Accepted, no worker receipt</option>
+            <option value="received_not_displayed">Received, display unresolved</option>
+            <option value="display_failed">Display failed</option>
+            <option value="displayed">Display succeeded</option>
+            <option value="provider_failed">Provider failed</option>
+          </select>
+          <select
+            value={deliveryHours}
+            onChange={(event) => setDeliveryHours(event.target.value)}
+            className="input-field !min-h-[36px] text-xs"
+            aria-label="Delivery time range"
+          >
+            <option value="1">Last hour</option>
+            <option value="24">Last 24 hours</option>
+            <option value="168">Last 7 days</option>
+            <option value="720">Last 30 days</option>
+          </select>
+        </div>
+
+        <p className="text-[11px] text-rally-muted mb-2">
+          Each row correlates the real push-service response with service-worker receipt and
+          notification display. “Displayed” means the Notifications API succeeded; Focus may still
+          suppress the banner.
+        </p>
+
+        <div className="max-h-[34rem] overflow-auto space-y-1.5">
+          {deliveries.length === 0 ? (
+            <p className="text-rally-muted text-sm py-4 text-center">
+              {deliveryLoading ? "Loading delivery telemetry…" : "No matching deliveries"}
+            </p>
+          ) : (
+            deliveries.map((row) => {
+              const expanded = expandedDelivery === row.id;
+              const providerOk = !!row.providerAcceptedAt;
+              const displayFailed = !!row.displayFailedAt;
+              return (
+                <div key={row.id} className="rounded-lg border border-rally-border bg-rally-bg text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedDelivery(expanded ? null : row.id)}
+                    className="w-full text-left p-2 !min-h-0"
+                    aria-expanded={expanded}
+                  >
+                    <div className="flex items-start gap-2">
+                      {expanded ? (
+                        <ChevronDown className="h-3.5 w-3.5 mt-0.5 text-rally-muted shrink-0" aria-hidden />
+                      ) : (
+                        <ChevronRight className="h-3.5 w-3.5 mt-0.5 text-rally-muted shrink-0" aria-hidden />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-semibold text-rally-snow">
+                            {row.displayName || row.username || "Unknown user"}
+                          </span>
+                          <span className="text-rally-muted">{row.platform || "unknown"}</span>
+                          <span className="font-mono text-rally-muted">
+                            {row.notificationType || "push"}
+                          </span>
+                          <span className="text-rally-muted">{formatWhen(row.createdAt)}</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          <StatusBadge tone={providerOk ? "success" : row.providerError ? "danger" : "warning"}>
+                            {providerOk ? `Accepted ${row.providerStatus || ""}` : row.providerError ? "Provider failed" : "Sending"}
+                          </StatusBadge>
+                          <StatusBadge tone={row.receivedAt ? "success" : providerOk ? "warning" : "neutral"}>
+                            {row.receivedAt ? "Worker received" : "No receipt"}
+                          </StatusBadge>
+                          <StatusBadge tone={displayFailed ? "danger" : row.displayedAt ? "success" : "neutral"}>
+                            {displayFailed ? "Display failed" : row.displayedAt ? "Display succeeded" : "Display unknown"}
+                          </StatusBadge>
+                          {row.clickedAt && <StatusBadge tone="success">Clicked</StatusBadge>}
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                  {expanded && (
+                    <div className="border-t border-rally-border px-3 py-2 space-y-1 font-mono text-[10px] text-rally-muted overflow-x-auto">
+                      <p>dispatch: <span className="text-rally-snow">{row.dispatchId}</span></p>
+                      <p>source: {row.source} · provider: {row.providerAcceptedAt ? formatWhen(row.providerAcceptedAt) : "—"} · {row.providerDurationMs ?? "—"}ms</p>
+                      <p>worker received: {formatWhen(row.receivedAt)} · displayed: {formatWhen(row.displayedAt)} · clicked: {formatWhen(row.clickedAt)}</p>
+                      <p>endpoint: {row.endpointHost || "—"} · fp {row.endpointFingerprint || "—"} · VAPID fp {row.vapidFingerprint || "—"}</p>
+                      <p>device: {row.deviceId || "—"} · SW: {row.serviceWorkerVersion || "—"}</p>
+                      <p className="font-sans text-rally-snow">Diagnosis: {deliveryDiagnosis(row)}</p>
+                      {row.providerMessageId && <p>provider message: {row.providerMessageId}</p>}
+                      {row.providerError && <p className="text-rally-danger">provider error: {row.providerError}</p>}
+                      {row.displayError && <p className="text-rally-danger">display error: {row.displayError}</p>}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+        {deliveryCursor && (
+          <button
+            type="button"
+            onClick={() => loadDeliveries(true, deliveryCursor)}
+            disabled={deliveryLoading}
+            className="btn-ghost w-full mt-2 text-xs"
+          >
+            {deliveryLoading ? "Loading…" : "Load older deliveries"}
+          </button>
+        )}
+      </Panel>
 
       <Panel className="mb-4">
         <div className="flex flex-wrap items-center justify-between gap-2">

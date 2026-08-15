@@ -34,7 +34,9 @@ export async function sendCalibrationPings(
   const pings: Array<{ index: number; targetAt: string }> = [];
 
   for (let i = 0; i < pingCount; i++) {
-    const targetAt = new Date(Date.now() + 300).toISOString();
+    // Calibration is sent immediately; targetAt is therefore the send baseline
+    // used to measure transport time, not a future scheduled display moment.
+    const targetAt = new Date().toISOString();
 
     for (const sub of subscriptions) {
       await sendPushNotification(

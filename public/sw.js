@@ -1,4 +1,4 @@
-self.__RALLY_SW_VERSION = "2026-08-15-pwa-refresh-2";
+self.__RALLY_SW_VERSION = "2026-08-15-passive-calibration-3";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -240,7 +240,9 @@ self.addEventListener("push", (event) => {
     (async () => {
       const clientList = await listWindowClients();
       const inForeground = hasFocusedClient(clientList);
-      const receiptTasks = [postPushReceipt(data, "received").catch(() => {})];
+      const receiptTasks = [
+        postPushReceipt(data, "received", { clientReceivedAtMs: receivedAtMs }).catch(() => {}),
+      ];
       const notificationOptions = {
         body: presented.body,
         icon: "/icons/icon-192.png",
@@ -334,6 +336,7 @@ self.addEventListener("push", (event) => {
             notificationType,
             rallyId,
             endpoint: currentSubscription?.endpoint,
+            dispatchId: data.dispatchId || undefined,
           }),
         }).catch(() => {});
       }

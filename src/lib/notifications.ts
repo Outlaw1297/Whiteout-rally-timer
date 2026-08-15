@@ -3,8 +3,9 @@ import {
   buildNotificationEventsForAssignment,
   recalculateAssignmentTimes,
 } from "./rally-event";
-import { getEffectivePushLeadMs } from "./delivery-lead";
+import { getEffectivePushLeadMs, nextEarlierScheduleMs } from "./delivery-lead";
 import { ALL_SCHEDULED_NOTIFICATION_TYPES } from "./notification-prefs";
+import { getNotificationTargetAt, type NotificationOffsetType } from "./timing";
 import type { RallyAssignment, User, RallyEvent } from "@prisma/client";
 import { listCanonicalPushSubscriptions } from "@/lib/push-devices";
 
@@ -14,6 +15,70 @@ async function getPushLeadForUser(userId: string, eventPushLeadMs: number) {
     eventPushLeadMs,
     subscriptions.map((s) => ({ deliveryLeadMs: s.deliveryLeadMs }))
   );
+}
+
+/**
+ * Apply a newly learned device delay to alerts that have not been claimed yet.
+ * During an active rally we only pull notifications earlier; moving one later
+ * could turn a conservative sample into a missed warning.
+ */
+export async function advancePendingNotificationsForUser(userId: string) {
+  const subscriptions = await listCanonicalPushSubscriptions(userId);
+  if (subscriptions.length === 0) return { advanced: 0 };
+
+  const assignments = await prisma.rallyAssignment.findMany({
+    where: {
+      userId,
+      launchTime: { not: null },
+      rallyEvent: { status: "ACTIVE" },
+      notificationEvents: { some: { status: "PENDING" } },
+    },
+    include: {
+      rallyEvent: { select: { pushLeadMs: true, startedAt: true } },
+      notificationEvents: {
+        where: { status: "PENDING" },
+        select: { id: true, type: true, scheduledAt: true },
+      },
+    },
+  });
+
+  const now = Date.now();
+  let advanced = 0;
+
+  for (const assignment of assignments) {
+    if (!assignment.launchTime) continue;
+    const leadMs = getEffectivePushLeadMs(
+      assignment.rallyEvent.pushLeadMs,
+      subscriptions.map((sub) => ({ deliveryLeadMs: sub.deliveryLeadMs }))
+    );
+
+    for (const notification of assignment.notificationEvents) {
+      const targetAt = getNotificationTargetAt(
+        assignment.launchTime,
+        notification.type as NotificationOffsetType,
+        { startedAt: assignment.rallyEvent.startedAt }
+      );
+      const desiredMs = nextEarlierScheduleMs(
+        notification.scheduledAt.getTime(),
+        targetAt.getTime(),
+        leadMs,
+        now
+      );
+      if (desiredMs == null) continue;
+
+      const updated = await prisma.notificationEvent.updateMany({
+        where: {
+          id: notification.id,
+          status: "PENDING",
+          scheduledAt: notification.scheduledAt,
+        },
+        data: { scheduledAt: new Date(desiredMs) },
+      });
+      advanced += updated.count;
+    }
+  }
+
+  return { advanced };
 }
 
 async function syncNotificationEventsForAssignment(

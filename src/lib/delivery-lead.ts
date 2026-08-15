@@ -64,3 +64,33 @@ export function defaultDeliveryLeadMs(
   }
   return base;
 }
+
+/** Return an earlier pending send time, or null when the current time is already safer. */
+export function nextEarlierScheduleMs(
+  currentScheduledMs: number,
+  targetMs: number,
+  deliveryLeadMs: number,
+  nowMs: number
+): number | null {
+  const desiredMs = Math.max(nowMs, targetMs - Math.max(0, deliveryLeadMs));
+  return desiredMs < currentScheduledMs ? desiredMs : null;
+}
+
+/** Prefer a device receipt timestamp only when its wall clock is plausibly aligned. */
+export function trustedReceiptTime(clientReceivedAtMs: unknown, serverReceivedAt: Date): Date {
+  const clientMs = Number(clientReceivedAtMs);
+  if (!Number.isFinite(clientMs)) return serverReceivedAt;
+  const maxClockSkewMs = 5_000;
+  if (Math.abs(clientMs - serverReceivedAt.getTime()) > maxClockSkewMs) {
+    return serverReceivedAt;
+  }
+  return new Date(clientMs);
+}
+
+/** Convert a measured signed-receipt round trip into the correction for the current lead. */
+export function deliveryLeadCorrectionMs(
+  currentLeadMs: number,
+  measuredRoundTripMs: number
+): number {
+  return measuredRoundTripMs - currentLeadMs;
+}

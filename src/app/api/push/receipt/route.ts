@@ -18,6 +18,7 @@ export async function POST(request: NextRequest) {
     stage?: string;
     serviceWorkerVersion?: string;
     error?: string;
+    clientReceivedAtMs?: number;
   };
   try {
     body = await request.json();
@@ -43,7 +44,8 @@ export async function POST(request: NextRequest) {
     stage,
     serviceWorkerVersion: body.serviceWorkerVersion,
     error: body.error,
+    clientReceivedAtMs: body.clientReceivedAtMs,
   });
   if (result.count === 0) return errorResponse("Delivery attempt not found", 404);
-  return jsonResponse({ ok: true });
+  return jsonResponse({ ok: true, calibration: result.calibration });
 }

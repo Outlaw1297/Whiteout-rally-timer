@@ -626,7 +626,14 @@ console.log("PASS adaptive delivery lead");
     console.error("FAIL declarative push marker, worker opt-in, or visibility", envelope);
     process.exit(1);
   }
-  if (envelope.notification.navigate !== "https://timer.example/caller/events/rally%201") {
+  const navigate = new URL(envelope.notification.navigate);
+  if (
+    navigate.origin !== "https://timer.example" ||
+    navigate.pathname !== "/api/push/open" ||
+    navigate.searchParams.get("dispatchId") !== "dispatch-1" ||
+    navigate.searchParams.get("receiptToken") !== "signed-token" ||
+    navigate.searchParams.get("next") !== "/caller/events/rally%201"
+  ) {
     console.error("FAIL declarative push navigation", envelope.notification.navigate);
     process.exit(1);
   }

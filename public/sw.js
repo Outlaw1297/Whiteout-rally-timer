@@ -1,4 +1,4 @@
-self.__RALLY_SW_VERSION = "2026-08-15-declarative-p90-3";
+self.__RALLY_SW_VERSION = "2026-08-15-fallback-telemetry-1";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -11,6 +11,12 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("message", (event) => {
   if (event.data?.type === "SKIP_WAITING") {
     self.skipWaiting();
+  }
+  if (event.data?.type === "GET_RALLY_SW_VERSION") {
+    event.ports?.[0]?.postMessage({
+      version: self.__RALLY_SW_VERSION,
+      state: "active",
+    });
   }
 });
 

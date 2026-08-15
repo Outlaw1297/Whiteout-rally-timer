@@ -1,8 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { isIOSDevice } from "@/lib/push-support";
+import {
+  inspectServiceWorkerHealth,
+  type ServiceWorkerHealth,
+} from "@/lib/service-worker-health";
 
-export type CalibrationPhase = "idle" | "running" | "complete" | "partial" | "failed";
+export type CalibrationPhase =
+  | "idle"
+  | "running"
+  | "complete"
+  | "partial"
+  | "fallback"
+  | "failed";
 
 export interface CalibrationState {
   phase: CalibrationPhase;
@@ -27,6 +38,24 @@ async function fetchCalibrationStatus() {
     maxLeadMs: number;
     isCalibrated: boolean;
   }>;
+}
+
+async function currentPushEndpoint(): Promise<string | null> {
+  try {
+    if (!("serviceWorker" in navigator)) return null;
+    const registration = await navigator.serviceWorker.getRegistration("/");
+    const subscription = await registration?.pushManager.getSubscription();
+    return subscription?.endpoint || null;
+  } catch {
+    return null;
+  }
+}
+
+function fallbackMessage(worker: ServiceWorkerHealth): string {
+  if (!worker.controlled || !worker.responding) {
+    return `Apple accepted the timing check, but the PWA's background worker is not responding while open (${worker.registrationState}). Alerts can still use Apple's fallback, but timing cannot be measured until the worker runs.`;
+  }
+  return `Apple accepted the timing check and worker ${worker.version || "unknown"} is installed, but iOS did not wake it for this background push. Alerts can still appear through Apple's fallback; timing will be learned passively whenever iOS supplies a worker receipt.`;
 }
 
 export function usePushCalibration() {
@@ -73,25 +102,48 @@ export function usePushCalibration() {
     }));
 
     try {
+      const [workerHealth, endpoint] = await Promise.all([
+        inspectServiceWorkerHealth(),
+        currentPushEndpoint(),
+      ]);
       const before = await fetchCalibrationStatus();
       const samplesBefore = before?.totalSamples ?? 0;
 
-      const res = await fetch("/api/push/calibrate", { method: "POST" });
+      const res = await fetch("/api/push/calibrate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...(endpoint ? { endpoint } : {}) }),
+      });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setState({
+        setState((prev) => ({
           phase: "failed",
           received: 0,
-            total: 1,
+          total: 1,
           deliveryLeadMs: null,
           message: data.error || "Calibration could not start.",
-          learnedLeadMs: null,
-        });
+          learnedLeadMs: prev.learnedLeadMs,
+        }));
         return;
       }
 
       const data = await res.json();
       const total = data.total ?? 1;
+      const accepted = Number(data.accepted || 0);
+      if (accepted < 1) {
+        const providerError = data.deliveries?.find(
+          (delivery: { accepted?: boolean; error?: string }) => !delivery.accepted
+        )?.error;
+        setState((prev) => ({
+          phase: "failed",
+          received: 0,
+          total,
+          deliveryLeadMs: null,
+          message: providerError || "The push provider rejected the timing check.",
+          learnedLeadMs: prev.learnedLeadMs,
+        }));
+        return;
+      }
       const targetSamples = (data.samplesBefore ?? samplesBefore) + total;
       const deadline = Date.now() + CALIBRATION_TIMEOUT_MS;
 
@@ -124,15 +176,16 @@ export function usePushCalibration() {
           message: `Partial calibration (${gained}/${total} samples). Rally alerts will still work; try again on Wi‑Fi if timing feels off.`,
         });
       } else {
-        setState({
-          phase: "failed",
+        setState((prev) => ({
+          phase: isIOSDevice() ? "fallback" : "failed",
           received: 0,
           total,
           deliveryLeadMs: null,
-          learnedLeadMs: null,
-          message:
-            "Calibration timed out. Check notification permission and try Send test notification.",
-        });
+          learnedLeadMs: prev.learnedLeadMs,
+          message: isIOSDevice()
+            ? fallbackMessage(workerHealth)
+            : "The provider accepted the check, but the background worker did not return a timing receipt.",
+        }));
       }
     } finally {
       runningRef.current = false;

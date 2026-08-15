@@ -372,3 +372,19 @@ export async function recordPushReceipt(opts: {
   });
   return { ...updated, calibration };
 }
+
+/**
+ * Record a declarative notification opening through its signed navigation URL.
+ * This deliberately does not create a timing sample: click latency includes the
+ * user's reaction time and cannot stand in for device delivery latency.
+ */
+export async function recordDeclarativePushOpen(dispatchId: string) {
+  const updated = await prisma.pushDeliveryAttempt.updateMany({
+    where: { dispatchId },
+    data: { clickedAt: new Date() },
+  });
+  if (updated.count > 0) {
+    logger.info("declarative_push_opened", { dispatchId });
+  }
+  return updated;
+}

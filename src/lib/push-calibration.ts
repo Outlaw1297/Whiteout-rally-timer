@@ -13,7 +13,7 @@ function sleep(ms: number) {
 
 export async function sendCalibrationPings(
   userId: string,
-  options: { mode?: "setup" | "live"; silent?: boolean } = {}
+  options: { mode?: "setup" | "live"; silent?: boolean; endpoint?: string } = {}
 ) {
   const mode = options.mode === "live" ? "live" : "setup";
   // WebKit revokes subscriptions that receive pushes without a user-visible
@@ -21,7 +21,10 @@ export async function sendCalibrationPings(
   const silent = false;
   const pingCount = mode === "live" ? LIVE_PING_COUNT : CALIBRATION_PING_COUNT;
 
-  const subscriptions = await listCanonicalPushSubscriptions(userId);
+  const canonicalSubscriptions = await listCanonicalPushSubscriptions(userId);
+  const subscriptions = options.endpoint
+    ? canonicalSubscriptions.filter((sub) => sub.endpoint === options.endpoint)
+    : canonicalSubscriptions;
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { username: true, displayName: true },
@@ -32,6 +35,13 @@ export async function sendCalibrationPings(
   }
 
   const pings: Array<{ index: number; targetAt: string }> = [];
+  const deliveries: Array<{
+    subscriptionId: string;
+    dispatchId: string | null;
+    accepted: boolean;
+    statusCode: number | null;
+    error: string | null;
+  }> = [];
 
   for (let i = 0; i < pingCount; i++) {
     // Calibration is sent immediately; targetAt is therefore the send baseline
@@ -39,7 +49,7 @@ export async function sendCalibrationPings(
     const targetAt = new Date().toISOString();
 
     for (const sub of subscriptions) {
-      await sendPushNotification(
+      const result = await sendPushNotification(
         { endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth },
         {
           title: "🔔 Rally notification timing check",
@@ -62,6 +72,13 @@ export async function sendCalibrationPings(
           platform: sub.platform,
         }
       );
+      deliveries.push({
+        subscriptionId: sub.id,
+        dispatchId: result.dispatchId ?? null,
+        accepted: result.success,
+        statusCode: result.statusCode ?? null,
+        error: result.error ?? null,
+      });
     }
 
     pings.push({ index: i + 1, targetAt });
@@ -74,6 +91,8 @@ export async function sendCalibrationPings(
   return {
     total: pingCount,
     pings,
+    deliveries,
+    accepted: deliveries.filter((delivery) => delivery.accepted).length,
     mode,
     status: 200 as const,
   };

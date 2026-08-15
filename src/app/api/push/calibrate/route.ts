@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
 
   const ip = getClientIp(request);
 
-  let body: { mode?: string; silent?: boolean } = {};
+  let body: { mode?: string; silent?: boolean; endpoint?: string } = {};
   try {
     body = await request.json();
   } catch {
@@ -32,6 +32,10 @@ export async function POST(request: NextRequest) {
   }
 
   const mode = body.mode === "live" ? "live" : "setup";
+  const endpoint =
+    typeof body.endpoint === "string" && body.endpoint.length <= 2_000
+      ? body.endpoint.trim()
+      : undefined;
   // Retained for request compatibility; calibration pushes are always visible.
   const silent = false;
 
@@ -60,7 +64,7 @@ export async function POST(request: NextRequest) {
   }
 
   const before = await getCalibrationStatus(session.id);
-  const result = await sendCalibrationPings(session.id, { mode, silent });
+  const result = await sendCalibrationPings(session.id, { mode, silent, endpoint });
 
   if ("error" in result) {
     return errorResponse(result.error!, result.status);
@@ -71,6 +75,8 @@ export async function POST(request: NextRequest) {
     mode,
     total: result.total ?? CALIBRATION_PING_COUNT,
     pings: result.pings,
+    accepted: result.accepted,
+    deliveries: result.deliveries,
     samplesBefore: before.totalSamples,
   });
 }

@@ -66,9 +66,11 @@ assert(both?.OR.length === 2, "endpoint and deviceId are OR-matched for this use
 
 assert(activityKindGroup("LOGIN") === "auth", "login grouped as auth");
 assert(activityKindGroup("DEVICE_REGISTER") === "device", "register grouped as device");
+assert(activityKindGroup("SW_HEALTH") === "device", "worker health grouped as device");
 assert(activityKindGroup("PUSH_SKIPPED") === "notification", "missed push grouped as notification");
 assert(activityKindLabel("PUSH_SKIPPED") === "Push missed", "skipped labeled as missed");
 assert(isActivityKind("PUSH_TEST"), "PUSH_TEST is a known kind");
+assert(isActivityKind("SW_HEALTH"), "SW_HEALTH is a known kind");
 assert(!isActivityKind("HACK"), "unknown kinds rejected");
 assert(kindsForGroup("auth").includes("LOGOUT"), "logout listed under auth");
 

@@ -10,7 +10,7 @@ import {
   AndroidHeadsUpTip,
   clearAndroidPushFixAck,
 } from "@/components/AndroidNotificationFix";
-import { isAndroidDevice } from "@/lib/push-support";
+import { isAndroidDevice, isIOSDevice } from "@/lib/push-support";
 
 export function NotificationButton({ onStatusChange }: { onStatusChange?: () => void }) {
   const {
@@ -282,8 +282,9 @@ export function NotificationButton({ onStatusChange }: { onStatusChange?: () => 
                 : "Enable Rally Notifications"}
           </button>
           <p className="text-rally-muted text-xs text-center px-2">
-            Includes a quick timing calibration for this device (about 5 seconds). Rally
-            alerts work in the background after setup.
+            {isIOSDevice()
+              ? "iPhone: keep this home-screen app installed. Test alerts are visible; throw alerts use the same path — silent timing pings are not sent on iOS."
+              : "Includes a quick timing calibration for this device (about 5 seconds). Rally alerts work in the background after setup."}
           </p>
         </>
       ) : (
@@ -310,6 +311,7 @@ export function NotificationButton({ onStatusChange }: { onStatusChange?: () => 
             ) : "Send Test Notification"}
           </button>
           <AndroidHeadsUpTip visible={showHeadsUpTip} />
+          {!isIOSDevice() && (
           <button
             onClick={handleRecalibrate}
             disabled={isCalibrating}
@@ -317,6 +319,7 @@ export function NotificationButton({ onStatusChange }: { onStatusChange?: () => 
           >
             {isCalibrating ? "Calibrating..." : "Recalibrate Timing"}
           </button>
+          )}
           <button
             onClick={handleDisable}
             disabled={loading || isCalibrating}

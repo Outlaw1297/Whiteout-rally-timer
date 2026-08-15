@@ -51,6 +51,21 @@ export function detectPlatformFromUA(ua: string | null | undefined): string {
   return `${os} · ${browser}`;
 }
 
+/**
+ * Apple Web Push (iOS/iPadOS home-screen PWAs) requires a user-visible
+ * notification for every push. Silent/calibration pings that show then close
+ * (or skip showNotification while the PWA is open) exhaust a per-app budget;
+ * Apple then accepts later pushes (test still "succeeds" on the server) but
+ * never wakes the service worker again until the user reopens the app.
+ */
+export function allowsSilentWebPush(
+  platform?: string | null,
+  userAgent?: string | null
+): boolean {
+  const label = resolveDevicePlatform(platform, userAgent);
+  return platformFamily(label) !== "iOS";
+}
+
 /** Coarse bucket used by summary counters and delivery-lead defaults. */
 export function platformFamily(label: string | null | undefined): "Android" | "iOS" | "Desktop" | "Unknown" {
   if (!label) return "Unknown";

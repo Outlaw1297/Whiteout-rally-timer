@@ -68,6 +68,7 @@ export async function POST(request: NextRequest) {
   return jsonResponse({
     started: true,
     mode,
+    skippedIos: "skippedIos" in result ? result.skippedIos : false,
     total: result.total ?? CALIBRATION_PING_COUNT,
     pings: result.pings,
     samplesBefore: before.totalSamples,

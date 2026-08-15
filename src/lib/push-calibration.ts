@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { sendPushNotification } from "@/lib/push";
 import { defaultDeliveryLeadMs } from "@/lib/delivery-lead";
 import { listCanonicalPushSubscriptions } from "@/lib/push-devices";
+import { allowsSilentWebPush } from "@/lib/device-platform";
 
 export const CALIBRATION_PING_COUNT = 3;
 export const CALIBRATION_PING_SPACING_MS = 700;
@@ -25,12 +26,28 @@ export async function sendCalibrationPings(
     return { error: "No active push subscription" as const, status: 404 as const };
   }
 
+  const deliverable = subscriptions.filter((sub) =>
+    allowsSilentWebPush(sub.platform, sub.userAgent)
+  );
+
+  // iPhone/iPad: never send silent calibration or live pings. They burn Apple's
+  // push budget and then throw alerts stop arriving even though test pushes worked.
+  if (deliverable.length === 0) {
+    return {
+      skippedIos: true as const,
+      total: 0,
+      pings: [] as Array<{ index: number; targetAt: string }>,
+      mode,
+      status: 200 as const,
+    };
+  }
+
   const pings: Array<{ index: number; targetAt: string }> = [];
 
   for (let i = 0; i < pingCount; i++) {
     const targetAt = new Date(Date.now() + 300).toISOString();
 
-    for (const sub of subscriptions) {
+    for (const sub of deliverable) {
       await sendPushNotification(
         { endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth },
         {

@@ -145,6 +145,10 @@ model PushSubscription {
   /** Learned ms to send early so this device receives alerts on time */
   deliveryLeadMs      Int @default(1000)
   deliverySampleCount Int @default(0)
+  /** Recent valid signed-receipt window used for conservative percentile timing. */
+  deliveryP50Ms       Int?
+  deliveryP90Ms       Int?
+  deliveryWindowCount Int @default(0)
   /** Last time this device contributed a delivery timing sample */
   lastCalibratedAt    DateTime? @db.Timestamptz(3)
   /** Last presence ping or delivery feedback from this device */
@@ -236,6 +240,8 @@ model PushDeliveryAttempt {
   notificationType     String?
   rallyId              String?
   assignmentId         String?
+  /** Payload included an OS-renderable Declarative Web Push fallback. */
+  declarativePayload   Boolean   @default(false)
   /** Intended user-visible time carried in the push payload. */
   targetAt             DateTime? @db.Timestamptz(3)
   providerStatus       Int?
@@ -252,6 +258,11 @@ model PushDeliveryAttempt {
   calibrationRoundTripMs Int?
   /** Device receipt offset from the intended user-visible target. */
   calibrationDelayMs   Int?
+  /** Recent-window timing summary used when this sample was applied. */
+  calibrationP50Ms       Int?
+  calibrationP90Ms       Int?
+  calibrationWindowCount Int?
+  calibrationMethod      String?
   displayedAt          DateTime? @db.Timestamptz(3)
   displayFailedAt      DateTime? @db.Timestamptz(3)
   displayError         String?

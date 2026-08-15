@@ -33,6 +33,9 @@ interface DeviceInfo {
   userAgent: string | null;
   deliveryLeadMs: number;
   deliverySampleCount: number;
+  deliveryP50Ms: number | null;
+  deliveryP90Ms: number | null;
+  deliveryWindowCount: number;
   lastCalibratedAt: string | null;
   lastSeenAt?: string | null;
   online?: boolean;
@@ -125,6 +128,7 @@ interface PushDeliveryRow {
   vapidFingerprint: string | null;
   notificationType: string | null;
   rallyId: string | null;
+  declarativePayload: boolean;
   targetAt: string | null;
   providerStatus: number | null;
   providerMessageId: string | null;
@@ -136,6 +140,10 @@ interface PushDeliveryRow {
   calibrationAppliedAt: string | null;
   calibrationRoundTripMs: number | null;
   calibrationDelayMs: number | null;
+  calibrationP50Ms: number | null;
+  calibrationP90Ms: number | null;
+  calibrationWindowCount: number | null;
+  calibrationMethod: string | null;
   displayedAt: string | null;
   displayFailedAt: string | null;
   displayError: string | null;
@@ -180,6 +188,15 @@ function formatOffset(ms: number | undefined | null): string {
   return `${ms >= 0 ? "+" : ""}${Math.round(ms)}ms`;
 }
 
+function hasFreshTimingWindow(lastCalibratedAt: string | null | undefined): boolean {
+  if (!lastCalibratedAt) return false;
+  const calibratedMs = new Date(lastCalibratedAt).getTime();
+  return (
+    Number.isFinite(calibratedMs) &&
+    Date.now() - calibratedMs <= 30 * 24 * 60 * 60 * 1000
+  );
+}
+
 function deliveryDiagnosis(row: PushDeliveryRow): string {
   const ageMs = Date.now() - new Date(row.createdAt).getTime();
   if (row.providerError) return "The push provider rejected the request; inspect the provider error below.";
@@ -187,9 +204,15 @@ function deliveryDiagnosis(row: PushDeliveryRow): string {
   if (!row.receivedAt) {
     return ageMs < 30_000
       ? "Apple/FCM accepted the push; waiting briefly for the device receipt."
-      : "Apple/FCM accepted the push, but the service worker did not report receiving it.";
+      : row.declarativePayload
+        ? "Apple/FCM accepted the push, but the service worker did not report it. On compatible Apple devices, the declarative fallback may still have displayed."
+        : "Apple/FCM accepted the push, but the service worker did not report receiving it.";
   }
-  if (row.displayFailedAt) return "The service worker received the push, but showNotification failed.";
+  if (row.displayFailedAt) {
+    return row.declarativePayload
+      ? "The worker received the push but its replacement display failed. Compatible Apple devices should use the declarative fallback."
+      : "The service worker received the push, but showNotification failed.";
+  }
   if (row.displayedAt) {
     return "The service worker created the notification. If no banner appeared, check Focus/Gaming Focus, notification settings, or an iOS/Game Mode interaction.";
   }
@@ -669,7 +692,8 @@ export default function DeveloperPage() {
         <p className="text-[11px] text-rally-muted mb-2">
           Each row correlates the real push-service response with service-worker receipt and
           notification display. “Displayed” means the Notifications API succeeded; Focus may still
-          suppress the banner.
+          suppress the banner. Declarative payloads give compatible Apple devices a visible fallback
+          when worker JavaScript fails.
         </p>
 
         <div className="max-h-[34rem] overflow-auto space-y-1.5">
@@ -721,6 +745,9 @@ export default function DeveloperPage() {
                           {row.calibrationAppliedAt && (
                             <StatusBadge tone="success">Timing learned</StatusBadge>
                           )}
+                          {row.declarativePayload && (
+                            <StatusBadge tone="neutral">Declarative fallback</StatusBadge>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -731,6 +758,7 @@ export default function DeveloperPage() {
                       <p>source: {row.source} · provider: {row.providerAcceptedAt ? formatWhen(row.providerAcceptedAt) : "—"} · {row.providerDurationMs ?? "—"}ms</p>
                       <p>worker received: {formatWhen(row.receivedAt)} · displayed: {formatWhen(row.displayedAt)} · clicked: {formatWhen(row.clickedAt)}</p>
                       <p>timing target: {formatWhen(row.targetAt)} · round trip: {row.calibrationRoundTripMs == null ? "—" : `${row.calibrationRoundTripMs}ms`} · target offset: {formatOffset(row.calibrationDelayMs)} · {row.calibrationAppliedAt ? "applied once" : "not applied"}</p>
+                      <p>timing model: {row.calibrationMethod?.replaceAll("_", " ") || "—"} · P50 {row.calibrationP50Ms == null ? "—" : `${row.calibrationP50Ms}ms`} · P90 {row.calibrationP90Ms == null ? "—" : `${row.calibrationP90Ms}ms`} · recent n={row.calibrationWindowCount ?? 0}</p>
                       <p>endpoint: {row.endpointHost || "—"} · fp {row.endpointFingerprint || "—"} · VAPID fp {row.vapidFingerprint || "—"}</p>
                       <p>device: {row.deviceId || "—"} · SW: {row.serviceWorkerVersion || "—"}</p>
                       <p className="font-sans text-rally-snow">Diagnosis: {deliveryDiagnosis(row)}</p>
@@ -967,8 +995,17 @@ export default function DeveloperPage() {
                             </StatusBadge>
                           </div>
                           <span className="font-mono text-rally-muted">
-                            lead {d.deliveryLeadMs}ms · {d.deliverySampleCount} samples
+                            lead {d.deliveryLeadMs}ms · P50{" "}
+                            {d.deliveryP50Ms == null ? "—" : `${d.deliveryP50Ms}ms`} · P90{" "}
+                            {d.deliveryP90Ms == null ? "—" : `${d.deliveryP90Ms}ms`}
                           </span>
+                          <p className="text-[10px] text-rally-muted mt-0.5">
+                            {d.deliveryWindowCount >= 10 && hasFreshTimingWindow(d.lastCalibratedAt)
+                              ? `P90 ready · ${d.deliveryWindowCount} recent / ${d.deliverySampleCount} lifetime samples`
+                              : d.deliveryWindowCount >= 10
+                                ? "P90 stale · refreshes from the next real push"
+                                : `Learning P90 · ${d.deliveryWindowCount}/10 recent samples`}
+                          </p>
                         </div>
                         <div className="flex gap-1 shrink-0">
                           <button

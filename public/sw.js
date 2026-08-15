@@ -1,4 +1,4 @@
-self.__RALLY_SW_VERSION = "2026-08-15-passive-calibration-3";
+self.__RALLY_SW_VERSION = "2026-08-15-declarative-p90-1";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -23,6 +23,20 @@ function safeError(error) {
   const name = typeof error.name === "string" ? error.name : "Error";
   const message = typeof error.message === "string" ? error.message : String(error);
   return `${name}: ${message}`.slice(0, 900);
+}
+
+function unwrapPushData(raw) {
+  if (!raw || raw.web_push !== 8030 || !raw.notification) return raw || {};
+  const notification = raw.notification;
+  const appData =
+    notification.data && typeof notification.data === "object" ? notification.data : {};
+  return {
+    ...appData,
+    title: notification.title || appData.title || "Whiteout Rally",
+    body: notification.body || appData.body || "Rally notification",
+    navigate: notification.navigate || appData.navigate || "/caller",
+    declarativePayload: true,
+  };
 }
 
 async function postPushReceipt(data, stage, detail = {}) {
@@ -171,7 +185,7 @@ self.addEventListener("push", (event) => {
 
   let data;
   try {
-    data = event.data.json();
+    data = unwrapPushData(event.data.json());
   } catch {
     data = { title: "Whiteout Rally", body: event.data.text() };
   }
@@ -199,11 +213,13 @@ self.addEventListener("push", (event) => {
   if (!body.trim()) {
     presented.body = isCalibration ? "Notification delivery timing check." : "Rally update";
   }
-  const url = assignmentId
-    ? `/caller/events/${rallyId}`
-    : rallyId
+  const url =
+    data.navigate ||
+    (assignmentId
       ? `/caller/events/${rallyId}`
-      : "/caller";
+      : rallyId
+        ? `/caller/events/${rallyId}`
+        : "/caller");
 
   const isLaunch = notificationType === "LAUNCH";
 
@@ -360,7 +376,7 @@ self.addEventListener("notificationclick", (event) => {
     "clicked"
   ).catch(() => {});
 
-  const url = event.notification.data?.url || "/caller";
+  const url = event.notification.data?.url || event.notification.data?.navigate || "/caller";
 
   event.waitUntil(
     Promise.all([

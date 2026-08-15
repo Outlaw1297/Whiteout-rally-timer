@@ -18,6 +18,7 @@ export interface DeclarativePushEnvelope<T extends DeclarativeSourcePayload> {
     body: string;
     navigate: string;
     silent: false;
+    mutable: true;
     tag: string;
     data: T & { navigate: string };
   };
@@ -80,6 +81,10 @@ export function buildDeclarativePushEnvelope<T extends DeclarativeSourcePayload>
       body,
       navigate,
       silent: false,
+      // Compatibility for WebKit releases affected by webkit.org/b/296770,
+      // which read mutable from the notification object instead of its
+      // standardized top-level location. Newer WebKit accepts both forms.
+      mutable: true,
       tag: pushNotificationTag(payload),
       data,
     },

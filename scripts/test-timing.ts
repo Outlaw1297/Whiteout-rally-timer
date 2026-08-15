@@ -620,6 +620,7 @@ console.log("PASS adaptive delivery lead");
   if (
     envelope.web_push !== 8030 ||
     envelope.mutable !== true ||
+    envelope.notification.mutable !== true ||
     envelope.notification.silent !== false
   ) {
     console.error("FAIL declarative push marker, worker opt-in, or visibility", envelope);

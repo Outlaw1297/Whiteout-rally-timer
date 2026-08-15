@@ -217,11 +217,20 @@ async function resolveVapidKeys(): Promise<boolean> {
 export async function initWebPush(): Promise<boolean> {
   if (initialized) return true;
   if (!initPromise) {
-    initPromise = resolveVapidKeys().catch((err) => {
+    const pending = resolveVapidKeys().catch((err) => {
       lastInitError = err instanceof Error ? err.message : String(err);
       logger.error("vapid_init_failed", { error: lastInitError });
       return false;
     });
+    initPromise = pending;
+
+    const ready = await pending;
+    if (!ready && initPromise === pending) {
+      // A transient database outage must not poison this process forever.
+      // Keep successful initialization cached, but let the next request retry.
+      initPromise = null;
+    }
+    return ready;
   }
   return initPromise;
 }

@@ -645,4 +645,27 @@ console.log("PASS adaptive delivery lead");
     process.exit(1);
   }
   console.log("PASS backward-compatible declarative push envelope");
+
+  const safeRelativeEnvelope = buildDeclarativePushEnvelope(
+    {
+      title: "Production fallback",
+      body: "Must stay on this app origin",
+      rallyId: "developer-test",
+      notificationType: "TEST",
+      dispatchId: "dispatch-relative",
+      receiptToken: "signed-relative-token",
+    },
+    ""
+  );
+  const relativeNavigate = safeRelativeEnvelope.notification.navigate;
+  const resolvedRelativeNavigate = new URL(relativeNavigate, "https://deployed.example");
+  if (
+    !relativeNavigate.startsWith("/api/push/open?") ||
+    relativeNavigate.includes("localhost") ||
+    resolvedRelativeNavigate.origin !== "https://deployed.example"
+  ) {
+    console.error("FAIL missing production origin must stay same-origin", relativeNavigate);
+    process.exit(1);
+  }
+  console.log("PASS missing production origin never navigates to localhost");
 }

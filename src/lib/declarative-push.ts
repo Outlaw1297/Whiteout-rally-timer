@@ -30,12 +30,24 @@ function configuredPushOrigin(): string {
   const candidate =
     process.env.PUSH_APP_ORIGIN ||
     process.env.RENDER_EXTERNAL_URL ||
-    `http://localhost:${process.env.PORT || "3000"}`;
+    (process.env.NODE_ENV === "production"
+      ? ""
+      : `http://localhost:${process.env.PORT || "3000"}`);
 
   try {
-    return new URL(candidate).origin;
+    if (!candidate) return "";
+    const parsed = new URL(candidate);
+    if (
+      process.env.NODE_ENV === "production" &&
+      (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1")
+    ) {
+      return "";
+    }
+    return parsed.origin;
   } catch {
-    return "http://localhost:3000";
+    // A relative same-origin navigation is safer than directing a user's phone
+    // to this server process's localhost address.
+    return "";
   }
 }
 
@@ -53,14 +65,14 @@ export function pushNavigatePath(payload: DeclarativeSourcePayload): string {
 function trackedNavigateUrl(payload: DeclarativeSourcePayload, origin: string): string {
   const next = pushNavigatePath(payload);
   if (!payload.dispatchId || !payload.receiptToken) {
-    return new URL(next, origin).toString();
+    return origin ? new URL(next, origin).toString() : next;
   }
 
-  const tracker = new URL("/api/push/open", origin);
+  const tracker = new URL("/api/push/open", origin || "https://push-origin.invalid");
   tracker.searchParams.set("dispatchId", payload.dispatchId);
   tracker.searchParams.set("receiptToken", payload.receiptToken);
   tracker.searchParams.set("next", next);
-  return tracker.toString();
+  return origin ? tracker.toString() : `${tracker.pathname}${tracker.search}`;
 }
 
 export function pushNotificationTag(payload: DeclarativeSourcePayload): string {

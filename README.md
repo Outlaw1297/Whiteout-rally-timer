@@ -58,7 +58,7 @@ Verify timing math: `npm run test:timing`
 | `VAPID_PUBLIC_KEY` | Web Push public key |
 | `VAPID_PRIVATE_KEY` | Web Push private key |
 | `VAPID_SUBJECT` | `mailto:` contact URI |
-| `PUSH_APP_ORIGIN` | Optional public app origin for Declarative Web Push navigation; Render supplies its URL automatically |
+| `PUSH_APP_ORIGIN` | Public HTTPS app origin used when notifications are opened; set this explicitly in production (for example, `https://your-app.onrender.com`) |
 | `ADMIN_USERNAME` | First-deploy admin username |
 | `ADMIN_PASSWORD` | First-deploy admin password |
 

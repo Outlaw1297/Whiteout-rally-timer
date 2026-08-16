@@ -1,4 +1,4 @@
-self.__RALLY_SW_VERSION = "2026-08-16-proposed-notification-1";
+self.__RALLY_SW_VERSION = "2026-08-16-default-action-1";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -184,6 +184,7 @@ async function showRallyNotification(title, options) {
       body: options.body || "Rally notification",
       icon: "/icons/icon-192.png",
       badge: "/icons/icon-192.png",
+      navigate: options.navigate || options.data?.url || "/caller",
       tag: options.tag,
       renotify: options.renotify !== false && !options.silent,
       silent: !!options.silent,
@@ -217,6 +218,7 @@ self.addEventListener("push", (event) => {
       self.registration.showNotification("Whiteout Rally", {
         body: "Rally update",
         icon: "/icons/icon-192.png",
+        navigate: "/caller",
       })
     );
     return;
@@ -293,6 +295,9 @@ self.addEventListener("push", (event) => {
       ];
       const notificationOptions = {
         body: presented.body,
+        // WebKit requires a navigation/default-action URL when a mutable
+        // declarative push is replaced from inside its push event.
+        navigate: url,
         icon: "/icons/icon-192.png",
         badge: "/icons/icon-192.png",
         tag,

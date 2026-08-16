@@ -1,0 +1,97 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import vm from "node:vm";
+
+type Listener = (event: Record<string, unknown>) => void;
+
+const listeners = new Map<string, Listener>();
+const displayed: Array<{ title: string; options: Record<string, unknown> }> = [];
+const receipts: Array<Record<string, unknown>> = [];
+
+const workerScope = {
+  addEventListener(type: string, listener: Listener) {
+    listeners.set(type, listener);
+  },
+  skipWaiting: async () => undefined,
+  clients: {
+    claim: async () => undefined,
+    matchAll: async () => [],
+    openWindow: async () => undefined,
+  },
+  registration: {
+    showNotification: async (title: string, options: Record<string, unknown>) => {
+      displayed.push({ title, options });
+    },
+    getNotifications: async () => [],
+    pushManager: {
+      getSubscription: async () => null,
+    },
+  },
+};
+
+const fetchMock = async (input: string, init?: { body?: string }) => {
+  if (input === "/api/push/receipt" && init?.body) {
+    receipts.push(JSON.parse(init.body) as Record<string, unknown>);
+  }
+  return { ok: true };
+};
+
+async function main() {
+  const source = await readFile("public/sw.js", "utf8");
+  vm.runInNewContext(source, {
+    self: workerScope,
+    fetch: fetchMock,
+    setTimeout,
+    clearTimeout,
+    console,
+  });
+
+  const pushListener = listeners.get("push");
+  assert.ok(pushListener, "service worker registered a push listener");
+
+  let lifetime: Promise<unknown> | undefined;
+  pushListener({
+    data: null,
+    notification: {
+      title: "Apple proposed notification",
+      body: "Declarative push body",
+      navigate: "/caller/test",
+      data: {
+        dispatchId: "dispatch-apple-proposed",
+        receiptToken: "signed-receipt-token",
+        subscriptionId: "subscription-1",
+        notificationType: "TEST",
+      },
+    },
+    waitUntil(promise: Promise<unknown>) {
+      lifetime = promise;
+    },
+  });
+
+  assert.ok(lifetime, "push handler extended the event lifetime");
+  await lifetime;
+
+  assert.equal(displayed.length, 1, "proposed notification was displayed by the worker");
+  assert.equal(displayed[0].title, "Apple proposed notification");
+  assert.equal(displayed[0].options.body, "Declarative push body");
+  assert.equal(
+    (displayed[0].options.data as Record<string, unknown>).url,
+    "/caller/test",
+    "declarative navigate target was preserved"
+  );
+
+  assert.deepEqual(
+    receipts.map((receipt) => receipt.stage).sort(),
+    ["displayed", "received"],
+    "worker sent both delivery receipts"
+  );
+  for (const receipt of receipts) {
+    assert.equal(receipt.dispatchId, "dispatch-apple-proposed");
+    assert.equal(receipt.receiptToken, "signed-receipt-token");
+    assert.equal(receipt.serviceWorkerVersion, "2026-08-16-proposed-notification-1");
+  }
+
+  console.log("PASS Apple proposed notification is displayed and receipted");
+}
+
+void main();

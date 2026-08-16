@@ -10,6 +10,7 @@
     "db:deploy": "tsx scripts/deploy-db.ts",
     "db:seed": "tsx scripts/seed-admin.ts",
     "test:timing": "tsx scripts/test-timing.ts",
+    "test:push-worker": "tsx scripts/test-push-worker.ts",
     "test:live-board": "tsx scripts/test-live-board.ts",
     "test:device-id": "tsx scripts/test-device-id.ts",
     "test:activity-log": "tsx scripts/test-activity-log.ts",

@@ -1,4 +1,4 @@
-self.__RALLY_SW_VERSION = "2026-08-15-fallback-telemetry-1";
+self.__RALLY_SW_VERSION = "2026-08-16-proposed-notification-1";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -42,6 +42,25 @@ function unwrapPushData(raw) {
     body: notification.body || appData.body || "Rally notification",
     navigate: notification.navigate || appData.navigate || "/caller",
     declarativePayload: true,
+  };
+}
+
+/**
+ * Mutable Declarative Web Push uses the newer PushEvent.notification member.
+ * In that path event.data is intentionally null; the proposed Notification
+ * carries our application data and signed receipt token instead.
+ */
+function unwrapProposedNotification(notification) {
+  if (!notification) return null;
+  const appData =
+    notification.data && typeof notification.data === "object" ? notification.data : {};
+  return {
+    ...appData,
+    title: notification.title || appData.title || "Whiteout Rally",
+    body: notification.body || appData.body || "Rally notification",
+    navigate: notification.navigate || appData.navigate || "/caller",
+    declarativePayload: true,
+    proposedNotification: true,
   };
 }
 
@@ -178,8 +197,22 @@ async function showRallyNotification(title, options) {
 }
 
 self.addEventListener("push", (event) => {
-  // Chrome may drop background pushes if we don't show a notification quickly.
-  if (!event.data) {
+  let data;
+  if (event.data) {
+    try {
+      data = unwrapPushData(event.data.json());
+    } catch {
+      data = { title: "Whiteout Rally", body: event.data.text() };
+    }
+  } else {
+    // The Declarative Web Push specification dispatches mutable messages with
+    // event.notification populated and event.data set to null.
+    data = unwrapProposedNotification(event.notification);
+  }
+
+  // Legacy truly-empty push: Chrome may drop background pushes if we don't
+  // show a notification quickly.
+  if (!data) {
     event.waitUntil(
       self.registration.showNotification("Whiteout Rally", {
         body: "Rally update",
@@ -187,13 +220,6 @@ self.addEventListener("push", (event) => {
       })
     );
     return;
-  }
-
-  let data;
-  try {
-    data = unwrapPushData(event.data.json());
-  } catch {
-    data = { title: "Whiteout Rally", body: event.data.text() };
   }
 
   const receivedAtMs = Date.now();

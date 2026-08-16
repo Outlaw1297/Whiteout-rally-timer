@@ -1,4 +1,4 @@
-self.__RALLY_SW_VERSION = "2026-08-16-default-action-1";
+self.__RALLY_SW_VERSION = "2026-08-16-click-receipt-1";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -400,34 +400,45 @@ self.addEventListener("push", (event) => {
 });
 
 self.addEventListener("notificationclick", (event) => {
+  // WebKit can perform the notification's default navigation immediately and
+  // tear down the click worker before its receipt fetch finishes. Take over the
+  // activation so the signed receipt is persisted before opening the PWA.
+  event.preventDefault();
   event.notification.close();
 
   const notificationData = event.notification.data || {};
   if (event.action === "dismiss") return;
 
-  const clickReceipt = postPushReceipt(
-    {
-      dispatchId: notificationData.dispatchId,
-      receiptToken: notificationData.receiptToken,
-    },
-    "clicked"
-  ).catch(() => {});
-
   const url = event.notification.data?.url || event.notification.data?.navigate || "/caller";
 
   event.waitUntil(
-    Promise.all([
-      clickReceipt,
-      self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
-        for (const client of clientList) {
-          if ("focus" in client) {
-            if (client.url.includes(url)) return client.focus();
+    (async () => {
+      await postPushReceipt(
+        {
+          dispatchId: notificationData.dispatchId,
+          receiptToken: notificationData.receiptToken,
+        },
+        "clicked"
+      ).catch(() => {});
+
+      const clientList = await self.clients.matchAll({
+        type: "window",
+        includeUncontrolled: true,
+      });
+      for (const client of clientList) {
+        if ("navigate" in client) {
+          const navigated = await client.navigate(url).catch(() => null);
+          if (navigated && "focus" in navigated) {
+            return navigated.focus();
           }
         }
-        if (self.clients.openWindow) {
-          return self.clients.openWindow(url);
+        if ("focus" in client && client.url.includes(url)) {
+          return client.focus();
         }
-      }),
-    ])
+      }
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(url);
+      }
+    })()
   );
 });

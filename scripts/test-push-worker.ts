@@ -99,10 +99,38 @@ async function main() {
   for (const receipt of receipts) {
     assert.equal(receipt.dispatchId, "dispatch-apple-proposed");
     assert.equal(receipt.receiptToken, "signed-receipt-token");
-    assert.equal(receipt.serviceWorkerVersion, "2026-08-16-default-action-1");
+    assert.equal(receipt.serviceWorkerVersion, "2026-08-16-click-receipt-1");
   }
 
-  console.log("PASS Apple proposed notification is displayed and receipted");
+  const clickListener = listeners.get("notificationclick");
+  assert.ok(clickListener, "service worker registered a notification click listener");
+
+  let clickLifetime: Promise<unknown> | undefined;
+  let defaultActionPrevented = false;
+  clickListener({
+    action: "",
+    notification: {
+      data: displayed[0].options.data,
+      close() {},
+    },
+    preventDefault() {
+      defaultActionPrevented = true;
+    },
+    waitUntil(promise: Promise<unknown>) {
+      clickLifetime = promise;
+    },
+  });
+
+  assert.equal(defaultActionPrevented, true, "worker took over WebKit's default action");
+  assert.ok(clickLifetime, "click handler extended the event lifetime");
+  await clickLifetime;
+  assert.equal(
+    receipts.filter((receipt) => receipt.stage === "clicked").length,
+    1,
+    "click was receipted before navigation"
+  );
+
+  console.log("PASS Apple proposed notification is displayed, receipted, and click-tracked");
 }
 
 void main();

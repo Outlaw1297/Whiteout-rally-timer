@@ -9,6 +9,9 @@ const displayed: Array<{ title: string; options: Record<string, unknown> }> = []
 const receipts: Array<Record<string, unknown>> = [];
 
 const workerScope = {
+  location: {
+    origin: "https://rally.example",
+  },
   addEventListener(type: string, listener: Listener) {
     listeners.set(type, listener);
   },
@@ -47,6 +50,7 @@ async function main() {
   vm.runInNewContext(source, {
     self: workerScope,
     fetch: fetchMock,
+    URL,
     setTimeout,
     clearTimeout,
     console,
@@ -82,12 +86,12 @@ async function main() {
   assert.equal(displayed[0].options.body, "Declarative push body");
   assert.equal(
     displayed[0].options.navigate,
-    "/caller/test",
+    "https://rally.example/caller/test",
     "declarative navigate target became the replacement default action"
   );
   assert.equal(
     (displayed[0].options.data as Record<string, unknown>).url,
-    "/caller/test",
+    "https://rally.example/caller/test",
     "declarative navigate target was preserved"
   );
 
@@ -99,7 +103,7 @@ async function main() {
   for (const receipt of receipts) {
     assert.equal(receipt.dispatchId, "dispatch-apple-proposed");
     assert.equal(receipt.receiptToken, "signed-receipt-token");
-    assert.equal(receipt.serviceWorkerVersion, "2026-08-16-click-receipt-1");
+    assert.equal(receipt.serviceWorkerVersion, "2026-08-16-origin-guard-1");
   }
 
   const clickListener = listeners.get("notificationclick");
@@ -128,6 +132,38 @@ async function main() {
     receipts.filter((receipt) => receipt.stage === "clicked").length,
     1,
     "click was receipted before navigation"
+  );
+
+  let unsafeLifetime: Promise<unknown> | undefined;
+  pushListener({
+    data: null,
+    notification: {
+      title: "Unsafe internal Render URL",
+      body: "Must stay on the installed PWA origin",
+      navigate: "https://localhost:10000/caller",
+      data: {
+        dispatchId: "dispatch-localhost",
+        receiptToken: "signed-localhost-token",
+        notificationType: "TEST",
+        navigate: "https://localhost:10000/caller",
+      },
+    },
+    waitUntil(promise: Promise<unknown>) {
+      unsafeLifetime = promise;
+    },
+  });
+  assert.ok(unsafeLifetime, "unsafe-origin push extended the event lifetime");
+  await unsafeLifetime;
+  assert.equal(displayed.length, 2, "unsafe-origin notification was still displayed");
+  assert.equal(
+    displayed[1].options.navigate,
+    "https://rally.example/caller",
+    "localhost default action was replaced with the installed PWA origin"
+  );
+  assert.equal(
+    (displayed[1].options.data as Record<string, unknown>).url,
+    "https://rally.example/caller",
+    "localhost click data was replaced with the installed PWA origin"
   );
 
   console.log("PASS Apple proposed notification is displayed, receipted, and click-tracked");

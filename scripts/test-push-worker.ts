@@ -20,6 +20,12 @@ const workerScope = {
   },
   registration: {
     showNotification: async (title: string, options: Record<string, unknown>) => {
+      assert.equal(typeof options.navigate, "string", "replacement has a default action");
+      assert.ok(options.navigate, "replacement default action is not empty");
+      assert.doesNotThrow(
+        () => new URL(String(options.navigate), "https://rally.example"),
+        "replacement notification has a valid default-action URL"
+      );
       displayed.push({ title, options });
     },
     getNotifications: async () => [],
@@ -75,6 +81,11 @@ async function main() {
   assert.equal(displayed[0].title, "Apple proposed notification");
   assert.equal(displayed[0].options.body, "Declarative push body");
   assert.equal(
+    displayed[0].options.navigate,
+    "/caller/test",
+    "declarative navigate target became the replacement default action"
+  );
+  assert.equal(
     (displayed[0].options.data as Record<string, unknown>).url,
     "/caller/test",
     "declarative navigate target was preserved"
@@ -88,7 +99,7 @@ async function main() {
   for (const receipt of receipts) {
     assert.equal(receipt.dispatchId, "dispatch-apple-proposed");
     assert.equal(receipt.receiptToken, "signed-receipt-token");
-    assert.equal(receipt.serviceWorkerVersion, "2026-08-16-proposed-notification-1");
+    assert.equal(receipt.serviceWorkerVersion, "2026-08-16-default-action-1");
   }
 
   console.log("PASS Apple proposed notification is displayed and receipted");

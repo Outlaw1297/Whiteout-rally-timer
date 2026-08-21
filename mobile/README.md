@@ -16,14 +16,22 @@ Admin GO/reset/templates stay on the web app for now.
 
 ## Prerequisites
 
-1. Rally timer backend running (`npm run dev` in repo root) with a reachable URL.
-2. **Expo Go from the App Store** (SDK 54).
-3. Physical device for real push testing (simulators are limited).
-4. Optional later: Expo account + [EAS project](https://docs.expo.dev/eas/) for production push (`extra.eas.projectId` in `app.json`).
+1. Rally timer backend (Render or local) with a reachable URL.
+2. Expo account + EAS project (`npx eas init` in `mobile/`).
+3. Physical device for push testing.
 
-## Push notifications (required once)
+## Configure API URL
 
-Expo push needs a real EAS project UUID (not a placeholder):
+```bash
+cd mobile
+cp .env.example .env
+# Point at Render (recommended):
+# EXPO_PUBLIC_API_URL=https://whiteout-rally-timer.onrender.com
+```
+
+Restart Metro after changing `.env` (`npx expo start --dev-client -c`).
+
+## Push: EAS project id (iOS Expo Go + all builds)
 
 ```bash
 cd mobile
@@ -31,43 +39,54 @@ npx eas-cli@latest login
 npx eas-cli@latest init
 ```
 
-That writes `extra.eas.projectId` into `app.json`. Restart Expo (`npx expo start -c`), then tap **Enable notifications** in the app.
+## Push: Android FCM (required for EAS / dev builds)
 
-You can instead set `EXPO_PUBLIC_EAS_PROJECT_ID=<uuid>` in `mobile/.env`.
+Expo Go on Android **cannot** receive remote push (removed in SDK 53). Use a
+**development build**. Android also needs Firebase:
 
-## Configure
+1. Create a Firebase project at [console.firebase.google.com](https://console.firebase.google.com).
+2. Add an **Android** app with package name **`com.whiteoutrally.caller`**.
+3. Download **`google-services.json`** → place it at `mobile/google-services.json`
+   (`app.json` already points `android.googleServicesFile` here).
+4. Firebase → Project settings → **Service accounts** → **Generate new private key**.
+5. Upload that JSON to EAS (do **not** commit it):
 
-```bash
-cd mobile
-cp .env.example .env
-# Set EXPO_PUBLIC_API_URL to your backend, e.g.
-#   https://your-app.onrender.com
-#   http://192.168.1.20:3000   (LAN device)
-#   http://10.0.2.2:3000       (Android emulator → host)
-```
+   ```bash
+   cd mobile
+   npx eas-cli@latest credentials
+   # Android → (development or production) → Google Service Account
+   # → FCM V1 → Upload a new service account key
+   ```
+
+   Or: [expo.dev](https://expo.dev) → your project → Credentials → Android → FCM V1.
+
+6. **Rebuild** the Android app (Firebase is baked into the native binary):
+
+   ```bash
+   npx eas-cli@latest build --profile development --platform android
+   ```
+
+7. Install the new APK, start Metro, enable notifications again:
+
+   ```bash
+   npx expo start --dev-client -c
+   ```
+
+Guide: [FCM credentials](https://docs.expo.dev/push-notifications/fcm-credentials/).
 
 ## Run
 
+**iPhone (Expo Go, SDK 54):**
 ```bash
-npm install
 npx expo start
 ```
 
-If Expo asks to log in, either **Log in** or **Proceed anonymously** is fine for a first smoke test.
-
-Open on your **phone with Expo Go** (scan the QR code). Do not press `w` for web unless you intentionally want the browser target.
-
-### If you see “incompatible with this version of Expo Go”
-
-App Store Expo Go only supports **SDK 54**. This project is pinned to 54 on purpose. If you previously pulled an SDK 57 build of this branch, `git pull` and reinstall:
-
+**Android (dev client):**
 ```bash
-git pull
-cd mobile
-rm -rf node_modules
-npm install
-npx expo start -c
+npx expo start --dev-client
 ```
+
+Phone and Mac on the same Wi‑Fi, or use `--tunnel` / `adb reverse tcp:8081 tcp:8081`.
 
 ## Backend contracts used
 

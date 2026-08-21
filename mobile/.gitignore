@@ -39,3 +39,8 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Firebase / FCM secrets (never commit the private key)
+*-firebase-adminsdk-*.json
+fcm-service-account.json
+google-services.json.local

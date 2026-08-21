@@ -25,8 +25,26 @@ export function getWsUrl(): string {
   return `ws://${base}/ws`;
 }
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** Only return a real EAS project UUID — never placeholders. */
+export function isValidEasProjectId(value: unknown): value is string {
+  return typeof value === "string" && UUID_RE.test(value.trim());
+}
+
+/**
+ * EAS project id required by getExpoPushTokenAsync.
+ * Set via `eas init`, app.json extra.eas.projectId, or EXPO_PUBLIC_EAS_PROJECT_ID.
+ */
 export function getExpoProjectId(): string | undefined {
-  const id = Constants.expoConfig?.extra?.eas?.projectId;
-  if (typeof id === "string" && id && !id.startsWith("REPLACE_")) return id;
+  const candidates = [
+    process.env.EXPO_PUBLIC_EAS_PROJECT_ID,
+    Constants.expoConfig?.extra?.eas?.projectId,
+    Constants.easConfig?.projectId,
+  ];
+  for (const raw of candidates) {
+    if (isValidEasProjectId(raw)) return raw.trim();
+  }
   return undefined;
 }

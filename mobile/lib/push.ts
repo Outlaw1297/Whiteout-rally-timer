@@ -2,7 +2,6 @@ import { Platform } from "react-native";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import * as SecureStore from "expo-secure-store";
-import Constants from "expo-constants";
 import { apiFetch } from "./api";
 import { getExpoProjectId } from "./config";
 import { getOrCreateDeviceId } from "./device-id";
@@ -59,12 +58,18 @@ export async function registerForPushAsync(): Promise<{
     return { ok: false, error: "Notification permission denied" };
   }
 
-  const projectId = getExpoProjectId() || Constants.easConfig?.projectId;
+  const projectId = getExpoProjectId();
+  if (!projectId) {
+    return {
+      ok: false,
+      error:
+        "Missing EAS projectId. On your Mac: cd mobile && npx eas-cli login && npx eas init — then restart Expo.",
+    };
+  }
+
   let token: string;
   try {
-    const result = await Notifications.getExpoPushTokenAsync(
-      projectId ? { projectId } : undefined
-    );
+    const result = await Notifications.getExpoPushTokenAsync({ projectId });
     token = result.data;
   } catch (err) {
     return {

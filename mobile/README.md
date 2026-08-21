@@ -38,7 +38,11 @@ npm install --legacy-peer-deps
 npx expo start
 ```
 
-Scan the QR code with Expo Go (dev), or build a dev client / store build with EAS for reliable push.
+If Expo asks to log in, either **Log in** (needed later for EAS push) or **Proceed anonymously** is fine for a first smoke test.
+
+Use a **phone with Expo Go** (scan the QR code). Do not press `w` for web unless you intentionally want the browser target — this app is built for iOS/Android.
+
+Or build a dev client / store build with EAS for reliable push.
 
 ## Backend contracts used
 

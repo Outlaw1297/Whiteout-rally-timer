@@ -22,12 +22,15 @@ Admin GO/reset/templates stay on the web app for now.
 
 ## Configure API URL
 
+Local Metro / Expo Go read `mobile/.env`:
+
 ```bash
 cd mobile
 cp .env.example .env
-# Point at Render (recommended):
 # EXPO_PUBLIC_API_URL=https://whiteout-rally-timer.onrender.com
 ```
+
+**EAS cloud builds do not upload `.env`** (gitignored). Preview/production APKs get the URL from `eas.json` → `env.EXPO_PUBLIC_API_URL` and `app.json` → `extra.apiUrl` (both default to the Render app). Rebuild after changing those.
 
 Restart Metro after changing `.env` (`npx expo start --dev-client -c`).
 

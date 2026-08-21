@@ -48,7 +48,7 @@
     ],
     "extra": {
       "router": {},
-      "apiUrl": ""
+      "apiUrl": "https://whiteout-rally-timer.onrender.com"
     }
   }
 }

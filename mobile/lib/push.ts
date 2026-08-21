@@ -72,9 +72,16 @@ export async function registerForPushAsync(): Promise<{
     const result = await Notifications.getExpoPushTokenAsync({ projectId });
     token = result.data;
   } catch (err) {
+    const raw = err instanceof Error ? err.message : "Could not get Expo push token";
+    const needsFcm =
+      /FirebaseApp is not initialized/i.test(raw) ||
+      /fcm-credentials/i.test(raw) ||
+      /Default FirebaseApp/i.test(raw);
     return {
       ok: false,
-      error: err instanceof Error ? err.message : "Could not get Expo push token",
+      error: needsFcm
+        ? "Android needs Firebase/FCM. Add google-services.json, upload FCM key to EAS, then rebuild the APK. See mobile/README.md (Android FCM)."
+        : raw,
     };
   }
 

@@ -1,0 +1,7 @@
+# Place the Firebase Android config file here after downloading it from
+# Firebase Console → Project settings → Your apps → google-services.json
+#
+# Package name must be: com.whiteoutrally.caller
+#
+# This path is referenced by app.json → android.googleServicesFile
+# You may commit google-services.json (it is not the private service-account key).

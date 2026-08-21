@@ -21,6 +21,20 @@ Admin GO/reset/templates stay on the web app for now.
 3. Physical device for real push testing (simulators are limited).
 4. Optional later: Expo account + [EAS project](https://docs.expo.dev/eas/) for production push (`extra.eas.projectId` in `app.json`).
 
+## Push notifications (required once)
+
+Expo push needs a real EAS project UUID (not a placeholder):
+
+```bash
+cd mobile
+npx eas-cli@latest login
+npx eas-cli@latest init
+```
+
+That writes `extra.eas.projectId` into `app.json`. Restart Expo (`npx expo start -c`), then tap **Enable notifications** in the app.
+
+You can instead set `EXPO_PUBLIC_EAS_PROJECT_ID=<uuid>` in `mobile/.env`.
+
 ## Configure
 
 ```bash

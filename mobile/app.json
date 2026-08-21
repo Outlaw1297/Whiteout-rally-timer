@@ -47,9 +47,6 @@
     ],
     "extra": {
       "router": {},
-      "eas": {
-        "projectId": "REPLACE_WITH_EAS_PROJECT_ID"
-      },
       "apiUrl": ""
     }
   }

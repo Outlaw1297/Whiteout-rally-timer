@@ -14,8 +14,8 @@ export function getApiBaseUrl(): string {
     return fromExtra.trim().replace(/\/$/, "");
   }
 
-  // Dev fallback: Expo Go on a physical device needs your LAN IP via EXPO_PUBLIC_API_URL.
-  return "http://localhost:3000";
+  // Default to production Render — local .env is not uploaded to EAS builds.
+  return "https://whiteout-rally-timer.onrender.com";
 }
 
 export function getWsUrl(): string {

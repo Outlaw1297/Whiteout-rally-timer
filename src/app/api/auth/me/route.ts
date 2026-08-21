@@ -1,8 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonResponse } from "@/lib/api";
 import {
-  getSession,
+  getSessionFromRequest,
   createSessionToken,
   setSessionCookie,
   type SessionUser,
@@ -13,8 +13,8 @@ function isAppRole(role: string): role is AppRole {
   return role === "ADMIN" || role === "CALLER" || role === "DEVELOPER";
 }
 
-export async function GET() {
-  const session = await getSession();
+export async function GET(request: NextRequest) {
+  const session = await getSessionFromRequest(request);
   if (!session) return jsonResponse({ user: null });
 
   // Refresh role from DB so promotions (e.g. ADMIN → DEVELOPER) show up
@@ -41,12 +41,21 @@ export async function GET() {
     role: dbUser.role,
   };
 
-  const response = NextResponse.json({ user });
+  const usedBearer = /^Bearer\s+/i.test(request.headers.get("authorization") || "");
+  const response = NextResponse.json(
+    usedBearer
+      ? {
+          user,
+          token: await createSessionToken(user),
+        }
+      : { user }
+  );
 
   if (
-    user.role !== session.role ||
-    user.displayName !== session.displayName ||
-    user.username !== session.username
+    !usedBearer &&
+    (user.role !== session.role ||
+      user.displayName !== session.displayName ||
+      user.username !== session.username)
   ) {
     const token = await createSessionToken(user);
     setSessionCookie(response, token);

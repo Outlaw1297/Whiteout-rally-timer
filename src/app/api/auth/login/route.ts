@@ -95,6 +95,8 @@ export async function POST(request: NextRequest) {
       displayName: user.displayName,
       role: user.role,
     },
+    /** JWT for native / Expo clients (web still uses the httpOnly cookie). */
+    token,
   });
   setSessionCookie(response, token);
   return response;

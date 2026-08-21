@@ -49,6 +49,14 @@ export async function verifySessionToken(token: string): Promise<SessionUser | n
   }
 }
 
+function bearerTokenFromHeader(authorization: string | null): string | null {
+  if (!authorization) return null;
+  const match = /^Bearer\s+(.+)$/i.exec(authorization.trim());
+  if (!match?.[1]) return null;
+  const token = match[1].trim();
+  return token || null;
+}
+
 export async function getSession(): Promise<SessionUser | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(COOKIE_NAME)?.value;
@@ -59,6 +67,9 @@ export async function getSession(): Promise<SessionUser | null> {
 export async function getSessionFromRequest(
   request: NextRequest
 ): Promise<SessionUser | null> {
+  const bearer = bearerTokenFromHeader(request.headers.get("authorization"));
+  if (bearer) return verifySessionToken(bearer);
+
   const token = request.cookies.get(COOKIE_NAME)?.value;
   if (!token) return null;
   return verifySessionToken(token);

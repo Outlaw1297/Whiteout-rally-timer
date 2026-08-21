@@ -71,15 +71,16 @@ Verify timing math: `npm run test:timing`
 
 ## Native caller app (Expo)
 
-Caller-first iOS/Android app lives in [`mobile/`](mobile/). It uses Bearer JWT auth and Expo Push (stored alongside Web Push subscriptions). See [`mobile/README.md`](mobile/README.md).
+Caller-first iOS/Android app lives in [`mobile/`](mobile/). It uses **Expo SDK 54** (matches App Store Expo Go), Bearer JWT auth, and Expo Push (stored alongside Web Push subscriptions). See [`mobile/README.md`](mobile/README.md).
 
 ```bash
 cd mobile
 cp .env.example .env   # set EXPO_PUBLIC_API_URL
-npm install --legacy-peer-deps
+npm install
 npx expo start
 ```
 
+Open with **Expo Go from the App Store** (SDK 54). SDK 55+ is not on the App Store yet.
 ## Architecture
 
 - **PostgreSQL** — users, events, assignments, notification schedule

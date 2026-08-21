@@ -2,6 +2,8 @@
 
 Native iOS/Android caller app for the Whiteout Rally Timer. Reuses the existing web backend (auth, events, WebSocket clock sync, notification scheduler).
 
+**SDK:** Expo **54** (matches Apple App Store Expo Go). SDK 55+ is not on the App Store yet.
+
 ## Features (caller-first)
 
 - Login with Bearer JWT (stored in SecureStore)
@@ -15,8 +17,9 @@ Admin GO/reset/templates stay on the web app for now.
 ## Prerequisites
 
 1. Rally timer backend running (`npm run dev` in repo root) with a reachable URL.
-2. Expo account + [EAS project](https://docs.expo.dev/eas/) for production push (set `extra.eas.projectId` in `app.json`).
+2. **Expo Go from the App Store** (SDK 54).
 3. Physical device for real push testing (simulators are limited).
+4. Optional later: Expo account + [EAS project](https://docs.expo.dev/eas/) for production push (`extra.eas.projectId` in `app.json`).
 
 ## Configure
 
@@ -29,20 +32,28 @@ cp .env.example .env
 #   http://10.0.2.2:3000       (Android emulator → host)
 ```
 
-Replace `REPLACE_WITH_EAS_PROJECT_ID` in `app.json` after `eas init`.
-
 ## Run
 
 ```bash
-npm install --legacy-peer-deps
+npm install
 npx expo start
 ```
 
-If Expo asks to log in, either **Log in** (needed later for EAS push) or **Proceed anonymously** is fine for a first smoke test.
+If Expo asks to log in, either **Log in** or **Proceed anonymously** is fine for a first smoke test.
 
-Use a **phone with Expo Go** (scan the QR code). Do not press `w` for web unless you intentionally want the browser target — this app is built for iOS/Android.
+Open on your **phone with Expo Go** (scan the QR code). Do not press `w` for web unless you intentionally want the browser target.
 
-Or build a dev client / store build with EAS for reliable push.
+### If you see “incompatible with this version of Expo Go”
+
+App Store Expo Go only supports **SDK 54**. This project is pinned to 54 on purpose. If you previously pulled an SDK 57 build of this branch, `git pull` and reinstall:
+
+```bash
+git pull
+cd mobile
+rm -rf node_modules
+npm install
+npx expo start -c
+```
 
 ## Backend contracts used
 

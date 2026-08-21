@@ -69,13 +69,25 @@ Verify timing math: `npm run test:timing`
 3. Tap **Enable Rally Notifications**
 4. Receive alerts when it is your turn to throw
 
+## Native caller app (Expo)
+
+Caller-first iOS/Android app lives in [`mobile/`](mobile/). It uses **Expo SDK 54** (matches App Store Expo Go), Bearer JWT auth, and Expo Push (stored alongside Web Push subscriptions). See [`mobile/README.md`](mobile/README.md).
+
+```bash
+cd mobile
+cp .env.example .env   # set EXPO_PUBLIC_API_URL
+npm install
+npx expo start
+```
+
+Open with **Expo Go from the App Store** (SDK 54). SDK 55+ is not on the App Store yet.
 ## Architecture
 
 - **PostgreSQL** — users, events, assignments, notification schedule
 - **Persistent scheduler** — survives Render restarts; no in-memory-only timers
-- **Web Push (VAPID)** — per-caller WARNING_10, WARNING_5, LAUNCH notifications
+- **Web Push (VAPID)** + **Expo Push** — per-caller WARNING / LAUNCH notifications
 - **Server clock sync** — NTP-style HTTP + WebSocket for accurate countdowns
-- **requestAnimationFrame** countdown — not `setInterval`
+- **requestAnimationFrame** countdown — not `setInterval` (web); native app uses 50ms ticks
 
 Server schedule is exact; push delivery latency depends on OS/browser/network.
 

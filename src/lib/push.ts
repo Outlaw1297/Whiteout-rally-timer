@@ -9,6 +9,11 @@ import {
   type PushDeliveryContext,
 } from "./push-delivery";
 import { buildDeclarativePushEnvelope } from "./declarative-push";
+import {
+  expoTokenFromEndpoint,
+  isExpoPushEndpoint,
+  sendExpoPushNotification,
+} from "./expo-push";
 
 const CONFIG_ID = "default";
 
@@ -318,16 +323,18 @@ export async function sendPushNotification(
   payload: PushPayload,
   context?: PushDeliveryContext
 ): Promise<PushSendResult> {
-  if (!(await initWebPush())) {
-    return { success: false, error: lastInitError || "VAPID not configured" };
-  }
-
   // Short TTL + Android Doze = messages expire before Chrome wakes.
   // Rally alerts need minutes of headroom; calibration probes can stay brief.
   const isEphemeral = !!payload.silent || !!payload.livePing || payload.notificationType === "CALIBRATION";
   const ttlSeconds = isEphemeral ? 90 : 900;
   // Don't let a hung FCM/web-push call block the scheduler tick forever.
   const SEND_TIMEOUT_MS = isEphemeral ? 5_000 : 8_000;
+
+  const isExpo = isExpoPushEndpoint(subscription.endpoint);
+
+  if (!isExpo && !(await initWebPush())) {
+    return { success: false, error: lastInitError || "VAPID not configured" };
+  }
 
   let dispatchId: string | undefined;
   let receiptToken: string | undefined;
@@ -337,8 +344,8 @@ export async function sendPushNotification(
         context,
         payload,
         endpoint: subscription.endpoint,
-        vapidPublicKey: activePublicKey,
-        declarativePayload: true,
+        vapidPublicKey: isExpo ? null : activePublicKey,
+        declarativePayload: !isExpo,
       });
       dispatchId = attempt.dispatchId;
       receiptToken = attempt.receiptToken;
@@ -355,8 +362,60 @@ export async function sendPushNotification(
     ...(receiptToken ? { receiptToken } : {}),
     ...(context?.subscriptionId ? { subscriptionId: context.subscriptionId } : {}),
   };
-  const outboundPayload = buildDeclarativePushEnvelope(applicationPayload);
   const startedAt = Date.now();
+
+  if (isExpo) {
+    const expoToken = expoTokenFromEndpoint(subscription.endpoint);
+    if (!expoToken) {
+      return { success: false, error: "Invalid Expo push endpoint", dispatchId };
+    }
+
+    const result = await sendExpoPushNotification(expoToken, {
+      title: applicationPayload.title,
+      body: applicationPayload.body,
+      silent: isEphemeral,
+      ttlSeconds,
+      data: { ...applicationPayload },
+    });
+
+    if (result.success) {
+      if (dispatchId) {
+        await markPushProviderAccepted({
+          dispatchId,
+          statusCode: result.statusCode,
+          messageId: result.providerMessageId,
+          durationMs: Date.now() - startedAt,
+        }).catch(() => {});
+      }
+      return {
+        success: true,
+        statusCode: result.statusCode,
+        dispatchId,
+        providerMessageId: result.providerMessageId,
+      };
+    }
+
+    logger.error("expo_push_send_failed", {
+      statusCode: result.statusCode,
+      error: result.error,
+    });
+    if (dispatchId) {
+      await markPushProviderFailed({
+        dispatchId,
+        statusCode: result.statusCode,
+        error: result.error || "Unknown Expo push error",
+        durationMs: Date.now() - startedAt,
+      }).catch(() => {});
+    }
+    return {
+      success: false,
+      statusCode: result.statusCode,
+      error: result.error,
+      dispatchId,
+    };
+  }
+
+  const outboundPayload = buildDeclarativePushEnvelope(applicationPayload);
 
   try {
     const response = await Promise.race([

@@ -103,6 +103,7 @@ export function activityKindLabel(kind: string): string {
 
 export function pushEndpointHost(endpoint: string | null | undefined): string | null {
   if (!endpoint) return null;
+  if (endpoint.startsWith("expo:")) return "expo.push";
   try {
     return new URL(endpoint).host;
   } catch {

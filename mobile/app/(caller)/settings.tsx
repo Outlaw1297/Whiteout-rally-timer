@@ -18,8 +18,9 @@ import {
   reportPushReceipt,
   unregisterPush,
 } from "../../lib/push";
-import { getApiBaseUrl } from "../../lib/config";
-import { getExpoProjectId } from "../../lib/config";
+import { getApiBaseUrl, getExpoProjectId } from "../../lib/config";
+import type { NotificationPreferences } from "../../lib/types";
+import { colors } from "../../components/theme";
 
 const ALLOWED = [60, 30, 15, 10, 5, 3];
 
@@ -45,18 +46,29 @@ export default function SettingsScreen() {
   }, [user, loadPrefs]);
 
   useEffect(() => {
-    const sub = Notifications.addNotificationReceivedListener((notification) => {
-      const data = notification.request.content.data as {
-        dispatchId?: string;
-        receiptToken?: string;
-      };
-      reportPushReceipt({
-        dispatchId: data.dispatchId,
-        receiptToken: data.receiptToken,
-        stage: "displayed",
+    let sub: { remove: () => void } | null = null;
+    try {
+      sub = Notifications.addNotificationReceivedListener((notification) => {
+        const data = notification.request.content.data as {
+          dispatchId?: string;
+          receiptToken?: string;
+        };
+        reportPushReceipt({
+          dispatchId: data.dispatchId,
+          receiptToken: data.receiptToken,
+          stage: "displayed",
+        });
       });
-    });
-    return () => sub.remove();
+    } catch {
+      // Native notifications may be unavailable until FCM is configured.
+    }
+    return () => {
+      try {
+        sub?.remove();
+      } catch {
+        // ignore
+      }
+    };
   }, []);
 
   if (loading) {
@@ -74,11 +86,15 @@ export default function SettingsScreen() {
     if (set.has(seconds)) set.delete(seconds);
     else set.add(seconds);
     const warningLeadsSeconds = Array.from(set).sort((a, b) => b - a);
-    const updated = await apiFetch<NotificationPreferences>("/api/auth/preferences", {
-      method: "PATCH",
-      body: JSON.stringify({ warningLeadsSeconds }),
-    });
-    setPrefs(updated);
+    try {
+      const updated = await apiFetch<NotificationPreferences>("/api/auth/preferences", {
+        method: "PATCH",
+        body: JSON.stringify({ warningLeadsSeconds }),
+      });
+      setPrefs(updated);
+    } catch (err) {
+      setPushStatus(err instanceof Error ? err.message : "Could not save preferences");
+    }
   };
 
   const enablePush = async () => {

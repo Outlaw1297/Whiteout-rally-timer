@@ -77,6 +77,44 @@ Expo Go on Android **cannot** receive remote push (removed in SDK 53). Use a
 
 Guide: [FCM credentials](https://docs.expo.dev/push-notifications/fcm-credentials/).
 
+## Android preview build checklist (icons + push)
+
+EAS only uploads **committed** files. Before `eas build`:
+
+```bash
+cd mobile
+git pull origin main
+
+# 1) New icons — must be on main (merged PR #33+)
+ls -la assets/icon.png    # should be ~650KB, not ~22KB
+
+# 2) Firebase config — MUST be committed for cloud builds
+ls -la google-services.json
+git add google-services.json
+git commit -m "Add Firebase google-services.json for Android push"
+
+# 3) EAS project id — in app.json extra.eas.projectId (from eas init)
+
+# 4) FCM service account — upload via eas credentials (private key, not committed)
+
+git push origin main
+
+npx eas-cli@latest build --profile preview --platform android --clear-cache
+```
+
+After install: **uninstall old app** → install new APK → log in → **Settings → Enable notifications** (must say success) → admin presses **GO** on web.
+
+**Preview** builds do not need Metro. **Development** builds do.
+
+### If icons did not update
+You built from `main` before the icon assets were merged, or EAS used a cached build. Pull latest `main`, verify `assets/icon.png` size, rebuild with `--clear-cache`, reinstall.
+
+### If push does not arrive
+1. Settings → Enable notifications — any error? (Firebase / projectId)
+2. Web admin → user has active push device?
+3. Rally must be **GO** / active with notifications scheduled
+4. Android: disable battery optimization for the app
+
 ## Run
 
 **iPhone (Expo Go, SDK 54):**

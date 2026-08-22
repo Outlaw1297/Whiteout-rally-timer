@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "696550861498",
+    "project_id": "whiteout-rally-1b5cf",
+    "storage_bucket": "whiteout-rally-1b5cf.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:696550861498:android:097a4c895c4c2abb5ab083",
+        "android_client_info": {
+          "package_name": "com.whiteoutrally.caller"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCZZYHd8SyxSK1taLElVAtRVd18eReg3H8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

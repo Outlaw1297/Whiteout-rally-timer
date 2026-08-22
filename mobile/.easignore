@@ -1,0 +1,2 @@
+# EAS uploads files from git. Do NOT list google-services.json here.
+# If you gitignore google-services.json, add an EAS file secret instead.

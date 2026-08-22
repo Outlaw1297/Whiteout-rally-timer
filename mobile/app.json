@@ -48,7 +48,10 @@
     ],
     "extra": {
       "router": {},
-      "apiUrl": "https://whiteout-rally-timer.onrender.com"
+      "apiUrl": "https://whiteout-rally-timer.onrender.com",
+      "eas": {
+        "projectId": "d2a1cc81-7ab9-46c3-9037-93e279eac29f"
+      }
     }
   }
 }

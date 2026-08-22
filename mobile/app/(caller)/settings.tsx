@@ -18,8 +18,8 @@ import {
   reportPushReceipt,
   unregisterPush,
 } from "../../lib/push";
-import type { NotificationPreferences } from "../../lib/types";
-import { colors } from "../../components/theme";
+import { getApiBaseUrl } from "../../lib/config";
+import { getExpoProjectId } from "../../lib/config";
 
 const ALLOWED = [60, 30, 15, 10, 5, 3];
 
@@ -133,6 +133,10 @@ export default function SettingsScreen() {
       <Text style={styles.meta}>
         {user.displayName} · @{user.username} · {user.role}
       </Text>
+      <Text style={styles.metaSmall}>API: {getApiBaseUrl()}</Text>
+      <Text style={styles.metaSmall}>
+        EAS project: {getExpoProjectId() ? "configured" : "missing — run eas init"}
+      </Text>
 
       <Text style={styles.heading}>Native push</Text>
       <Text style={styles.body}>
@@ -202,6 +206,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   meta: { color: colors.muted },
+  metaSmall: { color: colors.muted, fontSize: 11, marginTop: 2 },
   body: { color: colors.muted, lineHeight: 20 },
   row: { flexDirection: "row", gap: 10, marginTop: 8 },
   primary: {

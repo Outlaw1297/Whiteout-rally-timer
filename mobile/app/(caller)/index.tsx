@@ -10,15 +10,19 @@ import { Redirect, router } from "expo-router";
 import { useAuth } from "../../lib/auth";
 import { apiFetch } from "../../lib/api";
 import { pickPrimaryCallerEvent } from "../../lib/caller-events";
+import { isAdminRole } from "../../lib/roles";
 import type { SerializedEvent } from "../../lib/types";
 import { useServerClock } from "../../hooks/useServerClock";
 import { RallyView } from "../../components/RallyView";
+import { Screen, useBottomInset } from "../../components/Screen";
 import { colors } from "../../components/theme";
 
 export default function CallerHome() {
   const { user, loading, logout } = useAuth();
   const [events, setEvents] = useState<SerializedEvent[] | null>(null);
   const { correctedNow } = useServerClock();
+  const isAdmin = isAdminRole(user?.role);
+  const bottomInset = useBottomInset();
 
   useEffect(() => {
     if (!user) return;
@@ -61,8 +65,14 @@ export default function CallerHome() {
   const primary = pickPrimaryCallerEvent(events, user.id, correctedNow());
 
   return (
-    <View style={styles.root}>
+    <Screen edges={[]}>
       <View style={styles.topBar}>
+        {isAdmin && (
+          <Pressable onPress={() => router.push("/(admin)")} style={styles.linkBtn}>
+            <Text style={styles.linkTextAdmin}>Admin</Text>
+          </Pressable>
+        )}
+        <View style={styles.topBarSpacer} />
         <Pressable onPress={() => router.push("/(caller)/settings")} style={styles.linkBtn}>
           <Text style={styles.linkText}>Settings</Text>
         </Pressable>
@@ -74,11 +84,16 @@ export default function CallerHome() {
       {primary ? (
         <RallyView eventId={primary.id} />
       ) : (
-        <View style={styles.empty}>
+        <View style={[styles.empty, { paddingBottom: bottomInset }]}>
           <Text style={styles.emptyTitle}>No rally assigned yet</Text>
           <Text style={styles.emptyBody}>
             When an admin links you to a template, your throw countdown will show here.
           </Text>
+          {isAdmin && (
+            <Pressable onPress={() => router.push("/(admin)")} style={styles.primary}>
+              <Text style={styles.primaryText}>Manage rallies</Text>
+            </Pressable>
+          )}
           <Pressable
             onPress={() => router.push("/(caller)/settings")}
             style={styles.secondary}
@@ -87,19 +102,19 @@ export default function CallerHome() {
           </Pressable>
         </View>
       )}
-    </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, paddingHorizontal: 16, paddingBottom: 24 },
   center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.bg },
   topBar: {
     flexDirection: "row",
-    justifyContent: "flex-end",
+    alignItems: "center",
     gap: 8,
     paddingVertical: 8,
   },
+  topBarSpacer: { flex: 1 },
   linkBtn: {
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -108,9 +123,20 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   linkText: { color: colors.muted, fontSize: 13, fontWeight: "600" },
+  linkTextAdmin: { color: colors.ice, fontSize: 13, fontWeight: "700" },
   empty: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24 },
   emptyTitle: { color: colors.snow, fontWeight: "700", fontSize: 18, marginBottom: 8 },
   emptyBody: { color: colors.muted, textAlign: "center", marginBottom: 20, lineHeight: 20 },
+  primary: {
+    backgroundColor: colors.ice,
+    borderRadius: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    marginBottom: 12,
+    width: "100%",
+    maxWidth: 280,
+  },
+  primaryText: { color: colors.bg, fontWeight: "800", textAlign: "center" },
   secondary: {
     borderWidth: 1,
     borderColor: colors.border,

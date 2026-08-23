@@ -14,10 +14,12 @@ import type { SerializedEvent } from "../lib/types";
 import { useCountdown } from "../hooks/useCountdown";
 import { useEventSocket } from "../hooks/useEventSocket";
 import { useServerClock } from "../hooks/useServerClock";
+import { useBottomInset } from "./Screen";
 import { colors } from "./theme";
 
 export function RallyView({ eventId }: { eventId: string }) {
   const { user } = useAuth();
+  const bottomInset = useBottomInset();
   const [event, setEvent] = useState<SerializedEvent | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -214,7 +216,7 @@ export function RallyView({ eventId }: { eventId: string }) {
         </View>
       </View>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: bottomInset }]}>
         {waitingForGo ? (
           <View style={styles.panel}>
             <Text style={styles.muted}>

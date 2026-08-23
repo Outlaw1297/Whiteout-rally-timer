@@ -46,3 +46,11 @@ export function parseMarchDuration(value: string): number | null {
   if (!match) return null;
   return Number(match[1]) * 60 + Number(match[2]);
 }
+
+/** Parse rally gather time (M:SS). */
+export function parseGatherDuration(value: string): number | null {
+  const trimmed = value.trim();
+  const match = /^(\d{1,2}):([0-5]\d)$/.exec(trimmed);
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
+}

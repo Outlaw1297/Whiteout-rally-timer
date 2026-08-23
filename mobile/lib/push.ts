@@ -22,6 +22,15 @@ try {
 }
 async function ensureAndroidChannel() {
   if (Platform.OS !== "android") return;
+  // Default channel — matches Expo pushes that omit channelId.
+  await Notifications.setNotificationChannelAsync("default", {
+    name: "Alerts",
+    importance: Notifications.AndroidImportance.MAX,
+    vibrationPattern: [0, 250, 150, 250],
+    lightColor: "#38BDF8",
+    sound: "default",
+    bypassDnd: false,
+  });
   await Notifications.setNotificationChannelAsync("rally-alerts", {
     name: "Rally alerts",
     importance: Notifications.AndroidImportance.MAX,

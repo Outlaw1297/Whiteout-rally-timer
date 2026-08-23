@@ -57,7 +57,11 @@ export async function sendExpoPushNotification(
   if (!payload.silent) {
     message.title = payload.title;
     message.body = payload.body;
-    message.channelId = "rally-alerts";
+    // Do NOT set a custom Android channelId here.
+    // If the app never created that channel, Android 8+ silently drops the
+    // notification even when Expo/FCM receipts say "ok".
+    // Expo falls back to the platform default channel, which always exists.
+    message.mutableContent = true;
   }
 
   const controller = new AbortController();

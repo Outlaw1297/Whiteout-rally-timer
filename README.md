@@ -31,7 +31,7 @@ All rallies arrive at **8:00:00 PM**.
 
 ### Caller
 - Log in, view assigned rallies and personal launch time
-- Enable Web Push notifications (iPhone PWA, Android, desktop)
+- Enable push notifications (Web Push on PWA/desktop, Expo Push on native app)
 - Confirm rally launch
 - Cannot manage rallies or other users
 
@@ -71,16 +71,30 @@ Verify timing math: `npm run test:timing`
 
 ## Native caller app (Expo)
 
-Caller-first iOS/Android app lives in [`mobile/`](mobile/). It uses **Expo SDK 54** (matches App Store Expo Go), Bearer JWT auth, and Expo Push (stored alongside Web Push subscriptions). See [`mobile/README.md`](mobile/README.md).
+Caller-first iOS/Android app in [`mobile/`](mobile/). Uses **Expo SDK 54** (matches App Store Expo Go), Bearer JWT auth, and Expo Push (stored alongside Web Push subscriptions).
+
+**Production API:** `https://whiteout-rally-timer.onrender.com`
 
 ```bash
 cd mobile
 cp .env.example .env   # set EXPO_PUBLIC_API_URL
 npm install
-npx expo start
+npx expo start         # iPhone: Expo Go (SDK 54)
 ```
 
-Open with **Expo Go from the App Store** (SDK 54). SDK 55+ is not on the App Store yet.
+| Platform | Remote push |
+|----------|-------------|
+| iPhone (Expo Go / EAS) | Yes |
+| Android with Google Play Services (EAS build) | Yes |
+| Android Expo Go | No (SDK 53+) |
+| Amazon Fire / Kindle | No — Fire OS lacks Google Play Services; use a normal Android phone or iPhone |
+
+Full setup, EAS builds, FCM, and troubleshooting: [`mobile/README.md`](mobile/README.md).
+
+## Contributing
+
+The repo is public. Fork → branch → PR, or ask for collaborator access. See [CONTRIBUTING.md](CONTRIBUTING.md) for web/mobile setup, EAS access, and **keeping READMEs updated when you change code**.
+
 ## Architecture
 
 - **PostgreSQL** — users, events, assignments, notification schedule
@@ -94,3 +108,5 @@ Server schedule is exact; push delivery latency depends on OS/browser/network.
 ## Deploy (Render)
 
 Blueprint in `render.yaml`. Build runs `db:deploy` (schema push + admin seed). Set `SESSION_SECRET` and VAPID keys in the dashboard.
+
+Production: `https://whiteout-rally-timer.onrender.com`

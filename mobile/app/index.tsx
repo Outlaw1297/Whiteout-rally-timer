@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { Redirect } from "expo-router";
 import { useAuth } from "../lib/auth";
+import { homeHrefForRole } from "../lib/roles";
 import { colors } from "../components/theme";
 
 export default function Index() {
@@ -18,5 +19,5 @@ export default function Index() {
   }
 
   if (!user) return <Redirect href="/login" />;
-  return <Redirect href="/(caller)" />;
+  return <Redirect href={homeHrefForRole(user.role)} />;
 }

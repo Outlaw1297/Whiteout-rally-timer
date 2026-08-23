@@ -12,7 +12,7 @@ Native iOS/Android caller app for the Whiteout Rally Timer. Reuses the existing 
 - Expo push registration → server sends WARNING / LAUNCH via Expo Push API
 - Warning-lead preferences + change password
 
-Admin GO/reset/templates stay on the web app for now.
+Admin GO/reset/templates are available in the **Admin** tab (ADMIN and DEVELOPER roles). User management and developer diagnostics remain on the web app for now.
 
 ## Prerequisites
 

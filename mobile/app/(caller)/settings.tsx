@@ -21,11 +21,13 @@ import {
 import { getApiBaseUrl, getExpoProjectId } from "../../lib/config";
 import type { NotificationPreferences } from "../../lib/types";
 import { colors } from "../../components/theme";
+import { useBottomInset } from "../../components/Screen";
 
 const ALLOWED = [60, 30, 15, 10, 5, 3];
 
 export default function SettingsScreen() {
   const { user, loading } = useAuth();
+  const bottomInset = useBottomInset();
   const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
   const [pushEndpoint, setPushEndpoint] = useState<string | null>(null);
   const [pushStatus, setPushStatus] = useState<string | null>(null);
@@ -144,7 +146,7 @@ export default function SettingsScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.root}>
+    <ScrollView contentContainerStyle={[styles.root, { paddingBottom: bottomInset + 16 }]}>
       <Text style={styles.heading}>Account</Text>
       <Text style={styles.meta}>
         {user.displayName} · @{user.username} · {user.role}

@@ -43,6 +43,7 @@ See [mobile/README.md](mobile/README.md) for EAS builds, FCM, push testing, and 
 |------|--------|------------|---------|
 | Edit code, open PRs | Fork or collaborator | Optional | Your own `.env` only |
 | Run Android cloud builds | Read repo | Invite to EAS project | FCM key on EAS (owner uploads) |
+| Run iOS TestFlight builds | Read repo | Invite to EAS project | Apple Developer login / ASC API key (EAS can manage) |
 | Deploy backend | Merge to `main` | — | Render dashboard / GitHub Actions secrets |
 
 **Do not commit:** Firebase service-account private keys, production JWTs, `SESSION_SECRET`, database URLs, or Render API keys.
@@ -76,7 +77,7 @@ When you change behavior, **update the docs in the same PR**. This keeps the rep
 | Platform | Remote push |
 |----------|-------------|
 | iPhone (Expo Go SDK 54) | Yes |
-| iPhone (EAS build) | Yes (APNs via EAS) |
+| iPhone / iPad (TestFlight or EAS build) | Yes (APNs via EAS) |
 | Android with Google Play Services | Yes (FCM via EAS) |
 | **Amazon Fire / Kindle** | **No** — Fire OS lacks Play Services; Expo/FCM push will not show banners. Use a Play Store Android or iPhone for push testing. |
 | Android Expo Go | No remote push (SDK 53+) |

@@ -14,7 +14,7 @@
       "backgroundColor": "#0B1220"
     },
     "ios": {
-      "supportsTablet": false,
+      "supportsTablet": true,
       "bundleIdentifier": "com.whiteoutrally.caller",
       "infoPlist": {
         "UIBackgroundModes": ["remote-notification"]

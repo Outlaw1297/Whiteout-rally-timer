@@ -18,18 +18,20 @@ Admin GO/reset/templates are available in the **Admin** tab (ADMIN and DEVELOPER
 
 ## Device support
 
-| Platform | Use for dev | Remote push |
-|----------|-------------|-------------|
-| iPhone | Expo Go (SDK 54) or EAS build | Yes |
+| Platform | Use for dev / test | Remote push |
+|----------|--------------------|-------------|
+| iPhone | Expo Go (SDK 54), TestFlight, or EAS ad hoc | Yes (APNs via EAS) |
+| iPad | TestFlight or EAS ad hoc (`supportsTablet: true`) | Yes (APNs via EAS) |
 | Android (Play Store phone/tablet) | EAS **preview** or **development** APK | Yes (FCM) |
 | Android Expo Go | UI only | **No** (removed SDK 53+) |
-| **Amazon Fire / Kindle** | Not recommended | **No** — Fire OS has no Google Play Services; Expo/FCM receipts can succeed but **no banner appears**. Use a Play Store Android or iPhone for push testing. |
+| **Amazon Fire / Kindle** | Not recommended | **No** — Fire OS has no Google Play Services |
 
 ## Prerequisites
 
 1. Rally timer backend (Render or local) with a reachable URL.
 2. Expo account; EAS project id is in `app.json` → `extra.eas.projectId`.
 3. Physical device for push testing (not Fire tablet).
+4. For iOS TestFlight / device builds: paid **Apple Developer** account.
 
 ## Configure API URL
 
@@ -86,6 +88,90 @@ Expo Go on Android **cannot** receive remote push (removed in SDK 53). Use a
 7. Install the new APK, log in, enable notifications in **Settings**.
 
 Guide: [FCM credentials](https://docs.expo.dev/push-notifications/fcm-credentials/).
+
+## iOS / iPadOS — internal & test releases
+
+Bundle ID: **`com.whiteoutrally.caller`** (must match App Store Connect).
+
+You have two options. Prefer **TestFlight** with your Apple Developer account.
+
+### Option A — TestFlight (recommended)
+
+Best for alliance testers: install via the **TestFlight** app, no UDID list, easy updates.
+
+1. **Apple Developer / App Store Connect**
+   - [developer.apple.com](https://developer.apple.com/account/) → enroll (you already have this)
+   - [App Store Connect](https://appstoreconnect.apple.com) → **Apps** → **+** → New App
+   - Platforms: **iOS** (covers iPhone + iPad when tablet is enabled)
+   - Bundle ID: create/select **`com.whiteoutrally.caller`**
+   - Name / SKU: e.g. Whiteout Rally / `whiteout-rally`
+
+2. **Build + submit from your Mac** (from `mobile/` on latest `main`):
+
+   ```bash
+   cd mobile
+   git pull origin main
+   npx eas-cli@latest login
+   npx eas-cli@latest build --profile production --platform ios
+   ```
+
+   First time, EAS will ask to log into Apple and create signing certificates / provisioning. Let it manage credentials.
+
+   When the build finishes:
+
+   ```bash
+   npx eas-cli@latest submit --platform ios --latest
+   ```
+
+   Or one-shot (build + submit):
+
+   ```bash
+   npx testflight
+   ```
+
+3. **Invite internal testers**
+   - App Store Connect → your app → **TestFlight**
+   - Wait until the build finishes **Processing** (email when ready)
+   - **Internal Testing** → add yourself / team (up to 100 App Store Connect users)
+   - Testers install **TestFlight** from the App Store, accept the invite, install **Whiteout Rally**
+   - Log in → **Settings → Enable notifications** (APNs via Expo/EAS)
+
+4. **External testers** (optional, anyone with email)
+   - Create an External group → add emails → submit build for **Beta App Review** (first time only)
+   - After approval, later builds usually go out faster
+
+**Note:** TestFlight needs a **store** (production) build — not the `preview` ad hoc profile.
+
+### Option B — EAS ad hoc (install from URL)
+
+Install link from Expo, no TestFlight. Each device UDID must be registered **before** the build.
+
+```bash
+cd mobile
+npx eas-cli@latest device:create   # QR / URL for each iPhone/iPad
+npx eas-cli@latest build --profile preview --platform ios
+```
+
+Share the build URL from the EAS dashboard. To add a new device later: register it, then **rebuild** (profile includes the new UDID).
+
+### iOS push (APNs)
+
+EAS usually configures APNs when you build/submit with Apple credentials. If push fails on a TestFlight install:
+
+```bash
+npx eas-cli@latest credentials
+# iOS → production → Push Notifications → set up / regenerate
+```
+
+Then rebuild and resubmit.
+
+### Profile cheat sheet
+
+| Goal | Profile | Command |
+|------|---------|---------|
+| TestFlight / App Store | `production` | `eas build --profile production --platform ios` then `eas submit` |
+| Ad hoc install link | `preview` | `eas build --profile preview --platform ios` (+ `eas device:create`) |
+| Dev client + Metro | `development` | `eas build --profile development --platform ios` |
 
 ## Android preview build checklist
 
@@ -166,8 +252,9 @@ Native tokens are stored as `PushSubscription.endpoint = expo:<token>` and dispa
 | Goal | What to share |
 |------|----------------|
 | **Contribute code** | GitHub repo + this README; fork or collaborator access |
-| **Run cloud builds** | Expo project invite + FCM key on EAS (owner-managed) |
-| **Try the app only** | EAS **preview** APK download link — no repo required |
+| **Run cloud builds** | Expo project invite + FCM/APNs on EAS (owner-managed) |
+| **Try Android** | EAS **preview** APK download link |
+| **Try iPhone / iPad** | TestFlight invite (preferred) or EAS ad hoc install URL |
 
 See [CONTRIBUTING.md](../CONTRIBUTING.md) for the full workflow and doc-update checklist.
 

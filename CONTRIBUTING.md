@@ -31,9 +31,12 @@ cd mobile
 npm install
 cp .env.example .env
 # EXPO_PUBLIC_API_URL → production or local backend
-npx expo start          # iPhone: Expo Go (SDK 54)
-npx expo start --dev-client   # Android dev/preview builds
+npx expo start --dev-client   # iOS and Android
 ```
+
+Development runs against a **development client**, not Expo Go. Build it once
+per platform before the first run — see
+[mobile/README.md → Development client](mobile/README.md#development-client-first-time-setup).
 
 See [mobile/README.md](mobile/README.md) for EAS builds, FCM, push testing, and device support.
 
@@ -76,11 +79,10 @@ When you change behavior, **update the docs in the same PR**. This keeps the rep
 
 | Platform | Remote push |
 |----------|-------------|
-| iPhone (Expo Go SDK 54) | Yes |
-| iPhone / iPad (TestFlight or EAS build) | Yes (APNs via EAS) |
-| Android with Google Play Services | Yes (FCM via EAS) |
+| iPhone / iPad (development client, TestFlight, or EAS build) | Yes (APNs via EAS) |
+| Android with Google Play Services (development or preview build) | Yes (FCM via EAS) |
 | **Amazon Fire / Kindle** | **No** — Fire OS lacks Play Services; Expo/FCM push will not show banners. Use a Play Store Android or iPhone for push testing. |
-| Android Expo Go | No remote push (SDK 53+) |
+| Expo Go | Not used — no Android remote push since SDK 53 |
 
 ## Questions
 

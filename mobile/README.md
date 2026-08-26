@@ -2,9 +2,16 @@
 
 Native iOS/Android caller app for the Whiteout Rally Timer. Reuses the existing web backend (auth, events, WebSocket clock sync, notification scheduler).
 
-**SDK:** Expo **54** (matches Apple App Store Expo Go). SDK 55+ is not on the App Store yet.
+**SDK:** Expo **54**.
 
 **Production API:** `https://whiteout-rally-timer.onrender.com`
+
+> **Development uses a dev client, not Expo Go.** Expo Go cannot receive remote
+> push on Android (removed in SDK 53), so it cannot exercise the timing behavior
+> this app exists for. Build a **development** client once per platform — see
+> [Development client](#development-client-first-time-setup) — then run Metro
+> against it. SDK 54 is no longer pinned to whatever Expo Go ships on the App
+> Store; upgrade when we choose to.
 
 ## Features (caller-first)
 
@@ -20,10 +27,10 @@ Admin GO/reset/templates are available in the **Admin** tab (ADMIN and DEVELOPER
 
 | Platform | Use for dev / test | Remote push |
 |----------|--------------------|-------------|
-| iPhone | Expo Go (SDK 54), TestFlight, or EAS ad hoc | Yes (APNs via EAS) |
-| iPad | TestFlight or EAS ad hoc (`supportsTablet: true`) | Yes (APNs via EAS) |
-| Android (Play Store phone/tablet) | EAS **preview** or **development** APK | Yes (FCM) |
-| Android Expo Go | UI only | **No** (removed SDK 53+) |
+| iPhone | **development** client, TestFlight, or EAS ad hoc | Yes (APNs via EAS) |
+| iPad | **development** client, TestFlight, or EAS ad hoc (`supportsTablet: true`) | Yes (APNs via EAS) |
+| Android (Play Store phone/tablet) | **development** client or **preview** APK | Yes (FCM) |
+| Expo Go (either platform) | Not used — see note above | **No** on Android |
 | **Amazon Fire / Kindle** | Not recommended | **No** — Fire OS has no Google Play Services |
 
 ## Prerequisites
@@ -33,9 +40,61 @@ Admin GO/reset/templates are available in the **Admin** tab (ADMIN and DEVELOPER
 3. Physical device for push testing (not Fire tablet).
 4. For iOS TestFlight / device builds: paid **Apple Developer** account.
 
+## Development client (first-time setup)
+
+A **development client** is our own app — our bundle ID, our native modules —
+with Metro loading JS over the network. It replaces Expo Go for day-to-day work.
+Do this once per platform, then again only when native dependencies change.
+
+`expo-dev-client` is already in `package.json`. Install dependencies, build the
+client, install it on the device, and point Metro at it:
+
+```bash
+cd mobile
+npm install
+
+# 1) Build the dev client (once per platform)
+npx eas-cli@latest build --profile development --platform ios
+npx eas-cli@latest build --profile development --platform android
+
+# 2) Install the finished build on the device from the EAS link,
+#    then start Metro
+npx expo start --dev-client
+```
+
+For iOS, register the device UDID before the first build — a `development`
+build is ad hoc signed, same as `preview`:
+
+```bash
+npx eas-cli@latest device:create
+```
+
+**Rebuild the client only when native code changes** — adding or removing a
+native dependency, or editing `app.json` plugins or permissions. Ordinary JS and
+component edits reload over Metro with no rebuild.
+
+### Why not Expo Go
+
+- **It cannot test push on Android.** Remote push was removed from Android Expo
+  Go in SDK 53. Push timing is the product, so testing there hides the thing we
+  most need to see.
+- **It pinned our SDK version.** SDK 54 was chosen to match whatever Expo Go was
+  on the App Store. A dev client removes that constraint.
+- **EAS warns about it on production builds:**
+
+  ```
+  ⚠️ Detected that your app uses Expo Go for development, this is not
+  recommended when building production apps.
+  ```
+
+  This warning is about the development workflow, not the binary — a production
+  build is standalone and safe to ship either way. Installing `expo-dev-client`
+  clears it at the source. Do **not** silence it with
+  `EAS_BUILD_NO_EXPO_GO_WARNING=true`.
+
 ## Configure API URL
 
-Local Metro / Expo Go read `mobile/.env`:
+Local Metro and the dev client read `mobile/.env`:
 
 ```bash
 cd mobile
@@ -47,7 +106,7 @@ cp .env.example .env
 
 Restart Metro after changing `.env` (`npx expo start --dev-client -c`).
 
-## Push: EAS project id (iOS Expo Go + all builds)
+## Push: EAS project id (all builds)
 
 Only needed if you create a **new** EAS project. The repo already includes project id `d2a1cc81-7ab9-46c3-9037-93e279eac29f`.
 
@@ -61,8 +120,8 @@ Ask the repo owner for an **Expo org invite** if you need to run cloud builds on
 
 ## Push: Android FCM (required for EAS / dev builds)
 
-Expo Go on Android **cannot** receive remote push (removed in SDK 53). Use a
-**development** or **preview** build. Android also needs Firebase:
+Android push needs a **development** or **preview** build (never Expo Go, which
+lost Android remote push in SDK 53). Android also needs Firebase:
 
 1. Create a Firebase project at [console.firebase.google.com](https://console.firebase.google.com).
 2. Add an **Android** app with package name **`com.whiteoutrally.caller`**.
@@ -200,17 +259,20 @@ After install: **uninstall old app** → install new APK → log in → **Settin
 
 ## Run
 
-**iPhone (Expo Go, SDK 54):**
+Install the **development** client on the device first
+([Development client](#development-client-first-time-setup)), then:
+
 ```bash
-npx expo start
+cd mobile
+npx expo start --dev-client
 ```
 
-**Android (dev client or preview APK):**
-```bash
-npx expo start --dev-client   # dev build only
-```
+Same command for iOS and Android. Add `-c` to clear the Metro cache after
+changing `.env`.
 
 Phone and Mac on the same Wi‑Fi, or use `--tunnel` / `adb reverse tcp:8081 tcp:8081`.
+
+**Preview** builds bundle their own JS and do not need Metro.
 
 ## Test push (developer)
 

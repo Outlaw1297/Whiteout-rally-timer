@@ -71,7 +71,7 @@ Verify timing math: `npm run test:timing`
 
 ## Native caller app (Expo)
 
-Caller-first iOS/Android app in [`mobile/`](mobile/). Uses **Expo SDK 54** (matches App Store Expo Go), Bearer JWT auth, and Expo Push (stored alongside Web Push subscriptions).
+Caller-first iOS/Android app in [`mobile/`](mobile/). Uses **Expo SDK 54**, Bearer JWT auth, and Expo Push (stored alongside Web Push subscriptions).
 
 **Production API:** `https://whiteout-rally-timer.onrender.com`
 
@@ -79,14 +79,16 @@ Caller-first iOS/Android app in [`mobile/`](mobile/). Uses **Expo SDK 54** (matc
 cd mobile
 cp .env.example .env   # set EXPO_PUBLIC_API_URL
 npm install
-npx expo start         # iPhone: Expo Go (SDK 54)
+npx expo start --dev-client   # iOS and Android
 ```
+
+Development runs against a **development client**, not Expo Go — build it once per platform first ([setup](mobile/README.md#development-client-first-time-setup)).
 
 | Platform | Remote push |
 |----------|-------------|
-| iPhone (Expo Go / EAS) | Yes |
-| Android with Google Play Services (EAS build) | Yes |
-| Android Expo Go | No (SDK 53+) |
+| iPhone / iPad (development client, TestFlight, or EAS build) | Yes |
+| Android with Google Play Services (development or preview build) | Yes |
+| Expo Go | Not used — no Android remote push since SDK 53 |
 | Amazon Fire / Kindle | No — Fire OS lacks Google Play Services; use a normal Android phone or iPhone |
 
 Full setup, EAS builds, FCM, and troubleshooting: [`mobile/README.md`](mobile/README.md).

@@ -20,3 +20,34 @@ jobs:
       - run: npm run test:live-board
       - run: npm run test:device-id
       - run: npm run test:activity-log
+
+  migrations:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: rally
+          POSTGRES_PASSWORD: rally
+          POSTGRES_DB: rally_shadow
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      # Fails when schema.prisma changed without a matching migration, which
+      # would otherwise leave production behind the deployed code.
+      - name: Verify migrations match schema
+        env:
+          DATABASE_URL: postgresql://rally:rally@localhost:5432/rally_shadow?schema=public
+          SHADOW_DATABASE_URL: postgresql://rally:rally@localhost:5432/rally_shadow?schema=public
+        run: npm run db:verify

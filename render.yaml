@@ -15,6 +15,9 @@ services:
     plan: free
     region: oregon
     branch: main
+    # db:deploy runs prisma migrate deploy. A failed migration fails the build,
+    # so Render keeps the previous version serving instead of booting on a
+    # half-migrated schema.
     buildCommand: npm ci --include=dev && npx tsx scripts/generate-icons.ts && npx prisma generate && npm run build && npm run db:deploy
     startCommand: NODE_OPTIONS=--max-old-space-size=384 npx tsx server.ts
     healthCheckPath: /api/health/time

@@ -41,7 +41,7 @@ All rallies arrive at **8:00:00 PM**.
 npm install
 cp .env.example .env
 # Set DATABASE_URL, SESSION_SECRET (32+ chars), VAPID keys
-npm run db:deploy   # push schema + seed admin
+npm run db:deploy   # apply migrations + seed admin
 npm run dev
 ```
 
@@ -105,8 +105,34 @@ The repo is public. Fork → branch → PR, or ask for collaborator access. See 
 
 Server schedule is exact; push delivery latency depends on OS/browser/network.
 
+## Database migrations
+
+Schema changes go through **Prisma Migrate**. Every deploy replays the same reviewed SQL from `prisma/migrations/`.
+
+```bash
+# after editing prisma/schema.prisma
+npx prisma migrate dev --name describe_your_change   # generates the migration
+npm run db:verify                                    # SHADOW_DATABASE_URL required
+npm run db:status                                    # what is applied where
+```
+
+| Command | Does |
+|---------|------|
+| `npm run db:deploy` | Apply pending migrations (used by Render build) |
+| `npm run db:verify` | Fail if `schema.prisma` has changes with no migration |
+| `npm run db:status` | Show applied vs pending migrations |
+| `npm run db:push` | **Dev scratch only** — never used in deploy |
+
+Rules:
+
+- **Commit a migration with every `schema.prisma` change.** CI fails otherwise.
+- Deploys **never** run `db push --accept-data-loss`. A failed migration fails the build and Render keeps the previous version serving.
+- Server startup does not alter the schema; it logs `pending_migrations_detected` if the DB is behind.
+
+Databases created before migrations existed are **baselined** automatically on the next deploy: legacy pre-migrations run, `0_init` is marked as applied, then normal migrations resume. This happens once and preserves existing data.
+
 ## Deploy (Render)
 
-Blueprint in `render.yaml`. Build runs `db:deploy` (schema push + admin seed). Set `SESSION_SECRET` and VAPID keys in the dashboard.
+Blueprint in `render.yaml`. Build runs `db:deploy` (migrations + admin seed). Set `SESSION_SECRET` and VAPID keys in the dashboard.
 
 Production: `https://whiteout-rally-timer.onrender.com`

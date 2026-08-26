@@ -5,13 +5,7 @@ import { WebSocketServer } from "ws";
 import { setupWebSocket } from "./src/server/websocket";
 import { startScheduler } from "./src/server/scheduler";
 import { initWebPush } from "./src/lib/push";
-import {
-  migrateLegacyData,
-  migrateTemplateSchema,
-  migrateNotificationEnum,
-  migrateFeaturePackColumns,
-  migrateDeveloperRole,
-} from "./src/lib/db-migrate";
+import { getPendingMigrations } from "./src/lib/db-state";
 
 const dev = process.env.NODE_ENV !== "production";
 const port = parseInt(process.env.PORT || "3000", 10);
@@ -26,14 +20,21 @@ const handle = app.getRequestHandler();
 app
   .prepare()
   .then(async () => {
+    // Startup never alters the schema — that is `npm run db:deploy` (prisma
+    // migrate deploy). Report drift so a half-migrated deploy is visible.
     try {
-      await migrateLegacyData();
-      await migrateTemplateSchema();
-      await migrateNotificationEnum();
-      await migrateFeaturePackColumns();
-      await migrateDeveloperRole();
+      const pending = await getPendingMigrations();
+      if (pending.length > 0) {
+        console.error(
+          JSON.stringify({
+            event: "pending_migrations_detected",
+            pending,
+            hint: "run npm run db:deploy",
+          })
+        );
+      }
     } catch (err) {
-      console.error(JSON.stringify({ event: "startup_migration_failed", error: String(err) }));
+      console.error(JSON.stringify({ event: "migration_check_failed", error: String(err) }));
     }
 
     try {

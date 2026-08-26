@@ -5,24 +5,47 @@ import * as SecureStore from "expo-secure-store";
 import { apiFetch } from "./api";
 import { getExpoProjectId } from "./config";
 import { getOrCreateDeviceId } from "./device-id";
+import { suppressLocalAfterDisplay } from "./local-notifications";
+import { markAlertShown, wasAlertShown } from "./shown-alerts";
 
 const PUSH_ENDPOINT_KEY = "rally_expo_push_endpoint";
 
 try {
   Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowBanner: true,
-      shouldShowList: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-    }),
+    handleNotification: async (notification) => {
+      const data = (notification.request.content.data || {}) as Record<string, unknown>;
+      const assignmentId = typeof data.assignmentId === "string" ? data.assignmentId : undefined;
+      const notificationType =
+        typeof data.notificationType === "string" ? data.notificationType : undefined;
+
+      if (assignmentId && notificationType && wasAlertShown(assignmentId, notificationType)) {
+        return {
+          shouldShowBanner: false,
+          shouldShowList: false,
+          shouldPlaySound: false,
+          shouldSetBadge: false,
+        };
+      }
+
+      if (assignmentId && notificationType) {
+        markAlertShown(assignmentId, notificationType);
+        void suppressLocalAfterDisplay(assignmentId, notificationType);
+      }
+
+      return {
+        shouldShowBanner: true,
+        shouldShowList: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+      };
+    },
   });
 } catch {
   // Native module may be unavailable in some builds until FCM is configured.
 }
-async function ensureAndroidChannel() {
+
+export async function ensureAndroidChannel() {
   if (Platform.OS !== "android") return;
-  // Default channel — matches Expo pushes that omit channelId.
   await Notifications.setNotificationChannelAsync("default", {
     name: "Alerts",
     importance: Notifications.AndroidImportance.MAX,
@@ -145,4 +168,43 @@ export async function reportPushReceipt(payload: {
   } catch {
     // Receipts are best-effort.
   }
+}
+
+/** Global listeners for remote + local notifications (receipts + dedupe). */
+export function attachNotificationListeners(): () => void {
+  const received = Notifications.addNotificationReceivedListener((notification) => {
+    const data = (notification.request.content.data || {}) as Record<string, unknown>;
+    const assignmentId = typeof data.assignmentId === "string" ? data.assignmentId : undefined;
+    const notificationType =
+      typeof data.notificationType === "string" ? data.notificationType : undefined;
+    void suppressLocalAfterDisplay(assignmentId, notificationType);
+
+    const dispatchId = typeof data.dispatchId === "string" ? data.dispatchId : undefined;
+    const receiptToken = typeof data.receiptToken === "string" ? data.receiptToken : undefined;
+    if (dispatchId && receiptToken) {
+      void reportPushReceipt({
+        dispatchId,
+        receiptToken,
+        stage: "displayed",
+      });
+    }
+  });
+
+  const response = Notifications.addNotificationResponseReceivedListener((response) => {
+    const data = (response.notification.request.content.data || {}) as Record<string, unknown>;
+    const dispatchId = typeof data.dispatchId === "string" ? data.dispatchId : undefined;
+    const receiptToken = typeof data.receiptToken === "string" ? data.receiptToken : undefined;
+    if (dispatchId && receiptToken) {
+      void reportPushReceipt({
+        dispatchId,
+        receiptToken,
+        stage: "clicked",
+      });
+    }
+  });
+
+  return () => {
+    received.remove();
+    response.remove();
+  };
 }

@@ -98,12 +98,15 @@ The repo is public. Fork → branch → PR, or ask for collaborator access. See 
 ## Architecture
 
 - **PostgreSQL** — users, events, assignments, notification schedule
+- **Prisma Migrate** — versioned schema deploys (`prisma/migrations/`)
+- **`@whiteout/shared`** — clock sync, duration parsing, and notification schedule math shared by web + mobile (`packages/shared`)
 - **Persistent scheduler** — survives Render restarts; no in-memory-only timers
 - **Web Push (VAPID)** + **Expo Push** — per-caller WARNING / LAUNCH notifications
+- **Mobile local OS alarms** — hybrid: phone also schedules alerts from `launchTime` so late push still gets a banner
 - **Server clock sync** — NTP-style HTTP + WebSocket for accurate countdowns
 - **requestAnimationFrame** countdown — not `setInterval` (web); native app uses 50ms ticks
 
-Server schedule is exact; push delivery latency depends on OS/browser/network.
+Server schedule is exact; push delivery latency depends on OS/browser/network. Local alarms fire at the ideal wall-clock target (no delivery lead).
 
 ## Database migrations
 

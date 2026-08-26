@@ -8,6 +8,8 @@ import {
   apiFetch,
 } from "./api";
 import { getOrCreateDeviceId } from "./device-id";
+import { cancelAllLocalNotifications } from "./local-notifications";
+import { clearAlertShown } from "./shown-alerts";
 import type { SessionUser } from "./types";
 
 interface AuthContextValue {
@@ -68,6 +70,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     await setStoredToken(null);
     setUser(null);
+    clearAlertShown();
+    try {
+      await cancelAllLocalNotifications();
+    } catch {
+      // Native module may be unavailable.
+    }
   }, []);
 
   const value = useMemo(

@@ -22,7 +22,16 @@ npm run db:deploy
 npm run dev
 ```
 
-See the root [README.md](README.md) for env vars, roles, and Render deploy notes.
+**Changing the database schema?** Generate a migration in the same PR:
+
+```bash
+npx prisma migrate dev --name describe_your_change
+npm run db:verify   # needs SHADOW_DATABASE_URL
+```
+
+CI fails if `prisma/schema.prisma` changes without a matching migration in `prisma/migrations/`. Do not use `npm run db:push` for anything that ships.
+
+See the root [README.md](README.md) for env vars, roles, migrations, and Render deploy notes.
 
 ### Mobile / Expo (`mobile/`)
 
@@ -62,6 +71,7 @@ When you change behavior, **update the docs in the same PR**. This keeps the rep
 | Push / notifications | Root `README.md`, `mobile/README.md`, inline comments in `src/lib/expo-push.ts` / `mobile/lib/push.ts` |
 | EAS profiles, SDK, icons | `mobile/README.md`, `mobile/app.json`, `mobile/eas.json` |
 | Roles / caller vs admin UX | Root `README.md` |
+| Database schema | New migration in `prisma/migrations/`, root `README.md` |
 | Deploy / Render | `render.yaml`, root `README.md`, `.github/workflows/` comments |
 | New top-level feature area | Add or extend the relevant README; link from root `README.md` |
 

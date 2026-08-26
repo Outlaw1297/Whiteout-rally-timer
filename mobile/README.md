@@ -271,6 +271,15 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md) for the full workflow and doc-update c
 
 ## Troubleshooting
 
+### EAS iOS “Bundle JavaScript” / Unknown error
+Usually Metro resolution. Confirm `mobile/metro.config.js` does **not** set `resolver.disableHierarchicalLookup = true` (that breaks nested deps like `expo-asset`). Sanity-check locally from `mobile/`:
+
+```bash
+npx expo export --platform ios --output-dir /tmp/expo-export-test
+```
+
+Then rebuild: `npx --yes eas-cli@latest build --platform ios --profile production`.
+
 ### Icons did not update
 Built from stale `main` or EAS cache. Pull latest, verify `assets/icon.png`, rebuild with `--clear-cache`, reinstall.
 

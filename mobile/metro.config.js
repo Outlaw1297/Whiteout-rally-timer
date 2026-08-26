@@ -2,19 +2,15 @@ const { getDefaultConfig } = require("expo/metro-config");
 const path = require("path");
 
 const projectRoot = __dirname;
-const monorepoRoot = path.resolve(projectRoot, "..");
-const sharedRoot = path.resolve(monorepoRoot, "packages/shared");
+const sharedRoot = path.resolve(projectRoot, "../packages/shared");
 
 /** @type {import('expo/metro-config').MetroConfig} */
 const config = getDefaultConfig(projectRoot);
 
-// Allow importing @whiteout/shared from outside mobile/ (EAS clones full repo).
+// Non-workspace layout: allow Metro to watch/resolve @whiteout/shared outside mobile/.
+// Do NOT set disableHierarchicalLookup — that breaks nested deps like expo-asset
+// (shipped under node_modules/expo/node_modules) and fails EAS "Bundle JavaScript".
 config.watchFolders = [...(config.watchFolders || []), sharedRoot];
-config.resolver.nodeModulesPaths = [
-  path.resolve(projectRoot, "node_modules"),
-  path.resolve(monorepoRoot, "node_modules"),
-];
-config.resolver.disableHierarchicalLookup = true;
 config.resolver.extraNodeModules = {
   ...(config.resolver.extraNodeModules || {}),
   "@whiteout/shared": sharedRoot,

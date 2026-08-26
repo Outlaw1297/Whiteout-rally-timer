@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -126,97 +129,110 @@ export function RallyView({ eventId }: { eventId: string }) {
     !assignment.launchTime || event.status === "READY" || event.status === "DRAFT";
   const canEditMarch = event.status === "DRAFT" || event.status === "READY";
 
+  const showStickyConfirm = !waitingForGo && !confirmed;
+
   return (
-    <View style={styles.root}>
-      <View style={styles.header}>
-        <Text style={styles.badge}>
-          {event.status === "ACTIVE"
-            ? "● Live"
-            : waitingForGo
-              ? "Waiting for GO"
-              : event.status}
-        </Text>
-        <Text style={styles.title}>{event.name}</Text>
-        <Text style={styles.subtitle}>{user.displayName}</Text>
-      </View>
+    <KeyboardAvoidingView
+      style={styles.root}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: showStickyConfirm ? 16 : bottomInset + 8 },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.header}>
+          <Text style={styles.badge}>
+            {event.status === "ACTIVE"
+              ? "● Live"
+              : waitingForGo
+                ? "Waiting for GO"
+                : event.status}
+          </Text>
+          <Text style={styles.title}>{event.name}</Text>
+          <Text style={styles.subtitle}>{user.displayName}</Text>
+        </View>
 
-      {(statusMsg || statusError) && (
-        <Pressable
-          onPress={() => {
-            setStatusMsg(null);
-            setStatusError(null);
-          }}
-          style={[styles.banner, statusError ? styles.bannerError : styles.bannerOk]}
-        >
-          <Text style={styles.bannerText}>{statusError || statusMsg}</Text>
-        </Pressable>
-      )}
-
-      <View style={[styles.panel, isNow && !waitingForGo && styles.panelLaunch]}>
-        <Text style={styles.label}>Your rally</Text>
-        <Text style={styles.clock}>{formatArrivalTime(assignment.launchTime)}</Text>
-        <Text style={styles.label}>
-          {isNow && !waitingForGo ? "Action" : "Throw rally in"}
-        </Text>
-        {waitingForGo ? (
-          <Text style={[styles.countdown, { color: colors.muted }]}>WAITING</Text>
-        ) : isNow ? (
-          <Text style={styles.launchNow}>Launch Now</Text>
-        ) : (
-          <Text style={styles.countdown}>{countdown}</Text>
+        {(statusMsg || statusError) && (
+          <Pressable
+            onPress={() => {
+              setStatusMsg(null);
+              setStatusError(null);
+            }}
+            style={[styles.banner, statusError ? styles.bannerError : styles.bannerOk]}
+          >
+            <Text style={styles.bannerText}>{statusError || statusMsg}</Text>
+          </Pressable>
         )}
-      </View>
 
-      <View style={styles.grid}>
-        <View style={styles.cell}>
-          <Text style={styles.label}>Your march</Text>
-          {canEditMarch ? (
-            <>
-              <TextInput
-                value={marchDraft}
-                onChangeText={(v) => {
-                  marchDirtyRef.current = true;
-                  setMarchDraft(v);
-                }}
-                placeholder="M:SS"
-                placeholderTextColor={colors.muted}
-                style={styles.input}
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              <Pressable
-                onPress={saveMarch}
-                disabled={marchSaving}
-                style={styles.secondaryBtn}
-              >
-                <Text style={styles.secondaryBtnText}>
-                  {marchSaving ? "Saving…" : "Save march"}
-                </Text>
-              </Pressable>
-            </>
+        <View style={[styles.panel, isNow && !waitingForGo && styles.panelLaunch]}>
+          <Text style={styles.label}>Your rally</Text>
+          <Text style={styles.clock}>{formatArrivalTime(assignment.launchTime)}</Text>
+          <Text style={styles.label}>
+            {isNow && !waitingForGo ? "Action" : "Throw rally in"}
+          </Text>
+          {waitingForGo ? (
+            <Text style={[styles.countdown, { color: colors.muted }]}>WAITING</Text>
+          ) : isNow ? (
+            <Text style={styles.launchNow}>Launch Now</Text>
           ) : (
-            <Text style={styles.cellValue}>{assignment.marchFormatted}</Text>
+            <Text style={styles.countdown}>{countdown}</Text>
           )}
         </View>
-        <View style={styles.cell}>
-          <Text style={styles.label}>Rally time</Text>
-          <Text style={styles.cellValue}>{formatGather(event.gatherDurationSeconds)}</Text>
-        </View>
-        <View style={[styles.cell, styles.cellWide]}>
-          <Text style={styles.label}>Expected arrival</Text>
-          <Text style={styles.cellValue}>
-            {formatArrivalTime(assignment.expectedArrivalTime)}
-          </Text>
-        </View>
-        <View style={[styles.cell, styles.cellWide]}>
-          <Text style={styles.label}>Target arrival</Text>
-          <Text style={[styles.cellValue, { color: colors.ice }]}>
-            {formatArrivalTime(event.targetArrivalTime)}
-          </Text>
-        </View>
-      </View>
 
-      <View style={[styles.footer, { paddingBottom: bottomInset }]}>
+        <View style={styles.grid}>
+          <View style={styles.cell}>
+            <Text style={styles.label}>Your march</Text>
+            {canEditMarch ? (
+              <>
+                <TextInput
+                  value={marchDraft}
+                  onChangeText={(v) => {
+                    marchDirtyRef.current = true;
+                    setMarchDraft(v);
+                  }}
+                  placeholder="M:SS"
+                  placeholderTextColor={colors.muted}
+                  style={styles.input}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                <Pressable
+                  onPress={saveMarch}
+                  disabled={marchSaving}
+                  style={styles.secondaryBtn}
+                >
+                  <Text style={styles.secondaryBtnText}>
+                    {marchSaving ? "Saving…" : "Save march"}
+                  </Text>
+                </Pressable>
+              </>
+            ) : (
+              <Text style={styles.cellValue}>{assignment.marchFormatted}</Text>
+            )}
+          </View>
+          <View style={styles.cell}>
+            <Text style={styles.label}>Rally time</Text>
+            <Text style={styles.cellValue}>{formatGather(event.gatherDurationSeconds)}</Text>
+          </View>
+          <View style={[styles.cell, styles.cellWide]}>
+            <Text style={styles.label}>Expected arrival</Text>
+            <Text style={styles.cellValue}>
+              {formatArrivalTime(assignment.expectedArrivalTime)}
+            </Text>
+          </View>
+          <View style={[styles.cell, styles.cellWide]}>
+            <Text style={styles.label}>Target arrival</Text>
+            <Text style={[styles.cellValue, { color: colors.ice }]}>
+              {formatArrivalTime(event.targetArrivalTime)}
+            </Text>
+          </View>
+        </View>
+
         {waitingForGo ? (
           <View style={styles.panel}>
             <Text style={styles.muted}>
@@ -224,13 +240,17 @@ export function RallyView({ eventId }: { eventId: string }) {
             </Text>
           </View>
         ) : confirmed ? (
-          <View style={[styles.panel, styles.confirmed]}>
+          <View style={[styles.panel, styles.confirmed, { marginBottom: 0 }]}>
             <Text style={styles.confirmedTitle}>✓ Launched</Text>
             <Text style={styles.muted}>
               Launch: {formatArrivalTime(assignment.launchTime)}
             </Text>
           </View>
-        ) : (
+        ) : null}
+      </ScrollView>
+
+      {showStickyConfirm ? (
+        <View style={[styles.footer, { paddingBottom: bottomInset }]}>
           <Pressable
             onPress={confirmLaunch}
             style={[styles.confirmBtn, isNow && styles.confirmBtnHot]}
@@ -239,16 +259,18 @@ export function RallyView({ eventId }: { eventId: string }) {
               {isNow ? "Confirm — Rally Launched" : "Rally Launched"}
             </Text>
           </Pressable>
-        )}
-      </View>
-    </View>
+        </View>
+      ) : null}
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  scroll: { flex: 1 },
+  scrollContent: { flexGrow: 1 },
   loading: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
-  header: { alignItems: "center", marginBottom: 16 },
+  header: { alignItems: "center", marginBottom: 12 },
   badge: {
     color: colors.ice,
     fontSize: 12,
@@ -270,9 +292,9 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderWidth: 1,
     borderRadius: 16,
-    padding: 20,
+    padding: 16,
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 12,
   },
   panelLaunch: { borderColor: colors.launch },
   label: {
@@ -291,19 +313,19 @@ const styles = StyleSheet.create({
   },
   countdown: {
     color: colors.ice,
-    fontSize: 48,
+    fontSize: 42,
     fontVariant: ["tabular-nums"],
     fontWeight: "800",
     marginTop: 6,
   },
   launchNow: {
     color: colors.launch,
-    fontSize: 36,
+    fontSize: 32,
     fontWeight: "900",
     textTransform: "uppercase",
     marginTop: 8,
   },
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 16 },
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 12 },
   cell: {
     width: "48%",
     flexGrow: 1,
@@ -349,7 +371,13 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontSize: 12,
   },
-  footer: { marginTop: "auto" },
+  footer: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: 12,
+    paddingHorizontal: 0,
+    backgroundColor: colors.bg,
+  },
   confirmBtn: {
     backgroundColor: colors.success,
     borderRadius: 14,

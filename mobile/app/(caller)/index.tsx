@@ -65,14 +65,15 @@ export default function CallerHome() {
   const primary = pickPrimaryCallerEvent(events, user.id, correctedNow());
 
   return (
-    <Screen edges={[]}>
+    <Screen edges={["top"]}>
       <View style={styles.topBar}>
+        <Text style={styles.brand}>Whiteout Rally</Text>
+        <View style={styles.topBarSpacer} />
         {isAdmin && (
           <Pressable onPress={() => router.push("/(admin)")} style={styles.linkBtn}>
             <Text style={styles.linkTextAdmin}>Admin</Text>
           </Pressable>
         )}
-        <View style={styles.topBarSpacer} />
         <Pressable onPress={() => router.push("/(caller)/settings")} style={styles.linkBtn}>
           <Text style={styles.linkText}>Settings</Text>
         </Pressable>
@@ -111,19 +112,20 @@ const styles = StyleSheet.create({
   topBar: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
     paddingVertical: 8,
   },
-  topBarSpacer: { flex: 1 },
+  brand: { color: colors.snow, fontSize: 16, fontWeight: "800" },
+  topBarSpacer: { flex: 1, minWidth: 4 },
   linkBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  linkText: { color: colors.muted, fontSize: 13, fontWeight: "600" },
-  linkTextAdmin: { color: colors.ice, fontSize: 13, fontWeight: "700" },
+  linkText: { color: colors.muted, fontSize: 12, fontWeight: "600" },
+  linkTextAdmin: { color: colors.ice, fontSize: 12, fontWeight: "700" },
   empty: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24 },
   emptyTitle: { color: colors.snow, fontWeight: "700", fontSize: 18, marginBottom: 8 },
   emptyBody: { color: colors.muted, textAlign: "center", marginBottom: 20, lineHeight: 20 },

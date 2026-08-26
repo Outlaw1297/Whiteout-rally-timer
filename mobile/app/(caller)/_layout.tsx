@@ -11,7 +11,7 @@ export default function CallerLayout() {
         headerShadowVisible: false,
       }}
     >
-      <Stack.Screen name="index" options={{ title: "Whiteout Rally" }} />
+      <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="settings" options={{ title: "Settings" }} />
     </Stack>
   );

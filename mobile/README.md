@@ -276,3 +276,6 @@ Not supported with current Expo/FCM stack. Do not use Fire tablets to validate p
 ## Keeping this doc current
 
 When you change mobile behavior, update **this file in the same PR**. See [CONTRIBUTING.md](../CONTRIBUTING.md) for the full mapping (env vars, API routes, EAS profiles, push, etc.).
+
+### iOS layout / bottom cut off
+Caller home uses a scrollable rally view plus home-indicator safe-area padding. Confirm stays in a sticky footer above the home bar. Rebuild TestFlight/`preview` after layout changes.

@@ -16,6 +16,7 @@ import { formatArrivalTime, formatGather, parseMarchDuration } from "../lib/time
 import type { SerializedEvent } from "../lib/types";
 import { useCountdown } from "../hooks/useCountdown";
 import { useEventSocket } from "../hooks/useEventSocket";
+import { useLocalNotificationSchedule } from "../hooks/useLocalNotificationSchedule";
 import { useServerClock } from "../hooks/useServerClock";
 import { useBottomInset } from "./Screen";
 import { colors } from "./theme";
@@ -36,6 +37,12 @@ export function RallyView({ eventId }: { eventId: string }) {
   const assignment = event?.assignments.find((a) => a.userId === user?.id) ?? null;
   const launchMs = assignment?.launchTime ? new Date(assignment.launchTime).getTime() : null;
   const { display: countdown, isNow } = useCountdown(launchMs, correctedNow);
+
+  useLocalNotificationSchedule({
+    event,
+    userId: user?.id,
+    enabled: true,
+  });
 
   const applyServerMarch = useCallback(
     (data: SerializedEvent) => {

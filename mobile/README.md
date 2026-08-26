@@ -12,6 +12,7 @@ Native iOS/Android caller app for the Whiteout Rally Timer. Reuses the existing 
 - Primary rally home with server-synced countdown
 - Confirm launch + edit own march (when waiting for GO)
 - Expo push registration → server sends WARNING / LAUNCH via Expo Push API
+- **Local OS alarms** (hybrid) — when a rally is ACTIVE, the app also schedules DATE triggers from your `launchTime` so alerts fire even if remote push is late; remote + local are deduped so you only see one banner
 - Warning-lead preferences + change password
 
 Admin GO/reset/templates are available in the **Admin** tab (ADMIN and DEVELOPER roles). User management and developer diagnostics remain on the web app for now.
@@ -88,6 +89,16 @@ Expo Go on Android **cannot** receive remote push (removed in SDK 53). Use a
 7. Install the new APK, log in, enable notifications in **Settings**.
 
 Guide: [FCM credentials](https://docs.expo.dev/push-notifications/fcm-credentials/).
+
+## Hybrid local notifications
+
+When your assignment is **ACTIVE** with a `launchTime`, the app schedules local OS notifications (warnings + LAUNCH) at the **ideal wall-clock times** using the synced clock (`pushLeadMs: 0`). Remote Expo push remains the backup and still uses delivery-lead compensation on the server.
+
+- Android needs **`SCHEDULE_EXACT_ALARM`** (declared in `app.json`) — rebuild the APK/IPA after this change
+- Deduping: remote and local share `assignmentId:notificationType`; only one banner shows
+- Logout / disable notifications cancels pending local alarms
+
+Shared schedule math lives in `packages/shared` (`@whiteout/shared`) so web and mobile stay aligned.
 
 ## iOS / iPadOS — internal & test releases
 

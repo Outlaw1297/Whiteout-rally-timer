@@ -68,7 +68,8 @@ When you change behavior, **update the docs in the same PR**. This keeps the rep
 | Env vars (web) | `.env.example`, root `README.md` |
 | Env vars (mobile) | `mobile/.env.example`, `mobile/README.md`, `mobile/eas.json` / `app.json` if baked into builds |
 | API routes or auth | Root `README.md`, `mobile/README.md` (backend contracts table) |
-| Push / notifications | Root `README.md`, `mobile/README.md`, inline comments in `src/lib/expo-push.ts` / `mobile/lib/push.ts` |
+| Shared timing / clock sync | `packages/shared/`, root + mobile imports, `scripts/test-shared.ts` |
+| Push / notifications | Root `README.md`, `mobile/README.md`, `packages/shared` schedule helpers, `src/lib/expo-push.ts` / `mobile/lib/push.ts` / `mobile/lib/local-notifications.ts` |
 | EAS profiles, SDK, icons | `mobile/README.md`, `mobile/app.json`, `mobile/eas.json` |
 | Roles / caller vs admin UX | Root `README.md` |
 | Database schema | New migration in `prisma/migrations/`, root `README.md` |

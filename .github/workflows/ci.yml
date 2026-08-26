@@ -16,6 +16,7 @@ jobs:
           node-version: "20"
           cache: npm
       - run: npm ci
+      - run: npm run test:shared
       - run: npm run test:timing
       - run: npm run test:live-board
       - run: npm run test:device-id

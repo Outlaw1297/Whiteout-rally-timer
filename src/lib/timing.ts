@@ -1,11 +1,24 @@
 import type { NotificationOffsetType } from "./notification-prefs";
 import {
-  WARNING_TYPE_BY_SECONDS,
-  SECONDS_BY_WARNING_TYPE,
   type AllowedWarningLead,
 } from "./notification-prefs";
+import {
+  formatGatherDuration,
+  formatMarchDuration,
+  getNotificationPayload as sharedGetNotificationPayload,
+  getNotificationSchedule as sharedGetNotificationSchedule,
+  getNotificationSecondsBefore as sharedGetNotificationSecondsBefore,
+  getNotificationTargetAt as sharedGetNotificationTargetAt,
+  parseGatherDuration as sharedParseGatherDuration,
+  parseMarchDuration as sharedParseMarchDuration,
+  shouldSkipNotification as sharedShouldSkipNotification,
+} from "@whiteout/shared";
 
 export type { NotificationOffsetType } from "./notification-prefs";
+export {
+  formatGatherDuration,
+  formatMarchDuration,
+} from "@whiteout/shared";
 
 /** Default rally (gather) duration: 5 minutes */
 export const DEFAULT_GATHER_SECONDS = 300;
@@ -111,31 +124,11 @@ export function computeSharedTargetArrivalOnGo(
 
 /** Parse "8:00", "6:30", "4:15", "12:37" → seconds */
 export function parseMarchDuration(input: string): number | null {
-  const trimmed = input.trim();
-  const match = trimmed.match(/^(\d{1,2}):(\d{2})$/);
-  if (!match) return null;
-  const minutes = parseInt(match[1], 10);
-  const seconds = parseInt(match[2], 10);
-  if (seconds >= 60) return null;
-  return minutes * 60 + seconds;
-}
-
-/** Format seconds as M:SS e.g. 480 → "8:00" */
-export function formatMarchDuration(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}:${String(s).padStart(2, "0")}`;
-}
-
-/** Format gather duration e.g. 300 → "5:00" */
-export function formatGatherDuration(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}:${String(s).padStart(2, "0")}`;
+  return sharedParseMarchDuration(input);
 }
 
 export function parseGatherDuration(input: string): number | null {
-  return parseMarchDuration(input);
+  return sharedParseGatherDuration(input);
 }
 
 export const NOTIFICATION_OFFSETS = [
@@ -150,9 +143,7 @@ export const NOTIFICATION_OFFSETS = [
 ];
 
 export function getNotificationSecondsBefore(type: NotificationOffsetType): number {
-  if (type === "RALLY_STARTED") return 0;
-  if (type === "LAUNCH") return 0;
-  return SECONDS_BY_WARNING_TYPE[type as keyof typeof SECONDS_BY_WARNING_TYPE] ?? 0;
+  return sharedGetNotificationSecondsBefore(type);
 }
 
 /** Wall-clock moment the caller should experience this notification. */
@@ -161,11 +152,7 @@ export function getNotificationTargetAt(
   type: NotificationOffsetType,
   options: { startedAt?: Date | null } = {}
 ): Date {
-  if (type === "RALLY_STARTED") {
-    return options.startedAt ?? new Date();
-  }
-  const secondsBefore = getNotificationSecondsBefore(type);
-  return new Date(launchTime.getTime() - secondsBefore * 1000);
+  return sharedGetNotificationTargetAt(launchTime, type, options);
 }
 
 /** Skip a warning if less than its lead time remains before launch (applies to every caller). */
@@ -175,11 +162,7 @@ export function shouldSkipNotification(
   now: Date = new Date(),
   scheduledAt?: Date
 ): boolean {
-  if (type === "LAUNCH" || type === "RALLY_STARTED") return false;
-  // Honor the built schedule once the send time arrives, even if slightly late.
-  if (scheduledAt && now.getTime() >= scheduledAt.getTime()) return false;
-  const secondsUntilLaunch = (launchTime.getTime() - now.getTime()) / 1000;
-  return secondsUntilLaunch < getNotificationSecondsBefore(type);
+  return sharedShouldSkipNotification(type, launchTime, now, scheduledAt);
 }
 
 /**
@@ -243,46 +226,7 @@ export function getNotificationSchedule(
     startedAt?: Date | null;
   } = {}
 ): Array<{ type: NotificationOffsetType; scheduledAt: Date }> {
-  const referenceMs = (options.referenceTime ?? new Date()).getTime();
-  const pushLeadMs = options.pushLeadMs ?? 0;
-  const launchMs = launchTime.getTime();
-  const secondsUntilLaunch = (launchMs - referenceMs) / 1000;
-
-  const candidates: Array<{ type: NotificationOffsetType; secondsBefore: number }> = [];
-
-  if (options.includeRallyStarted) {
-    candidates.push({ type: "RALLY_STARTED", secondsBefore: -1 });
-  }
-
-  for (const lead of warningLeads) {
-    candidates.push({ type: WARNING_TYPE_BY_SECONDS[lead], secondsBefore: lead });
-  }
-
-  // Required throw alert
-  candidates.push({ type: "LAUNCH", secondsBefore: 0 });
-
-  return candidates
-    .filter(({ type, secondsBefore }) => {
-      if (type === "RALLY_STARTED") return true;
-      return secondsBefore <= secondsUntilLaunch;
-    })
-    .map(({ type, secondsBefore }) => {
-      if (type === "RALLY_STARTED") {
-        const startMs = (options.startedAt ?? options.referenceTime ?? new Date()).getTime();
-        return {
-          type,
-          scheduledAt: new Date(Math.max(startMs, referenceMs) - Math.min(pushLeadMs, 200)),
-        };
-      }
-      // Never schedule before GO/reference — high device lead (3s+) on a short
-      // first-caller window was scheduling LAUNCH in the past and racing Started.
-      const idealMs = launchMs - secondsBefore * 1000;
-      const leadCapped = Math.min(pushLeadMs, Math.max(0, idealMs - referenceMs));
-      return {
-        type,
-        scheduledAt: new Date(idealMs - leadCapped),
-      };
-    });
+  return sharedGetNotificationSchedule(launchTime, warningLeads, options);
 }
 
 /** @deprecated Use getNotificationSchedule(launchTime, warningLeads, options) */
@@ -357,55 +301,12 @@ export function getNotificationPayload(
   marchSeconds: number,
   gatherSeconds: number
 ): { title: string; body: string } {
-  const march = formatMarchDuration(marchSeconds);
-  const gather = formatGatherDuration(gatherSeconds);
-  const arrival = targetArrival.toLocaleTimeString(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
-  });
-
-  switch (type) {
-    case "RALLY_STARTED":
-      return {
-        title: `▶ Rally Timer Started`,
-        body: `${eventName}\n${callerName} — timers are live. Target: ${arrival}`,
-      };
-    case "WARNING_60":
-      return {
-        title: `60s — get ready to throw`,
-        body: `${eventName} · ${callerName}`,
-      };
-    case "WARNING_30":
-      return {
-        title: `30s — rally coming up`,
-        body: `${eventName} · ${callerName}`,
-      };
-    case "WARNING_15":
-      return {
-        title: `15s — prepare to throw`,
-        body: `${eventName} · ${callerName}`,
-      };
-    case "WARNING_10":
-      return {
-        title: `10s — almost throw time`,
-        body: `${eventName} · ${callerName}`,
-      };
-    case "WARNING_5":
-      return {
-        title: `5s — throw soon`,
-        body: `${eventName} · ${callerName}`,
-      };
-    case "WARNING_3":
-      return {
-        title: `3s — throw NOW`,
-        body: `${eventName} · ${callerName}`,
-      };
-    case "LAUNCH":
-      return {
-        title: `🚨 THROW RALLY NOW`,
-        body: `${eventName}\nTarget: ${arrival}\nMarch: ${march} | Rally: ${gather}`,
-      };
-  }
+  return sharedGetNotificationPayload(
+    type,
+    eventName,
+    callerName,
+    targetArrival,
+    marchSeconds,
+    gatherSeconds
+  );
 }

@@ -1,10 +1,14 @@
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { useEffect } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider } from "../lib/auth";
+import { attachNotificationListeners } from "../lib/push";
 import { colors } from "../components/theme";
 
 export default function RootLayout() {
+  useEffect(() => attachNotificationListeners(), []);
+
   return (
     <SafeAreaProvider>
       <AuthProvider>

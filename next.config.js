@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  transpilePackages: ["@whiteout/shared"],
   headers: async () => [
     {
       source: "/sw.js",

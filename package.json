@@ -12,6 +12,7 @@
     "db:verify": "tsx scripts/verify-migrations.ts",
     "db:seed": "tsx scripts/seed-admin.ts",
     "test:timing": "tsx scripts/test-timing.ts",
+    "test:shared": "tsx scripts/test-shared.ts",
     "test:push-worker": "tsx scripts/test-push-worker.ts",
     "test:live-board": "tsx scripts/test-live-board.ts",
     "test:device-id": "tsx scripts/test-device-id.ts",
@@ -25,6 +26,7 @@
   },
   "dependencies": {
     "@prisma/client": "^6.2.1",
+    "@whiteout/shared": "file:packages/shared",
     "autoprefixer": "^10.4.20",
     "bcryptjs": "^3.0.3",
     "jose": "^6.2.8",

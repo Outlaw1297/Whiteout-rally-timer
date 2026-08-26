@@ -9,15 +9,14 @@ import {
   View,
 } from "react-native";
 import { Redirect } from "expo-router";
-import * as Notifications from "expo-notifications";
 import { useAuth } from "../../lib/auth";
 import { apiFetch, ApiError } from "../../lib/api";
 import {
   getStoredPushEndpoint,
   registerForPushAsync,
-  reportPushReceipt,
   unregisterPush,
 } from "../../lib/push";
+import { cancelAllLocalNotifications } from "../../lib/local-notifications";
 import { getApiBaseUrl, getExpoProjectId } from "../../lib/config";
 import type { NotificationPreferences } from "../../lib/types";
 import { colors } from "../../components/theme";
@@ -46,32 +45,6 @@ export default function SettingsScreen() {
     loadPrefs().catch(() => setPrefs(null));
     getStoredPushEndpoint().then(setPushEndpoint).catch(() => setPushEndpoint(null));
   }, [user, loadPrefs]);
-
-  useEffect(() => {
-    let sub: { remove: () => void } | null = null;
-    try {
-      sub = Notifications.addNotificationReceivedListener((notification) => {
-        const data = notification.request.content.data as {
-          dispatchId?: string;
-          receiptToken?: string;
-        };
-        reportPushReceipt({
-          dispatchId: data.dispatchId,
-          receiptToken: data.receiptToken,
-          stage: "displayed",
-        });
-      });
-    } catch {
-      // Native notifications may be unavailable until FCM is configured.
-    }
-    return () => {
-      try {
-        sub?.remove();
-      } catch {
-        // ignore
-      }
-    };
-  }, []);
 
   if (loading) {
     return (
@@ -121,6 +94,7 @@ export default function SettingsScreen() {
     setBusy(true);
     try {
       await unregisterPush(pushEndpoint);
+      await cancelAllLocalNotifications();
       setPushEndpoint(null);
       setPushStatus("Notifications disabled on this device");
     } catch (err) {
@@ -159,7 +133,8 @@ export default function SettingsScreen() {
       <Text style={styles.heading}>Native push</Text>
       <Text style={styles.body}>
         Enable alerts so you get WARNING and LAUNCH notifications even when the app is
-        backgrounded.
+        backgrounded. The app also schedules local OS alarms from your launch time so
+        alerts still fire if push delivery is late.
       </Text>
       {pushEndpoint ? <Text style={styles.status}>Registered on this install</Text> : null}
       <View style={styles.row}>

@@ -17,7 +17,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.whiteoutrally.caller",
       "infoPlist": {
-        "UIBackgroundModes": ["remote-notification"]
+        "UIBackgroundModes": ["remote-notification"],
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
